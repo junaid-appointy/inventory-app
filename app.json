@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Field App",
+    "slug": "field-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "fieldapp",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0F7B3E",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.officeops.fieldapp",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET",
+        "VIBRATE"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0F7B3E"
+      }
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.officeops.fieldapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to scan product barcodes at the gate."
+      }
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Field App uses the camera to scan barcodes at the gate.",
+          "enableCodeScanner": true
+        }
+      ]
+    ]
+  }
+}
