@@ -1,0 +1,108 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "f04291e93c78",
+  "session_id": "271324a3-322f-442b-a249-ef3d47eea1f0",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-26T09:32:02.755891Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "App.tsx",
+    "DEVELOPMENT.md",
+    "app.json",
+    "eas.json",
+    "src/components/QueueBadge.tsx",
+    "src/db/database.ts",
+    "src/db/outbox.ts",
+    "src/db/stock.ts",
+    "src/design/Button.tsx",
+    "src/design/tokens.ts",
+    "src/i18n/I18nProvider.tsx",
+    "src/i18n/index.ts",
+    "src/i18n/strings.ts",
+    "src/modules/index.ts",
+    "src/modules/inventory/components/QueueBadge.tsx",
+    "src/modules/inventory/index.ts",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/DeliverySummaryScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/IssueScreen.tsx",
+    "src/modules/inventory/screens/OrdersScreen.tsx",
+    "src/modules/inventory/screens/OutboxScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/modules/registry.ts",
+    "src/modules/types.ts",
+    "src/navigation/RootNavigator.tsx",
+    "src/navigation/types.ts",
+    "src/rbac/index.ts",
+    "src/rbac/permissions.ts",
+    "src/screens/HomeScreen.tsx",
+    "src/screens/OrdersScreen.tsx",
+    "src/screens/OutboxScreen.tsx",
+    "src/screens/ReceivingScreen.tsx",
+    "src/screens/RegisterProductScreen.tsx",
+    "src/screens/ScannerScreen.tsx",
+    "src/theme/ThemeProvider.tsx",
+    "src/theme/index.ts",
+    "src/theme/themes.ts",
+    "src/theme/types.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "d7f4cf903f31",
+  "token_usage": {
+    "input_tokens": 4315,
+    "cache_creation_tokens": 250570,
+    "cache_read_tokens": 18612631,
+    "output_tokens": 122859,
+    "api_call_count": 117
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-26T09:32:02.730668Z",
+    "agent_lines": 2742,
+    "agent_removed": 1007,
+    "human_added": 793,
+    "human_modified": 101,
+    "human_removed": 0,
+    "total_committed": 3636,
+    "total_lines_changed": 4703,
+    "agent_percentage": 79.71507548373378,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1483,
+      "agent_lines_removed": 1006
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2843,
+      "agent_lines_removed": 1007
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2843,
+      "agent_lines_removed": 1007
+    }
+  ]
+}
