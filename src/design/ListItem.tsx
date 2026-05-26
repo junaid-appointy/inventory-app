@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useTheme } from '../theme';
 import { Text } from './Text';
-import { palette, spacing } from './tokens';
+import { spacing } from './tokens';
 
 type Props = {
   leading?: React.ReactNode;
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function ListItem({ leading, title, subtitle, trailing, onPress }: Props) {
+  const { palette } = useTheme();
   const C: any = onPress ? Pressable : View;
   return (
     <C

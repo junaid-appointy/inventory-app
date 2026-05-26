@@ -15,10 +15,11 @@ import {
   useCameraPermission,
   useCodeScanner,
 } from 'react-native-vision-camera';
-import { Button, IconButton, palette, spacing, Text } from '../design';
-import { findProduct } from '../db/products';
-import { RootStackParamList } from '../navigation/types';
-import { haptic } from '../utils/haptics';
+import { Button, IconButton, palette, spacing, Text } from '../../../design';
+import { findProduct, upsertProduct } from '../../../db/products';
+import { RootStackParamList } from '../../../navigation/types';
+import { api } from '../../../sync/api';
+import { haptic } from '../../../utils/haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 
@@ -98,12 +99,30 @@ export function ScannerScreen({ navigation }: Props) {
       lockedRef.current = true;
       haptic.success();
       flash();
-      findProduct(raw)
-        .then((existing) => {
-          if (existing) navigation.replace('Receiving', { barcode: raw });
-          else navigation.replace('RegisterProduct', { barcode: raw });
-        })
-        .catch(() => navigation.replace('RegisterProduct', { barcode: raw }));
+      (async () => {
+        const local = await findProduct(raw).catch(() => null);
+        if (local) {
+          navigation.replace('Receiving', { barcode: raw });
+          return;
+        }
+        // Local cache miss — ask the backend before forcing registration.
+        try {
+          const hit = await api.fetch.catalog(raw);
+          if (hit.product) {
+            await upsertProduct({
+              barcode: hit.product.barcode,
+              name: hit.product.name,
+              category: hit.product.category,
+              unit: hit.product.unit,
+            });
+            navigation.replace('Receiving', { barcode: raw });
+            return;
+          }
+        } catch {
+          // Offline / 401 — fall through to local registration flow.
+        }
+        navigation.replace('RegisterProduct', { barcode: raw });
+      })();
     },
     [navigation, flash]
   );

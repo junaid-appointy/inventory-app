@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StatusPill } from '../design';
-import { onPendingChange } from '../sync/syncService';
+import { StatusPill } from '../../../design';
+import { onPendingChange } from '../../../sync/syncService';
 
 export function QueueBadge() {
   const [count, setCount] = useState(0);

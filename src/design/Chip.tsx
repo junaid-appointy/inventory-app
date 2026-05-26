@@ -1,8 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useTheme } from '../theme';
 import { haptic } from '../utils/haptics';
 import { Text } from './Text';
-import { palette, radius, spacing } from './tokens';
+import { radius, spacing } from './tokens';
 
 type Props = {
   label: string;
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function Chip({ label, selected, onPress, leadingIcon }: Props) {
+  const { palette } = useTheme();
   return (
     <Pressable
       onPress={() => {

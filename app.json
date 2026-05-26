@@ -11,14 +11,17 @@
       "backgroundColor": "#0F7B3E",
       "resizeMode": "contain"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "com.officeops.fieldapp",
       "permissions": [
         "CAMERA",
         "ACCESS_NETWORK_STATE",
         "INTERNET",
-        "VIBRATE"
+        "VIBRATE",
+        "android.permission.CAMERA"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#0F7B3E"
@@ -28,7 +31,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.officeops.fieldapp",
       "infoPlist": {
-        "NSCameraUsageDescription": "Camera is used to scan product barcodes at the gate."
+        "NSCameraUsageDescription": "Field App uses the camera to scan barcodes at the gate."
       }
     },
     "plugins": [
@@ -39,6 +42,11 @@
           "enableCodeScanner": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5428db61-c637-4123-8b90-65c1bd684799"
+      }
+    }
   }
 }

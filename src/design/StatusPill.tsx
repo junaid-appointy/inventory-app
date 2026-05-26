@@ -1,16 +1,10 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useTheme } from '../theme';
 import { Text } from './Text';
-import { palette, radius, spacing } from './tokens';
+import { radius, spacing } from './tokens';
 
 type Tone = 'success' | 'warn' | 'danger' | 'neutral';
-
-const TONE: Record<Tone, { bg: string; fg: string }> = {
-  success: { bg: palette.primaryContainer, fg: palette.onPrimaryContainer },
-  warn: { bg: palette.warnContainer, fg: palette.onWarnContainer },
-  danger: { bg: palette.errorContainer, fg: palette.onErrorContainer },
-  neutral: { bg: palette.surfaceContainerHigh, fg: palette.onSurfaceVariant },
-};
 
 type Props = {
   label: string;
@@ -19,7 +13,14 @@ type Props = {
 };
 
 export function StatusPill({ label, tone = 'neutral', leadingIcon }: Props) {
-  const t = TONE[tone];
+  const { palette } = useTheme();
+  const toneMap: Record<Tone, { bg: string; fg: string }> = {
+    success: { bg: palette.primaryContainer, fg: palette.onPrimaryContainer },
+    warn: { bg: palette.warnContainer, fg: palette.onWarnContainer },
+    danger: { bg: palette.errorContainer, fg: palette.onErrorContainer },
+    neutral: { bg: palette.surfaceContainerHigh, fg: palette.onSurfaceVariant },
+  };
+  const t = toneMap[tone];
   return (
     <View style={[styles.base, { backgroundColor: t.bg }]}>
       {leadingIcon ? (

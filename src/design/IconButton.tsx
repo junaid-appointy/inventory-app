@@ -1,8 +1,9 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { useTheme } from '../theme';
 import { haptic } from '../utils/haptics';
 import { Text } from './Text';
-import { hitSlop, palette, radius } from './tokens';
+import { hitSlop, radius } from './tokens';
 
 type Props = {
   icon: string;
@@ -13,6 +14,7 @@ type Props = {
 };
 
 export function IconButton({ icon, onPress, size = 44, tone = 'default', style }: Props) {
+  const { palette } = useTheme();
   const color = tone === 'inverse' ? palette.surface : palette.onSurface;
   return (
     <Pressable

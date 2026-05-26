@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
-import { palette, radius, spacing } from './tokens';
+import { useTheme } from '../theme';
+import { radius, spacing } from './tokens';
 
 type Props = {
   onPress?: () => void;
@@ -11,19 +12,22 @@ type Props = {
 };
 
 export function Card({ onPress, tone = 'filled', padding = 'lg', style, children }: Props) {
+  const { palette } = useTheme();
   const Container: any = onPress ? Pressable : View;
+  const bg =
+    tone === 'outlined'
+      ? palette.surface
+      : tone === 'elevated'
+      ? palette.surfaceContainerLowest
+      : palette.surfaceContainerLow;
+
   return (
     <Container
       onPress={onPress}
       android_ripple={onPress ? { color: palette.outlineVariant } : undefined}
       style={[
         {
-          backgroundColor:
-            tone === 'outlined'
-              ? palette.surface
-              : tone === 'elevated'
-              ? palette.surfaceContainerLowest
-              : palette.surfaceContainerLow,
+          backgroundColor: bg,
           borderRadius: radius.lg,
           padding: spacing[padding],
           borderWidth: tone === 'outlined' ? 1 : 0,

@@ -58,6 +58,18 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
     CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox(status);
     CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+    CREATE TABLE IF NOT EXISTS stock_levels (
+      barcode TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT,
+      unit TEXT,
+      on_hand REAL NOT NULL DEFAULT 0,
+      threshold REAL NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_stock_category ON stock_levels(category);
   `);
   dbInstance = db;
   return db;

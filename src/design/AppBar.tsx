@@ -1,9 +1,10 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../theme';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
-import { palette, spacing } from './tokens';
+import { spacing } from './tokens';
 
 type Props = {
   title?: string;
@@ -13,8 +14,9 @@ type Props = {
 };
 
 export function AppBar({ title, subtitle, onBack, trailing }: Props) {
+  const { palette } = useTheme();
   return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
+    <SafeAreaView edges={['top']} style={{ backgroundColor: palette.surface }}>
       <View style={styles.row}>
         <View style={styles.leading}>
           {onBack ? <IconButton icon="←" onPress={onBack} /> : <View style={{ width: 44 }} />}
@@ -34,7 +36,6 @@ export function AppBar({ title, subtitle, onBack, trailing }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: palette.surface },
   row: {
     minHeight: 56,
     paddingHorizontal: spacing.sm,

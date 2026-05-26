@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleProp, Text as RNText, TextProps, TextStyle } from 'react-native';
-import { palette, type } from './tokens';
+import { useTheme } from '../theme';
+import { type } from './tokens';
 
 type Variant = keyof typeof type;
 
@@ -11,9 +12,10 @@ type Props = TextProps & {
   children: React.ReactNode;
 };
 
-export function Text({ variant = 'bodyLarge', color = palette.onSurface, style, children, ...rest }: Props) {
+export function Text({ variant = 'bodyLarge', color, style, children, ...rest }: Props) {
+  const { palette } = useTheme();
   return (
-    <RNText {...rest} style={[type[variant], { color }, style]}>
+    <RNText {...rest} style={[type[variant], { color: color ?? palette.onSurface }, style]}>
       {children}
     </RNText>
   );

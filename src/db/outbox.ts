@@ -1,7 +1,12 @@
 import { nanoid } from 'nanoid/non-secure';
 import { getDb, now } from './database';
 
-export type OutboxKind = 'receipt' | 'product_registration';
+export type OutboxKind =
+  | 'receipt'
+  | 'product_registration'
+  | 'issue'
+  | 'reorder_request'
+  | 'mismatch_flag';
 
 export type OutboxRow = {
   id: string;

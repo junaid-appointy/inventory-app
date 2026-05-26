@@ -9,12 +9,12 @@ import {
   spacing,
   Text,
   TextField,
-} from '../design';
-import { enqueue } from '../db/outbox';
-import { upsertProduct } from '../db/products';
-import { RootStackParamList } from '../navigation/types';
-import { flushOnce } from '../sync/syncService';
-import { haptic } from '../utils/haptics';
+} from '../../../design';
+import { enqueue } from '../../../db/outbox';
+import { upsertProduct } from '../../../db/products';
+import { RootStackParamList } from '../../../navigation/types';
+import { flushOnce } from '../../../sync/syncService';
+import { haptic } from '../../../utils/haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RegisterProduct'>;
 

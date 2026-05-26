@@ -1,17 +1,20 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { AppBar, Button, Card, palette, spacing, StatusPill, Text } from '../design';
-import { getDb } from '../db/database';
-import { OutboxRow } from '../db/outbox';
-import { RootStackParamList } from '../navigation/types';
-import { flushOnce } from '../sync/syncService';
+import { AppBar, Button, Card, palette, spacing, StatusPill, Text } from '../../../design';
+import { getDb } from '../../../db/database';
+import { OutboxRow } from '../../../db/outbox';
+import { RootStackParamList } from '../../../navigation/types';
+import { flushOnce } from '../../../sync/syncService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Outbox'>;
 
 const KIND_LABEL: Record<string, string> = {
   receipt: 'Receipt',
   product_registration: 'Product mapping',
+  issue: 'Issue',
+  reorder_request: 'Reorder request',
+  mismatch_flag: 'Mismatch flag',
 };
 
 const TONE: Record<OutboxRow['status'], 'success' | 'warn' | 'danger' | 'neutral'> = {

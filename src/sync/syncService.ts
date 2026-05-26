@@ -1,5 +1,6 @@
 import * as Network from 'expo-network';
 import { config } from '../config';
+import { OutboxKind } from '../db/outbox';
 import { markFailed, markSending, markSent, nextBatch, pendingCount } from '../db/outbox';
 import { api } from './api';
 
@@ -20,6 +21,16 @@ async function notify() {
   listeners.forEach((l) => l(c));
 }
 
+// Dispatch table for outbox kinds. Adding a new kind = one line here
+// + a handler in api.send.*.
+const DISPATCH: Record<OutboxKind, (payload: object) => Promise<unknown>> = {
+  receipt: api.send.receipt,
+  product_registration: api.send.product,
+  issue: api.send.issue,
+  reorder_request: api.send.reorderRequest,
+  mismatch_flag: api.send.mismatchFlag,
+};
+
 export async function flushOnce(): Promise<{ sent: number; failed: number }> {
   if (running) return { sent: 0, failed: 0 };
   running = true;
@@ -31,11 +42,15 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
 
     const batch = await nextBatch(config.outboxBatchSize);
     for (const row of batch) {
+      const dispatch = DISPATCH[row.kind];
+      if (!dispatch) {
+        await markFailed(row.id, `Unknown kind: ${row.kind}`);
+        failed++;
+        continue;
+      }
       try {
         await markSending(row.id);
-        const payload = JSON.parse(row.payload);
-        if (row.kind === 'receipt') await api.postReceipt(payload);
-        else if (row.kind === 'product_registration') await api.postProduct(payload);
+        await dispatch(JSON.parse(row.payload));
         await markSent(row.id);
         sent++;
       } catch (err) {

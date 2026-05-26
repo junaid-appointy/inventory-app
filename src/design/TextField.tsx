@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, TextInputProps, View } from 'react-native';
+import { useTheme } from '../theme';
 import { Text } from './Text';
-import { palette, radius, spacing, type as typo } from './tokens';
+import { radius, spacing, type as typo } from './tokens';
 
 type Props = TextInputProps & {
   label: string;
@@ -10,6 +11,7 @@ type Props = TextInputProps & {
 };
 
 export function TextField({ label, helper, error, onFocus, onBlur, style, ...rest }: Props) {
+  const { palette } = useTheme();
   const [focused, setFocused] = useState(false);
   const borderColor = error
     ? palette.error
@@ -35,7 +37,12 @@ export function TextField({ label, helper, error, onFocus, onBlur, style, ...res
         style={[
           styles.input,
           typo.bodyLarge,
-          { borderColor, color: palette.onSurface, borderWidth: focused ? 2 : 1.5 },
+          {
+            backgroundColor: palette.surfaceContainerLowest,
+            borderColor,
+            color: palette.onSurface,
+            borderWidth: focused ? 2 : 1.5,
+          },
           style,
         ]}
       />
@@ -54,7 +61,6 @@ export function TextField({ label, helper, error, onFocus, onBlur, style, ...res
 
 const styles = StyleSheet.create({
   input: {
-    backgroundColor: palette.surfaceContainerLowest,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     minHeight: 56,

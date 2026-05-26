@@ -6,21 +6,29 @@
 
 import { Platform, TextStyle } from 'react-native';
 
+/**
+ * Default brand palette ("Steady Purple"). Org primary is #92288E.
+ *
+ * NOTE: This module-level export remains the source of truth for components
+ * that haven't migrated to `useTheme()` yet. Once the theme system is wired
+ * through everywhere, this can become a re-export of the active theme's
+ * palette. For now both code paths resolve to the same colors.
+ */
 export const palette = {
-  primary: '#0B6E3E',
+  primary: '#92288E',
   onPrimary: '#FFFFFF',
-  primaryContainer: '#9FF0BE',
-  onPrimaryContainer: '#00210F',
+  primaryContainer: '#F8D9F5',
+  onPrimaryContainer: '#310031',
 
-  secondary: '#516350',
+  secondary: '#6E5868',
   onSecondary: '#FFFFFF',
-  secondaryContainer: '#D4E8D0',
-  onSecondaryContainer: '#0F1F11',
+  secondaryContainer: '#F8DAEF',
+  onSecondaryContainer: '#271624',
 
-  tertiary: '#39656B',
+  tertiary: '#7C5635',
   onTertiary: '#FFFFFF',
-  tertiaryContainer: '#BCEBF1',
-  onTertiaryContainer: '#001F23',
+  tertiaryContainer: '#FFDCBE',
+  onTertiaryContainer: '#2C1600',
 
   error: '#BA1A1A',
   onError: '#FFFFFF',
@@ -32,26 +40,30 @@ export const palette = {
   warnContainer: '#FFDF9E',
   onWarnContainer: '#261A00',
 
-  background: '#F7FBF5',
-  onBackground: '#181D18',
+  background: '#FBF7FA',
+  onBackground: '#1E1A1D',
 
-  surface: '#F7FBF5',
-  onSurface: '#181D18',
-  surfaceDim: '#D7DBD4',
-  surfaceBright: '#F7FBF5',
+  surface: '#FBF7FA',
+  onSurface: '#1E1A1D',
+  surfaceDim: '#DEDADD',
+  surfaceBright: '#FBF7FA',
 
   surfaceContainerLowest: '#FFFFFF',
-  surfaceContainerLow: '#F1F5EE',
-  surfaceContainer: '#EBEFE8',
-  surfaceContainerHigh: '#E5E9E2',
-  surfaceContainerHighest: '#DFE3DC',
+  surfaceContainerLow: '#F5EFF3',
+  surfaceContainer: '#EFE8EE',
+  surfaceContainerHigh: '#E9E2E8',
+  surfaceContainerHighest: '#E3DDE2',
 
-  onSurfaceVariant: '#414941',
-  outline: '#717971',
-  outlineVariant: '#C1C9BF',
+  onSurfaceVariant: '#4D444B',
+  outline: '#7C747A',
+  outlineVariant: '#CDC4CB',
 
   scrim: 'rgba(0,0,0,0.45)',
 } as const;
+
+// Widen string literals so alternate themes can supply any color value
+// for the same keys.
+export type Palette = { [K in keyof typeof palette]: string };
 
 export const spacing = {
   xxs: 2,

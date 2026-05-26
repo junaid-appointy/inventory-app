@@ -11,17 +11,20 @@ import {
   spacing,
   StatusPill,
   Text,
-} from '../design';
-import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../db/orders';
-import { enqueue } from '../db/outbox';
-import { findProduct, Product } from '../db/products';
-import { RootStackParamList } from '../navigation/types';
-import { flushOnce } from '../sync/syncService';
-import { haptic } from '../utils/haptics';
+} from '../../../design';
+import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../../../db/orders';
+import { enqueue } from '../../../db/outbox';
+import { findProduct, Product } from '../../../db/products';
+import { adjustOnHand, findStock, upsertStock } from '../../../db/stock';
+import { useT } from '../../../i18n';
+import { RootStackParamList } from '../../../navigation/types';
+import { flushOnce } from '../../../sync/syncService';
+import { haptic } from '../../../utils/haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Receiving'>;
 
 export function ReceivingScreen({ route, navigation }: Props) {
+  const t = useT();
   const { barcode } = route.params;
   const [product, setProduct] = useState<Product | null>(null);
   const [item, setItem] = useState<OrderItem | null>(null);
@@ -44,23 +47,76 @@ export function ReceivingScreen({ route, navigation }: Props) {
     setQty(n);
   };
 
+  const persist = async (flagged: boolean) => {
+    const id = `rcp_${nanoid(12)}`;
+    await enqueue('receipt', {
+      id,
+      order_id: item?.order_id ?? null,
+      order_item_id: item?.id ?? null,
+      barcode,
+      product_name: product?.name ?? 'Unknown',
+      qty,
+      flagged,
+      scanned_at: Date.now(),
+    });
+    if (flagged) {
+      await enqueue('mismatch_flag', {
+        id: `flg_${nanoid(12)}`,
+        receipt_id: id,
+        order_item_id: item?.id ?? null,
+        barcode,
+        expected: item?.expected_qty ?? null,
+        received_total: (item?.received_qty ?? 0) + qty,
+        flagged_at: Date.now(),
+      });
+    }
+    if (item) await addReceivedQty(item.id, qty);
+
+    // Roll the received qty into on-hand stock. Create the row if this
+    // product hasn't been tracked before so it shows up on Stock/Alerts.
+    const existing = await findStock(barcode);
+    if (existing) {
+      await adjustOnHand(barcode, qty);
+    } else {
+      await upsertStock({
+        barcode,
+        name: product?.name ?? 'Unknown',
+        category: product?.category ?? null,
+        unit: product?.unit ?? null,
+        on_hand: qty,
+        threshold: 0,
+      });
+    }
+
+    flushOnce().catch(() => {});
+  };
+
+  const goToSummary = (flagged: boolean) => {
+    navigation.replace('DeliverySummary', {
+      productName: product?.name ?? 'Unknown',
+      qty,
+      expected: item?.expected_qty ?? null,
+      flagged,
+    });
+  };
+
   const confirm = async () => {
     setSaving(true);
     try {
-      const id = `rcp_${nanoid(12)}`;
-      await enqueue('receipt', {
-        id,
-        order_id: item?.order_id ?? null,
-        order_item_id: item?.id ?? null,
-        barcode,
-        product_name: product?.name ?? 'Unknown',
-        qty,
-        scanned_at: Date.now(),
-      });
-      if (item) await addReceivedQty(item.id, qty);
-      flushOnce().catch(() => {});
+      await persist(false);
       haptic.success();
-      navigation.replace('Scanner');
+      goToSummary(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const flagAndContinue = async () => {
+    setSaving(true);
+    try {
+      await persist(true);
+      haptic.warn();
+      goToSummary(true);
     } finally {
       setSaving(false);
     }
@@ -137,20 +193,36 @@ export function ReceivingScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.footer}>
+        {mismatch ? (
+          <Button
+            label={t('flagAndContinue')}
+            onPress={flagAndContinue}
+            variant="danger"
+            loading={saving}
+            size="lg"
+            fullWidth
+            leadingIcon={
+              <Text variant="titleLarge" color={palette.onErrorContainer}>
+                ⚠
+              </Text>
+            }
+          />
+        ) : (
+          <Button
+            label="Confirm received"
+            onPress={confirm}
+            loading={saving}
+            size="lg"
+            fullWidth
+            leadingIcon={
+              <Text variant="titleLarge" color={palette.onPrimary}>
+                ✓
+              </Text>
+            }
+          />
+        )}
         <Button
-          label="Confirm received"
-          onPress={confirm}
-          loading={saving}
-          size="lg"
-          fullWidth
-          leadingIcon={
-            <Text variant="titleLarge" color={palette.onPrimary}>
-              ✓
-            </Text>
-          }
-        />
-        <Button
-          label="Cancel"
+          label={t('cancel')}
           variant="text"
           onPress={() => navigation.popToTop()}
           style={{ marginTop: spacing.sm }}
