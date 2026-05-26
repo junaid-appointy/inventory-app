@@ -1,0 +1,56 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "0455ca40a883",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 24,
+  "files_touched": [
+    "App.tsx",
+    "CLAUDE.md",
+    "DEVELOPMENT.md",
+    "app.json",
+    "package-lock.json",
+    "package.json",
+    "src/config.ts",
+    "src/db/catalog.ts",
+    "src/db/maintenance.ts",
+    "src/db/stock.ts",
+    "src/design/AppBar.tsx",
+    "src/design/Chip.tsx",
+    "src/design/IconButton.tsx",
+    "src/design/QtyStepper.tsx",
+    "src/design/Skeleton.tsx",
+    "src/design/StatusPill.tsx",
+    "src/design/index.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/QueueBadge.tsx",
+    "src/modules/inventory/hooks/useCatalogSuggest.ts",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/DeliverySummaryScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/IssueScreen.tsx",
+    "src/modules/inventory/screens/LoginScreen.tsx",
+    "src/modules/inventory/screens/OrdersScreen.tsx",
+    "src/modules/inventory/screens/OutboxScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/04/55ca40a883/0/metadata.json",
+      "transcript": "/04/55ca40a883/0/full.jsonl",
+      "content_hash": "/04/55ca40a883/0/content_hash.txt",
+      "prompt": "/04/55ca40a883/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1158,
+    "cache_creation_tokens": 896717,
+    "cache_read_tokens": 75000976,
+    "output_tokens": 175185,
+    "api_call_count": 189
+  }
+}
