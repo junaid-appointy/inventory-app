@@ -1,0 +1,30 @@
+so I did the cloud build, it was completed, I got the url and installed the app, then ran the npm run start:dev-client on my laptop terminal, and got the QR, in the mobile app, I opened and I say this expo development build screen where the sections were given start a local development server with : Npx expo start and below it there was given : Then select the local server when it appaears here and below it was http:localhost:8081 and connect button was there, below it was fethc dev server option and below it was Scan QR code option
+
+---
+
+so I did the cloud build, it was completed, I got the url and installed the app, then ran the npm run start:dev-client on my laptop terminal, and got the QR, in the mobile app, I opened and I say this expo development build screen where the sections were given start a local development server with : Npx expo start and below it there was given : Then select the local server when it appaears here and below it was http:localhost:8081 and connect button was there, below it was fethc dev server option and below it was Scan QR code option, but when I used the scan QR code option and scanned the qr code on my laptop terminal, there was an error : Error loading app, failed to connect to /192.168.200.15 (port 8081) from /10.0.0.148 (port 35284) after 10000ms
+
+---
+
+okay it was a different wifi connection , I brought both on common wifi, it works now
+
+---
+
+lets first fix the pipeline, I will be making a lot of changes and want to test all those changes on mobile and quickly, what setup do we need?
+
+---
+
+no the question is, suppose, I make some changes in app, then I have to build it using EAS cloud, then I will get a link, then I will uninstall the old app and reinstall this new one, then I will run the server on my laptop, scan the qr from mobile, then I will see the updated app. 
+is my understanding correct?
+
+---
+
+also why is the build file size 210 mb for such small app?
+
+---
+
+can you write an md doc for all this changes build and run flow for laptop and mobile both, with all the commands and configuration info
+
+---
+
+do we have git repo setup for field app?
