@@ -23,6 +23,7 @@
         "VIBRATE",
         "android.permission.CAMERA"
       ],
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#0F7B3E"
       }

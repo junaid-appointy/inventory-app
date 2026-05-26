@@ -99,33 +99,3 @@ export async function adjustOnHand(barcode: string, delta: number): Promise<void
     [delta, now(), barcode]
   );
 }
-
-/**
- * Seed demo stock once so Stock/Alerts/Issue screens show something on a
- * fresh install. Idempotent: skipped if any stock row already exists.
- */
-export async function seedDemoStockIfEmpty(): Promise<void> {
-  const db = await getDb();
-  const existing = await db.getFirstAsync<{ c: number }>(
-    'SELECT COUNT(*) as c FROM stock_levels'
-  );
-  if ((existing?.c ?? 0) > 0) return;
-  const ts = now();
-  const seed: Array<[string, string, string, string, number, number]> = [
-    ['8901030875021', 'A4 Printer Paper',     'Stationery', 'Pack',  12, 6],
-    ['8901001234567', 'Blue Ballpoint Pens',  'Stationery', 'Box',    3, 5],
-    ['8902080000034', 'Floor Cleaner 1L',     'Cleaning',   'Litre',  0, 4],
-    ['8901491100012', 'Toilet Paper Rolls',   'Cleaning',   'Pack',   8, 8],
-    ['8901058000023', 'Tea Bags (100ct)',     'Pantry',     'Box',    5, 4],
-    ['8901491307041', 'Coffee Powder 200g',   'Pantry',     'Piece',  1, 3],
-    ['8901030698778', 'HDMI Cable 1.8m',      'IT supplies','Piece',  2, 2],
-    ['8901138514525', 'USB-C Charger 20W',    'IT supplies','Piece',  6, 3],
-  ];
-  for (const [barcode, name, category, unit, on_hand, threshold] of seed) {
-    await db.runAsync(
-      `INSERT INTO stock_levels (barcode, name, category, unit, on_hand, threshold, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [barcode, name, category, unit, on_hand, threshold, ts]
-    );
-  }
-}

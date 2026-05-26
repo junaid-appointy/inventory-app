@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../auth';
+import { config } from '../../../config';
 import {
   Button,
   palette,
@@ -38,7 +39,14 @@ export function LoginScreen() {
       // AuthProvider flips state → RootNavigator swaps to the main stack.
     } catch (e) {
       haptic.warn();
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      // Native fetch surfaces "Network request failed" with no detail.
+      // Add the URL so a misconfigured base or unreachable server is obvious.
+      if (msg.toLowerCase().includes('network request failed')) {
+        setError(`Cannot reach ${config.apiBaseUrl}. Is the backend running, and is the URL right for this device?`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }

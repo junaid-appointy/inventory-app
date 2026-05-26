@@ -1,9 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { AppBar, Button, Card, palette, spacing, StatusPill, Text } from '../../../design';
+import { AppBar, Button, Card, palette, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { getDb } from '../../../db/database';
 import { OutboxRow } from '../../../db/outbox';
+import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce } from '../../../sync/syncService';
 
@@ -25,8 +26,10 @@ const TONE: Record<OutboxRow['status'], 'success' | 'warn' | 'danger' | 'neutral
 };
 
 export function OutboxScreen({ navigation }: Props) {
+  const t = useT();
   const [rows, setRows] = useState<OutboxRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(async () => {
     const db = await getDb();
@@ -35,6 +38,7 @@ export function OutboxScreen({ navigation }: Props) {
         'SELECT * FROM outbox ORDER BY created_at DESC LIMIT 200'
       )
     );
+    setInitialLoading(false);
   }, []);
 
   useEffect(() => {
@@ -53,7 +57,23 @@ export function OutboxScreen({ navigation }: Props) {
 
   return (
     <View style={styles.safe}>
-      <AppBar title="Sync queue" onBack={() => navigation.goBack()} />
+      <AppBar title={t('syncQueue')} onBack={() => navigation.goBack()} />
+      {initialLoading && rows.length === 0 ? (
+        <View style={styles.list}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ marginBottom: spacing.sm }}>
+              <Card tone="filled" padding="lg">
+                <View style={styles.rowHead}>
+                  <Skeleton width="40%" height={18} />
+                  <Skeleton width={64} height={20} rounded="pill" />
+                </View>
+                <View style={{ height: spacing.xs }} />
+                <Skeleton width="65%" height={14} />
+              </Card>
+            </View>
+          ))}
+        </View>
+      ) : (
       <FlatList
         data={rows}
         keyExtractor={(r) => r.id}
@@ -92,8 +112,9 @@ export function OutboxScreen({ navigation }: Props) {
           </View>
         }
       />
+      )}
       <View style={styles.footer}>
-        <Button label="Sync now" onPress={sync} loading={busy} size="lg" fullWidth />
+        <Button label={t('syncNow')} onPress={sync} loading={busy} size="lg" fullWidth />
       </View>
     </View>
   );

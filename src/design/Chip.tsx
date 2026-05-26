@@ -1,3 +1,4 @@
+import { Check, type LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../theme';
@@ -9,10 +10,11 @@ type Props = {
   label: string;
   selected?: boolean;
   onPress: () => void;
-  leadingIcon?: string;
+  /** Optional leading icon shown when the chip is unselected. */
+  Icon?: LucideIcon;
 };
 
-export function Chip({ label, selected, onPress, leadingIcon }: Props) {
+export function Chip({ label, selected, onPress, Icon }: Props) {
   const { palette } = useTheme();
   return (
     <Pressable
@@ -31,13 +33,9 @@ export function Chip({ label, selected, onPress, leadingIcon }: Props) {
     >
       <View style={styles.row}>
         {selected ? (
-          <Text variant="labelLarge" color={palette.onSecondaryContainer}>
-            ✓
-          </Text>
-        ) : leadingIcon ? (
-          <Text variant="labelLarge" color={palette.onSurface}>
-            {leadingIcon}
-          </Text>
+          <Check size={16} color={palette.onSecondaryContainer} strokeWidth={2.5} />
+        ) : Icon ? (
+          <Icon size={16} color={palette.onSurface} strokeWidth={2.2} />
         ) : null}
         <Text
           variant="labelLarge"

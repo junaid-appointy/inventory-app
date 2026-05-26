@@ -7,6 +7,7 @@ import {
   Chip,
   palette,
   radius,
+  Skeleton,
   spacing,
   StatusPill,
   Text,
@@ -15,6 +16,7 @@ import { listStock, statusFor, StockRow, StockStatus, syncStockFromRemote } from
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
+import { flushOnce } from '../../../sync/syncService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
@@ -37,8 +39,16 @@ export function StockScreen({ navigation }: Props) {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('All');
+  // Skeletons render only on the very first load — subsequent focus
+  // refreshes keep the existing rows on screen so the UI doesn't flicker.
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(async () => {
+    // Drain the outbox first so any pending issues/receipts are on the
+    // server before we ask for the new truth. Otherwise the remote fetch
+    // races the flush and we mirror the pre-write on-hand back into local.
+    await flushOnce().catch(() => {});
+
     // Mirror remote into local SQLite so the screen still works offline.
     try {
       const remote = await api.fetch.stock();
@@ -58,6 +68,7 @@ export function StockScreen({ navigation }: Props) {
       // Offline / 401 / server down — fall back to local cache.
     }
     setRows(await listStock());
+    setInitialLoading(false);
   }, []);
 
   useEffect(() => {
@@ -95,6 +106,23 @@ export function StockScreen({ navigation }: Props) {
         ))}
       </View>
 
+      {initialLoading && rows.length === 0 ? (
+        <View style={styles.list}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ marginBottom: spacing.sm }}>
+              <Card tone="filled" padding="lg">
+                <View style={styles.row}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width="60%" height={18} />
+                    <Skeleton width="40%" height={14} />
+                  </View>
+                  <Skeleton width={64} height={24} rounded="pill" />
+                </View>
+              </Card>
+            </View>
+          ))}
+        </View>
+      ) : (
       <FlatList
         data={filtered}
         keyExtractor={(r) => r.barcode}
@@ -135,6 +163,7 @@ export function StockScreen({ navigation }: Props) {
           </View>
         }
       />
+      )}
     </View>
   );
 }

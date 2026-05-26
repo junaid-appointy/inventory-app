@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../theme';
@@ -9,10 +10,11 @@ type Tone = 'success' | 'warn' | 'danger' | 'neutral';
 type Props = {
   label: string;
   tone?: Tone;
-  leadingIcon?: string;
+  /** Optional leading icon (Lucide component). */
+  Icon?: LucideIcon;
 };
 
-export function StatusPill({ label, tone = 'neutral', leadingIcon }: Props) {
+export function StatusPill({ label, tone = 'neutral', Icon }: Props) {
   const { palette } = useTheme();
   const toneMap: Record<Tone, { bg: string; fg: string }> = {
     success: { bg: palette.primaryContainer, fg: palette.onPrimaryContainer },
@@ -23,11 +25,7 @@ export function StatusPill({ label, tone = 'neutral', leadingIcon }: Props) {
   const t = toneMap[tone];
   return (
     <View style={[styles.base, { backgroundColor: t.bg }]}>
-      {leadingIcon ? (
-        <Text variant="labelLarge" color={t.fg}>
-          {leadingIcon}
-        </Text>
-      ) : null}
+      {Icon ? <Icon size={14} color={t.fg} strokeWidth={2.4} /> : null}
       <Text variant="labelLarge" color={t.fg}>
         {label}
       </Text>

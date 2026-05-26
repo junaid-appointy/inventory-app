@@ -1,11 +1,12 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
-import { AppBar, Card, palette, spacing, StatusPill, Text } from '../../../design';
+import { AppBar, Card, palette, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { getOrderItems, listOpenOrders, Order, OrderItem } from '../../../db/orders';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
+import { flushOnce } from '../../../sync/syncService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Orders'>;
 type Enriched = Order & { items: OrderItem[] };
@@ -24,8 +25,13 @@ const SECTION_ORDER: Bucket[] = ['arrived', 'awaited', 'done'];
 export function OrdersScreen({ navigation }: Props) {
   const t = useT();
   const [orders, setOrders] = useState<Enriched[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(async () => {
+    // Flush pending writes (e.g. receipts that updated received_qty) so
+    // the orders list reflects them on the very first remote fetch.
+    await flushOnce().catch(() => {});
+
     // Prefer remote when available — orders are managed server-side.
     try {
       const remote = await api.fetch.orders();
@@ -46,6 +52,7 @@ export function OrdersScreen({ navigation }: Props) {
           })),
         })),
       );
+      setInitialLoading(false);
       return;
     } catch {
       // Offline / unauthenticated — fall through to local cache.
@@ -54,6 +61,7 @@ export function OrdersScreen({ navigation }: Props) {
     setOrders(
       await Promise.all(list.map(async (o) => ({ ...o, items: await getOrderItems(o.id) })))
     );
+    setInitialLoading(false);
   }, []);
 
   useEffect(() => {
@@ -80,6 +88,30 @@ export function OrdersScreen({ navigation }: Props) {
   return (
     <View style={styles.safe}>
       <AppBar title={t('receiving')} subtitle={t('expectedToday')} onBack={() => navigation.goBack()} />
+      {initialLoading && orders.length === 0 ? (
+        <View style={styles.list}>
+          <View style={[styles.sectionHeader, { marginBottom: spacing.sm }]}>
+            <Skeleton width="35%" height={14} />
+          </View>
+          {[0, 1].map((i) => (
+            <View key={i} style={{ marginBottom: spacing.md }}>
+              <Card tone="filled" padding="lg">
+                <View style={styles.head}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width="50%" height={22} />
+                    <Skeleton width="35%" height={14} />
+                  </View>
+                  <Skeleton width={64} height={24} rounded="pill" />
+                </View>
+                <View style={{ height: spacing.md }} />
+                <Skeleton width="100%" height={16} />
+                <View style={{ height: spacing.sm }} />
+                <Skeleton width="80%" height={16} />
+              </Card>
+            </View>
+          ))}
+        </View>
+      ) : (
       <SectionList
         sections={sections}
         keyExtractor={(o) => o.id}
@@ -160,6 +192,7 @@ export function OrdersScreen({ navigation }: Props) {
           </View>
         }
       />
+      )}
     </View>
   );
 }

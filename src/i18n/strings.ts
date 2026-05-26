@@ -9,6 +9,21 @@ type Pair = readonly [string, string];
 export const STR = {
   // App
   appName:         ['Office Ops',         'ऑफिस ऑप्स'],
+  receiveItem:     ['Receive item',       'सामान लें'],
+  confirmReceived: ['Confirm received',   'मिलना पक्का'],
+  saveAndContinue: ['Save & continue',    'सेव और आगे'],
+  quantityReceived:['Quantity received',  'मिली गिनती'],
+  syncQueue:       ['Sync queue',         'भेजने की कतार'],
+  syncNow:         ['Sync now',           'अभी भेजें'],
+  receipt:         ['Receipt',            'रसीद'],
+  productMapping:  ['Product mapping',    'सामान मैपिंग'],
+  reorderRequest:  ['Reorder request',    'फिर मँगाने का अनुरोध'],
+  mismatchFlag:    ['Mismatch flag',      'फ़र्क का चिह्न'],
+  product:         ['Product',            'सामान'],
+  unknownProduct:  ['Unknown product',    'अनजान सामान'],
+  expectedShort:   ['Expected',           'अपेक्षित'],
+  alreadyReceived: ['already received',   'पहले मिला'],
+  noMatchingOrder: ['No matching order — capture stands alone.', 'कोई ऑर्डर नहीं मिला — अकेला कैप्चर।'],
   greet:           ['Hello',              'नमस्ते'],
   guard:           ['Guard at Gate',      'गेट सुरक्षाकर्मी'],
 

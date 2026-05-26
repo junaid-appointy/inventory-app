@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AlertTriangle, Check } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -26,7 +27,7 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
       <View style={styles.body}>
         <View style={styles.hero}>
           <View style={styles.tick}>
-            <Text variant="displayMedium" color={palette.onPrimary}>✓</Text>
+            <Check size={48} color={palette.onPrimary} strokeWidth={3} />
           </View>
           <Text variant="headlineMedium" style={{ marginTop: spacing.lg, textAlign: 'center' }}>
             {t('deliveryDone')}
@@ -63,9 +64,9 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
           )}
           <View style={{ marginTop: spacing.md }}>
             {flagged ? (
-              <StatusPill label={t('mismatch')} tone="danger" leadingIcon="⚠" />
+              <StatusPill label={t('mismatch')} tone="danger" Icon={AlertTriangle} />
             ) : matched ? (
-              <StatusPill label="Counts match" tone="success" leadingIcon="✓" />
+              <StatusPill label="Counts match" tone="success" Icon={Check} />
             ) : (
               <StatusPill label="Standalone receipt" tone="neutral" />
             )}

@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +20,7 @@ export function AppBar({ title, subtitle, onBack, trailing }: Props) {
     <SafeAreaView edges={['top']} style={{ backgroundColor: palette.surface }}>
       <View style={styles.row}>
         <View style={styles.leading}>
-          {onBack ? <IconButton icon="←" onPress={onBack} /> : <View style={{ width: 44 }} />}
+          {onBack ? <IconButton Icon={ArrowLeft} onPress={onBack} /> : <View style={{ width: 44 }} />}
         </View>
         <View style={styles.titleWrap}>
           {title ? <Text variant="titleLarge">{title}</Text> : null}

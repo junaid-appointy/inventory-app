@@ -1,11 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -16,7 +16,9 @@ import {
   Card,
   Chip,
   palette,
+  QtyStepper,
   radius,
+  Skeleton,
   spacing,
   Text,
   TextField,
@@ -42,9 +44,13 @@ export function IssueScreen({ route, navigation }: Props) {
   const [reason, setReason] = useState(REASONS[0]);
   const [who, setWho] = useState('');
   const [saving, setSaving] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
-    listStock().then(setAll);
+    listStock().then((rows) => {
+      setAll(rows);
+      setInitialLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -62,11 +68,6 @@ export function IssueScreen({ route, navigation }: Props) {
       .slice(0, 25);
   }, [all, query, selected]);
 
-  const bump = useCallback((d: number) => {
-    haptic.tap();
-    setQty((v) => Math.max(1, v + d));
-  }, []);
-
   const submit = async () => {
     if (!selected) return;
     setSaving(true);
@@ -81,7 +82,11 @@ export function IssueScreen({ route, navigation }: Props) {
         issued_at: Date.now(),
       });
       await adjustOnHand(selected.barcode, -qty);
-      flushOnce().catch(() => {});
+      // Block on the flush so the Stock/Alerts screen we navigate back to
+      // sees the server-side deduction on its very first refetch. If the
+      // device is offline this resolves immediately (no-op) and the local
+      // adjustOnHand above stands until the next online flush.
+      await flushOnce().catch(() => {});
       haptic.success();
       navigation.goBack();
     } finally {
@@ -103,31 +108,45 @@ export function IssueScreen({ route, navigation }: Props) {
             autoFocus
           />
         </View>
-        <FlatList
-          data={results}
-          keyExtractor={(r) => r.barcode}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-          renderItem={({ item }) => (
-            <Card tone="filled" padding="lg" onPress={() => setSelected(item)}>
-              <Text variant="titleMedium">{item.name}</Text>
-              <Text
-                variant="bodyMedium"
-                color={palette.onSurfaceVariant}
-                style={{ marginTop: 2 }}
-              >
-                {item.category ?? '—'} · {item.on_hand} {item.unit ?? ''} {t('onHand')}
-              </Text>
-            </Card>
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
-                No items match.
-              </Text>
-            </View>
-          }
-        />
+        {initialLoading && all.length === 0 ? (
+          <View style={styles.list}>
+            {[0, 1, 2, 3].map((i) => (
+              <View key={i} style={{ marginBottom: spacing.sm }}>
+                <Card tone="filled" padding="lg">
+                  <Skeleton width="55%" height={18} />
+                  <View style={{ height: 6 }} />
+                  <Skeleton width="75%" height={14} />
+                </Card>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <FlatList
+            data={results}
+            keyExtractor={(r) => r.barcode}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+            renderItem={({ item }) => (
+              <Card tone="filled" padding="lg" onPress={() => setSelected(item)}>
+                <Text variant="titleMedium">{item.name}</Text>
+                <Text
+                  variant="bodyMedium"
+                  color={palette.onSurfaceVariant}
+                  style={{ marginTop: 2 }}
+                >
+                  {item.category ?? '—'} · {item.on_hand} {item.unit ?? ''} {t('onHand')}
+                </Text>
+              </Card>
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
+                  No items match.
+                </Text>
+              </View>
+            }
+          />
+        )}
       </View>
     );
   }
@@ -160,11 +179,7 @@ export function IssueScreen({ route, navigation }: Props) {
             <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
               {t('howMany').toUpperCase()}
             </Text>
-            <View style={styles.stepperRow}>
-              <Stepper icon="−" onPress={() => bump(-1)} />
-              <Text variant="displayLarge" style={styles.qtyNum}>{qty}</Text>
-              <Stepper icon="+" onPress={() => bump(1)} />
-            </View>
+            <QtyStepper value={qty} onChange={setQty} min={1} max={selected.on_hand || undefined} />
           </View>
 
           <View>
@@ -194,25 +209,11 @@ export function IssueScreen({ route, navigation }: Props) {
             loading={saving}
             size="lg"
             fullWidth
-            leadingIcon={
-              <Text variant="titleLarge" color={palette.onPrimary}>✓</Text>
-            }
+            leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}
           />
         </View>
       </KeyboardAvoidingView>
     </View>
-  );
-}
-
-function Stepper({ icon, onPress }: { icon: string; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      android_ripple={{ color: palette.outlineVariant, borderless: true, radius: 44 }}
-      style={styles.stepper}
-    >
-      <Text variant="displayMedium" color={palette.onPrimary}>{icon}</Text>
-    </Pressable>
   );
 }
 
@@ -232,22 +233,6 @@ const styles = StyleSheet.create({
   list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   body: { flex: 1, padding: spacing.xl, gap: spacing.xl },
   qtySection: { gap: spacing.lg },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xl,
-  },
-  stepper: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: palette.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  qtyNum: { minWidth: 120, textAlign: 'center' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   empty: { padding: spacing.xxl },
   footer: {

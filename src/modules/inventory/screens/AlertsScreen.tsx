@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -7,6 +8,7 @@ import {
   Button,
   Card,
   palette,
+  Skeleton,
   spacing,
   StatusPill,
   Text,
@@ -25,8 +27,11 @@ export function AlertsScreen({ navigation }: Props) {
   const t = useT();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(async () => {
+    // Flush pending writes first so the remote reflects the latest state.
+    await flushOnce().catch(() => {});
     try {
       const remote = await api.fetch.alerts();
       await Promise.all(
@@ -45,6 +50,7 @@ export function AlertsScreen({ navigation }: Props) {
       // Fall back to local SQLite cache.
     }
     setRows(await listLowOrOut());
+    setInitialLoading(false);
   }, []);
 
   useEffect(() => {
@@ -71,6 +77,25 @@ export function AlertsScreen({ navigation }: Props) {
   return (
     <View style={styles.safe}>
       <AppBar title={t('alerts')} subtitle={t('alertsSub')} onBack={() => navigation.goBack()} />
+      {initialLoading && rows.length === 0 ? (
+        <View style={styles.list}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ marginBottom: spacing.md }}>
+              <Card tone="filled" padding="lg">
+                <View style={styles.head}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width="55%" height={18} />
+                    <Skeleton width="75%" height={14} />
+                  </View>
+                  <Skeleton width={56} height={24} rounded="pill" />
+                </View>
+                <View style={{ height: spacing.md }} />
+                <Skeleton width="40%" height={36} rounded="pill" />
+              </Card>
+            </View>
+          ))}
+        </View>
+      ) : (
       <FlatList
         data={rows}
         keyExtractor={(r) => r.barcode}
@@ -98,7 +123,7 @@ export function AlertsScreen({ navigation }: Props) {
               </View>
               <View style={{ height: spacing.md }} />
               {done ? (
-                <StatusPill label={t('reorderSent')} tone="success" leadingIcon="✓" />
+                <StatusPill label={t('reorderSent')} tone="success" Icon={Check} />
               ) : (
                 <Button
                   label={t('requestReorder')}
@@ -125,6 +150,7 @@ export function AlertsScreen({ navigation }: Props) {
           </View>
         }
       />
+      )}
     </View>
   );
 }

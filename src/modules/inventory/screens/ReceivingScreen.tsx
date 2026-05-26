@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AlertTriangle, Check, ScanLine } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -6,7 +7,9 @@ import {
   AppBar,
   Button,
   Card,
+  IconButton,
   palette,
+  QtyStepper,
   radius,
   spacing,
   StatusPill,
@@ -38,10 +41,6 @@ export function ReceivingScreen({ route, navigation }: Props) {
     })();
   }, [barcode]);
 
-  const bump = (n: number) => {
-    haptic.tap();
-    setQty((q) => Math.max(1, q + n));
-  };
   const setExact = (n: number) => {
     haptic.tap();
     setQty(n);
@@ -130,51 +129,48 @@ export function ReceivingScreen({ route, navigation }: Props) {
   return (
     <View style={styles.safe}>
       <AppBar
-        title="Receive item"
+        title={t('receiveItem')}
         onBack={() => navigation.popToTop()}
         trailing={
-          expected !== null ? (
-            <StatusPill
-              label={`${projected} / ${expected}`}
-              tone={mismatch ? 'danger' : projected === expected ? 'success' : 'neutral'}
-            />
-          ) : null
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+            {expected !== null ? (
+              <StatusPill
+                label={`${projected} / ${expected}`}
+                tone={mismatch ? 'danger' : projected === expected ? 'success' : 'neutral'}
+              />
+            ) : null}
+            <IconButton Icon={ScanLine} onPress={() => navigation.replace('Scanner')} />
+          </View>
         }
       />
 
       <View style={styles.content}>
         <Card tone="elevated" padding="xl">
           <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-            PRODUCT
+            {t('product').toUpperCase()}
           </Text>
           <Text variant="headlineSmall" style={{ marginTop: spacing.xs }}>
-            {product?.name ?? 'Unknown product'}
+            {product?.name ?? t('unknownProduct')}
           </Text>
           <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
             {barcode}
           </Text>
           {expected !== null ? (
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              Expected {expected} · {alreadyIn} already received
+              {t('expectedShort')} {expected} · {alreadyIn} {t('alreadyReceived')}
             </Text>
           ) : (
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              No matching order — capture stands alone.
+              {t('noMatchingOrder')}
             </Text>
           )}
         </Card>
 
         <View style={styles.qtySection}>
           <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
-            QUANTITY RECEIVED
+            {t('quantityReceived').toUpperCase()}
           </Text>
-          <View style={styles.stepperRow}>
-            <Stepper icon="−" onPress={() => bump(-1)} />
-            <Text variant="displayLarge" style={styles.qtyNum}>
-              {qty}
-            </Text>
-            <Stepper icon="+" onPress={() => bump(1)} />
-          </View>
+          <QtyStepper value={qty} onChange={setQty} min={1} />
           <View style={styles.quickRow}>
             {[5, 10, 20, 50].map((n) => (
               <QuickChip key={n} value={n} active={qty === n} onPress={() => setExact(n)} />
@@ -185,7 +181,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
               <StatusPill
                 label={`Over by ${projected - expected!}`}
                 tone="danger"
-                leadingIcon="⚠"
+                Icon={AlertTriangle}
               />
             </View>
           ) : null}
@@ -201,24 +197,16 @@ export function ReceivingScreen({ route, navigation }: Props) {
             loading={saving}
             size="lg"
             fullWidth
-            leadingIcon={
-              <Text variant="titleLarge" color={palette.onErrorContainer}>
-                ⚠
-              </Text>
-            }
+            leadingIcon={<AlertTriangle size={22} color={palette.onErrorContainer} strokeWidth={2.4} />}
           />
         ) : (
           <Button
-            label="Confirm received"
+            label={t('confirmReceived')}
             onPress={confirm}
             loading={saving}
             size="lg"
             fullWidth
-            leadingIcon={
-              <Text variant="titleLarge" color={palette.onPrimary}>
-                ✓
-              </Text>
-            }
+            leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}
           />
         )}
         <Button
@@ -229,20 +217,6 @@ export function ReceivingScreen({ route, navigation }: Props) {
         />
       </View>
     </View>
-  );
-}
-
-function Stepper({ icon, onPress }: { icon: string; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      android_ripple={{ color: palette.outlineVariant, borderless: true, radius: 44 }}
-      style={styles.stepper}
-    >
-      <Text variant="displayMedium" color={palette.onPrimary}>
-        {icon}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -270,17 +244,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.background },
   content: { flex: 1, padding: spacing.xl, gap: spacing.xl },
   qtySection: { gap: spacing.lg, alignItems: 'stretch' },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl },
-  stepper: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: palette.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  qtyNum: { minWidth: 120, textAlign: 'center' },
   quickRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' },
   quickChip: {
     minWidth: 64,

@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/auth';
 import { Text } from './src/design';
 import { getDb } from './src/db/database';
-import { seedDemoStockIfEmpty } from './src/db/stock';
+import { resetLocalCacheOnce } from './src/db/maintenance';
 import { I18nProvider } from './src/i18n';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { startSync, stopSync } from './src/sync/syncService';
@@ -33,7 +33,7 @@ function AppShell() {
     (async () => {
       try {
         await getDb();
-        await seedDemoStockIfEmpty();
+        await resetLocalCacheOnce();
         startSync();
         setReady(true);
       } catch (e) {

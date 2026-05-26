@@ -111,7 +111,14 @@ export const api = {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new ApiError(res.status, `Login failed`, text.slice(0, 200));
+      // Pull the server's reason out of `{ "error": "..." }` if present so
+      // the LoginScreen shows something actionable instead of just "Login failed".
+      let reason = text.slice(0, 200);
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed.error === 'string') reason = parsed.error;
+      } catch {}
+      throw new ApiError(res.status, reason || `Login failed (${res.status})`, text.slice(0, 500));
     }
     return res.json();
   },
@@ -139,5 +146,15 @@ export const api = {
       request<RemoteCatalogHit>(
         `/api/inventory/catalog/${encodeURIComponent(barcode)}`,
       ),
+    normalizeName: (rawName: string) =>
+      request<{
+        canonical: string;
+        language: 'en' | 'hi' | 'hinglish' | 'unknown';
+        confidence: number;
+        cached: boolean;
+      }>('/api/inventory/products/normalize', {
+        method: 'POST',
+        body: JSON.stringify({ rawName }),
+      }),
   },
 };

@@ -1,10 +1,15 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Keyboard, X, Zap, ZapOff } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Dimensions,
   Easing,
+  KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +20,7 @@ import {
   useCameraPermission,
   useCodeScanner,
 } from 'react-native-vision-camera';
-import { Button, IconButton, palette, spacing, Text } from '../../../design';
+import { Button, IconButton, palette, radius, spacing, Text } from '../../../design';
 import { findProduct, upsertProduct } from '../../../db/products';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -42,38 +47,53 @@ const CODE_TYPES = [
   'aztec',
 ] as const;
 
+// Wait this long (ms) for a second identical read before accepting a code.
+// Filters single-frame misreads without making good reads feel sluggish.
+// If a wrong code still slips through, the user can tap "Scan again" on
+// the next screen — no need for a time-limited retry banner here.
+const CONFIRM_WINDOW_MS = 600;
+
 export function ScannerScreen({ navigation }: Props) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const [torch, setTorch] = useState(false);
-  const lockedRef = useRef(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualValue, setManualValue] = useState('');
+
+  // Refs that survive renders but don't drive UI:
+  //   acceptedRef — true while a code is being routed; blocks further reads.
+  //   firstReadRef — last "saw it once" candidate; second matching read commits.
+  const acceptedRef = useRef(false);
+  const firstReadRef = useRef<{ value: string; at: number } | null>(null);
+
   const flashOpacity = useRef(new Animated.Value(0)).current;
-  const linePos = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
   }, [hasPermission, requestPermission]);
 
+  // Pulse the reticle border to communicate omnidirectional detection.
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(linePos, {
+        Animated.timing(pulse, {
           toValue: 1,
-          duration: 1600,
+          duration: 900,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(linePos, {
+        Animated.timing(pulse, {
           toValue: 0,
-          duration: 1600,
+          duration: 900,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     anim.start();
     return () => anim.stop();
-  }, [linePos]);
+  }, [pulse]);
 
   const flash = useCallback(() => {
     flashOpacity.setValue(0.6);
@@ -84,47 +104,70 @@ export function ScannerScreen({ navigation }: Props) {
     }).start();
   }, [flashOpacity]);
 
-  const onCodeScanned = useCallback(
-    (codes: Code[]) => {
-      if (lockedRef.current) return;
-      const first = codes.find((c) => c.value);
-      if (!first?.value) return;
-
-      // Strip GS1 FNC1 (ASCII 29 / "GS") so the printable payload is usable.
-      // For SSCC labels the raw value contains FNC1 between AIs.
-      const raw = first.value;
-      const printable = raw.replace(/\x1d/g, '|');
-      console.log('[scan]', first.type, JSON.stringify(printable));
-
-      lockedRef.current = true;
-      haptic.success();
-      flash();
-      (async () => {
-        const local = await findProduct(raw).catch(() => null);
-        if (local) {
+  /**
+   * Route a barcode to the next screen. Local catalog → Receiving;
+   * otherwise ask the backend; final fallback is the registration flow.
+   */
+  const routeFor = useCallback(
+    async (raw: string) => {
+      const local = await findProduct(raw).catch(() => null);
+      if (local) {
+        navigation.replace('Receiving', { barcode: raw });
+        return;
+      }
+      try {
+        const hit = await api.fetch.catalog(raw);
+        if (hit.product) {
+          await upsertProduct({
+            barcode: hit.product.barcode,
+            name: hit.product.name,
+            category: hit.product.category,
+            unit: hit.product.unit,
+          });
           navigation.replace('Receiving', { barcode: raw });
           return;
         }
-        // Local cache miss — ask the backend before forcing registration.
-        try {
-          const hit = await api.fetch.catalog(raw);
-          if (hit.product) {
-            await upsertProduct({
-              barcode: hit.product.barcode,
-              name: hit.product.name,
-              category: hit.product.category,
-              unit: hit.product.unit,
-            });
-            navigation.replace('Receiving', { barcode: raw });
-            return;
-          }
-        } catch {
-          // Offline / 401 — fall through to local registration flow.
-        }
-        navigation.replace('RegisterProduct', { barcode: raw });
-      })();
+      } catch {
+        // Offline / 401 — fall through to local registration flow.
+      }
+      navigation.replace('RegisterProduct', { barcode: raw });
     },
-    [navigation, flash]
+    [navigation],
+  );
+
+  /** Entry point for both camera scans (after the 2-read gate) and manual entry. */
+  const acceptCode = useCallback(
+    (raw: string) => {
+      if (acceptedRef.current) return;
+      acceptedRef.current = true;
+      haptic.success();
+      flash();
+      routeFor(raw);
+    },
+    [flash, routeFor],
+  );
+
+  const onCodeScanned = useCallback(
+    (codes: Code[]) => {
+      if (acceptedRef.current) return;
+      const first = codes.find((c) => c.value);
+      if (!first?.value) return;
+      const raw = first.value;
+
+      // Require two consecutive identical reads within the confirm window.
+      // ML Kit fires onCodeScanned repeatedly while a code is visible, so
+      // this typically costs ~one extra frame (~50ms) on real codes and
+      // rejects single-frame misreads outright.
+      const last = firstReadRef.current;
+      const now = Date.now();
+      if (!last || last.value !== raw || now - last.at > CONFIRM_WINDOW_MS) {
+        firstReadRef.current = { value: raw, at: now };
+        return;
+      }
+      firstReadRef.current = null;
+      acceptCode(raw);
+    },
+    [acceptCode],
   );
 
   const codeScanner = useCodeScanner({
@@ -132,7 +175,19 @@ export function ScannerScreen({ navigation }: Props) {
     onCodeScanned,
   });
 
-  const lineY = linePos.interpolate({ inputRange: [0, 1], outputRange: [0, 220] });
+  const submitManual = useCallback(() => {
+    const v = manualValue.trim();
+    if (!v) return;
+    setManualOpen(false);
+    setManualValue('');
+    if (acceptedRef.current) return;
+    acceptedRef.current = true;
+    haptic.success();
+    routeFor(v);
+  }, [manualValue, routeFor]);
+
+  const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
+  const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
 
   if (!hasPermission) {
     return (
@@ -184,50 +239,130 @@ export function ScannerScreen({ navigation }: Props) {
         codeScanner={codeScanner}
       />
 
-      <View style={styles.maskTop} />
-      <View style={styles.maskRow}>
+      {/* Dimmed border around the reticle. Pure cosmetics — detection
+          is full-frame, so this is just a "look here" hint. */}
+      <View pointerEvents="none" style={styles.maskTop} />
+      <View pointerEvents="none" style={styles.maskRow}>
         <View style={styles.maskSide} />
         <View style={styles.window}>
-          <View style={[styles.corner, styles.cornerTL]} />
-          <View style={[styles.corner, styles.cornerTR]} />
-          <View style={[styles.corner, styles.cornerBL]} />
-          <View style={[styles.corner, styles.cornerBR]} />
-          <Animated.View style={[styles.scanLine, { transform: [{ translateY: lineY }] }]} />
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.reticle,
+              {
+                opacity: pulseOpacity,
+                transform: [{ scale: pulseScale }],
+                borderColor: palette.primaryContainer,
+              },
+            ]}
+          />
         </View>
         <View style={styles.maskSide} />
       </View>
-      <View style={styles.maskBottom} />
+      <View pointerEvents="none" style={styles.maskBottom} />
 
       <Animated.View pointerEvents="none" style={[styles.flash, { opacity: flashOpacity }]} />
 
       <SafeAreaView edges={['top']} style={styles.topBar}>
         <View style={styles.topBarRow}>
-          <IconButton icon="✕" onPress={() => navigation.goBack()} tone="inverse" />
+          <IconButton Icon={X} onPress={() => navigation.goBack()} tone="inverse" />
           <Text variant="titleMedium" color="#fff">
             Scan barcode
           </Text>
           <IconButton
-            icon={torch ? '◉' : '○'}
+            Icon={torch ? Zap : ZapOff}
             onPress={() => setTorch((t) => !t)}
             tone="inverse"
           />
         </View>
       </SafeAreaView>
 
-      <SafeAreaView edges={['bottom']} style={styles.hint}>
+      <SafeAreaView edges={['bottom']} style={styles.bottom}>
         <Text
           variant="bodyLarge"
           color="#fff"
           style={{ textAlign: 'center', paddingHorizontal: spacing.xl }}
         >
-          Hold steady. Align the barcode inside the frame.
+          Point at any barcode — any angle works.
         </Text>
+        <Pressable
+          onPress={() => setManualOpen(true)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={({ pressed }) => [
+            styles.typeBtn,
+            { backgroundColor: pressed ? '#ffffff22' : '#ffffff11' },
+          ]}
+        >
+          <Keyboard size={18} color="#fff" strokeWidth={2.2} />
+          <Text variant="labelLarge" color="#fff">
+            Type code
+          </Text>
+        </Pressable>
       </SafeAreaView>
+
+      {manualOpen && (
+        <Pressable style={styles.modalBackdrop} onPress={() => setManualOpen(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalCenter}
+            pointerEvents="box-none"
+          >
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={[styles.modalCard, { backgroundColor: palette.surface }]}
+            >
+              <Text variant="titleLarge">Type the barcode</Text>
+              <Text
+                variant="bodyMedium"
+                color={palette.onSurfaceVariant}
+                style={{ marginTop: spacing.xs }}
+              >
+                Use this when the label is damaged or won't scan.
+              </Text>
+              <TextInput
+                value={manualValue}
+                onChangeText={setManualValue}
+                placeholder="e.g. 8901030875021"
+                placeholderTextColor={palette.onSurfaceVariant}
+                keyboardType="number-pad"
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={submitManual}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: palette.surfaceContainerLowest,
+                    borderColor: palette.outlineVariant,
+                    color: palette.onSurface,
+                  },
+                ]}
+              />
+              <View style={styles.modalActions}>
+                <Button
+                  label="Cancel"
+                  variant="text"
+                  size="md"
+                  onPress={() => setManualOpen(false)}
+                />
+                <Button
+                  label="Use code"
+                  size="md"
+                  disabled={manualValue.trim().length === 0}
+                  onPress={submitManual}
+                />
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
+      )}
     </View>
   );
 }
 
-const WINDOW = 260;
+// Reticle covers most of the screen width so the user has plenty of room
+// to frame a barcode at any rotation. Detection is full-frame regardless —
+// the reticle is purely a "look here" hint.
+const WINDOW = Math.min(Dimensions.get('window').width - 32, 340);
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
@@ -245,27 +380,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  maskTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
-  maskBottom: { flex: 1.4, backgroundColor: 'rgba(0,0,0,0.55)' },
+  maskTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  maskBottom: { flex: 1.4, backgroundColor: 'rgba(0,0,0,0.45)' },
   maskRow: { flexDirection: 'row', height: WINDOW },
-  maskSide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
-  window: { width: WINDOW, height: WINDOW, overflow: 'hidden' },
-  corner: { position: 'absolute', width: 28, height: 28, borderColor: '#fff' },
-  cornerTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 12 },
-  cornerTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 12 },
-  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 12 },
-  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 12 },
-  scanLine: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    height: 2,
-    backgroundColor: palette.primaryContainer,
-    shadowColor: palette.primaryContainer,
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    ...(Platform.OS === 'android' ? { elevation: 4 } : null),
+  maskSide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  window: { width: WINDOW, height: WINDOW, overflow: 'visible' },
+  reticle: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 3,
+    borderRadius: 18,
   },
   flash: { ...StyleSheet.absoluteFillObject, backgroundColor: '#fff' },
-  hint: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: spacing.lg },
+  bottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingBottom: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  typeBtn: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: '#ffffff66',
+    overflow: 'hidden',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  modalCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+  },
+  modalInput: {
+    marginTop: spacing.lg,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    paddingHorizontal: spacing.lg,
+    minHeight: 56,
+    fontSize: 18,
+    letterSpacing: 1,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
 });

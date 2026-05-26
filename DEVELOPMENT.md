@@ -94,6 +94,10 @@ npm install
 | `react` | `19.1.0` | |
 | `react-native-vision-camera` | `^4.6.4` | v5 dropped the Expo config plugin — pin to v4 |
 | `react-native-reanimated` | `~4.1.x` | needs `newArchEnabled: true` in `app.json` |
+| `react-native-svg` | `^15.x` | required by `lucide-react-native` for icons; native module → prebuild |
+| `lucide-react-native` | `^1.x` | the icon library — see Conventions in `CLAUDE.md` (do not use Unicode glyphs) |
+| `fuse.js` | `^7.x` | local fuzzy match for catalog suggestions (Layer 2 of spell-assist) |
+| `@react-native-async-storage/async-storage` | `2.x` | session token, theme/lang prefs, one-time migrations |
 | `babel-preset-expo` | `~54.0.10` | install with `npx expo install` if missing |
 
 If you add a native module, prefer `npx expo install <pkg>` (picks
@@ -228,45 +232,61 @@ adb shell run-as com.officeops.fieldapp rm -rf /data/data/com.officeops.fieldapp
 
 Reload — `getDb()` recreates the schema.
 
+Wipe everything (SQLite **and** AsyncStorage — session token, selected
+theme/language, the `resetLocalCacheOnce` migration flag):
+
+```bash
+adb shell pm clear com.officeops.fieldapp
+```
+
+Next launch you'll be at the Login screen with default theme/language and
+an empty local cache.
+
 ---
 
 ## 6. Rebuilding the dev-client APK (5% case)
 
-### 6.1 Whenever native changed
+> **This project uses EAS cloud builds, not local Android Studio.** Path A
+> below is the one we actually use. Path B is documented for completeness;
+> only use it if you've gone through §1.2 (Java 17) and §1.3 (Android
+> Studio + ANDROID_HOME) and have a working local toolchain.
+
+### 6.1 Path A — EAS cloud build (the default)
 
 ```bash
 cd /Users/appointy/work/OfficeOperationsUmbrella/field-app
-npx expo prebuild --clean --platform android
-```
-
-This regenerates the `android/` folder fresh from `app.json` + plugins. The
-`ios/` folder isn't needed if your target is Android.
-
-### 6.2 Path A — local build (recommended once Android Studio is set up)
-
-```bash
-npx expo run:android
-```
-
-- First build: ~5 min (Gradle downloads everything).
-- Subsequent builds: ~30–60 s (Gradle cache).
-- Installs the new APK on the connected device automatically.
-
-### 6.3 Path B — EAS cloud build (no Android Studio needed)
-
-```bash
 npx eas build --profile development --platform android
 ```
 
-- Build runs on Expo's servers, takes 8–15 min on free tier.
-- When done you get a URL — open it in Chrome on the phone, download APK,
-  install (you may need to allow "Install from unknown sources").
-- Then `npm run start:dev-client` and the new app reconnects.
+- Build runs on Expo's servers, ~8–15 min on free tier.
+- **Do not** `npm run prebuild` first. EAS runs prebuild on its servers;
+  doing it locally is redundant and just litters your working tree with a
+  generated `android/` folder.
+- When the build finishes, EAS prints a URL. Open it in Chrome on the
+  phone, download the APK, install it. Android will install on top of the
+  old one (same package id) — no need to uninstall first.
+- Then `npm run start:dev-client` on the laptop, open the new Field App on
+  the phone, scan the QR (or pick the recent server). You're back in the
+  dev loop.
 
-### 6.4 After the rebuild
+### 6.2 Path B — local build (only if you've set up Android Studio)
 
-Open the **Field App** icon on the phone (the new APK), reconnect to Metro
-(scan QR or pick the recent server). You're back in the dev loop.
+Skips the EAS queue and is much faster after the first build, but requires
+Java 17 + Android SDK + `ANDROID_HOME` (see §1.2 / §1.3).
+
+```bash
+npx expo prebuild --clean --platform android   # regenerate android/ from app.json
+npx expo run:android                            # local Gradle build + install
+```
+
+- First build: ~5 min. Subsequent: ~30–60 s.
+- Installs the new APK on the connected device automatically.
+- Don't commit the `android/` folder that prebuild generates.
+
+### 6.3 After either path
+
+Open the **Field App** icon on the phone (now the rebuilt APK), reconnect
+to Metro (scan QR or pick the recent server). You're back in the dev loop.
 
 ---
 
@@ -289,30 +309,59 @@ config-plugin in `app.json`.
 
 ```
 field-app/
-  App.tsx                   # ThemeProvider + I18nProvider + AppShell boot
-  index.ts                  # Expo entry — registerRootComponent(App)
-  app.json                  # Expo config (permissions, plugins, new-arch)
+  App.tsx                       # ThemeProvider + I18nProvider + AuthProvider + AppShell
+  index.ts                      # Expo entry — registerRootComponent(App)
+  app.json                      # Expo config (permissions, plugins, new-arch, cleartext)
   babel.config.js
   tsconfig.json
-  .node-version             # 22
-  eas.json                  # EAS Build profiles (if you've run `eas configure`)
+  .node-version                 # 22
+  eas.json                      # EAS Build profiles
   src/
-    config.ts               # API URL, site id, sync interval
-    db/                     # SQLite schema + CRUD (expo-sqlite)
-    sync/                   # Outbox flusher + HTTP client
-    design/                 # Design system: tokens, Button, Text, Card, etc.
-    theme/                  # ThemeProvider + useTheme()
-    i18n/                   # I18nProvider
-    modules/                # Module registry — getAllScreens()
-    screens/                # Home / Scanner / Receiving / Register / Outbox / Orders
-    components/             # Shared composites (QueueBadge, …)
-    navigation/             # RootNavigator (reads modules + theme)
-    utils/                  # haptics, deviceId
+    config.ts                   # API base URL, site id, sync interval
+    auth/                       # session store, AuthProvider, useAuth + useCan
+    rbac/                       # Permission/Principal types + pure `can()` checker
+    db/
+      database.ts               # SQLite singleton + schema migrations
+      products.ts               # catalog table
+      orders.ts                 # orders + order_items
+      outbox.ts                 # write queue (5 kinds: receipt/product/issue/reorder/mismatch)
+      stock.ts                  # stock_levels + adjustOnHand + syncStockFromRemote
+      catalog.ts                # union view used by fuzzy suggest
+      maintenance.ts            # one-time cache wipes (AsyncStorage-gated)
+    sync/
+      api.ts                    # backend client (api.send.*, api.fetch.*)
+      syncService.ts            # outbox flusher, ticks every config.syncIntervalMs
+    design/                     # Lucide-icon-aware primitives: Button, Card, Chip,
+                                # IconButton, Skeleton, StatusPill, Text, TextField,
+                                # QtyStepper, AppBar, Surface, ListItem, tokens.ts
+    theme/                      # ThemeProvider, themes (steadyPurple + bold)
+    i18n/                       # I18nProvider, strings.ts (EN/HI table), useT()
+    modules/
+      types.ts                  # Module contract
+      registry.ts               # MODULES list + getAllScreens()
+      inventory/
+        index.ts                # inventoryModule definition + screen registration
+        screens/                # Home, Scanner, Receiving, RegisterProduct,
+                                # DeliverySummary, Outbox, Orders, Stock, Issue,
+                                # Alerts, Settings, Login
+        components/             # QueueBadge (inventory-scoped)
+        hooks/                  # useCatalogSuggest (fuse.js wrapper)
+    navigation/
+      RootNavigator.tsx         # reads modules + theme; auth-gates to Login
+      types.ts                  # RootStackParamList
+    utils/                      # haptics, deviceId
 ```
 
-`RootNavigator` enumerates screens from `src/modules/` rather than importing
-each one directly — so adding a new screen is "register it in the module
-registry" instead of touching the navigator.
+`RootNavigator` enumerates screens from `src/modules/registry.ts` rather
+than importing each one directly — adding a new screen is "register it in
+its module's `index.ts`," not edits to the navigator. Adding a whole new
+operational area (attendance, maintenance, …) is a new `src/modules/<id>/`
+folder plus one `registerPlugin`-style line in `registry.ts`.
+
+The screen stack is gated on auth: until `useAuth().session` is non-null,
+the navigator only mounts `LoginScreen`. The Login screen calls
+`/api/guard/login` (visitor module's PIN auth) and stores the token in
+`src/auth/session.ts`. RBAC is derived from the session via `useCan()`.
 
 ---
 
@@ -328,7 +377,11 @@ registry" instead of touching the navigator.
 | `Error loading app, failed to connect to /<ip>:8081` | Phone and laptop on different subnets | Same Wi-Fi, or set `EXPO_PACKAGER_HOSTNAME`, or `--tunnel` |
 | `EMFILE: too many open files, watch` | macOS default file watcher hitting fd limit | `brew install watchman && watchman watch-del-all && npm start -- --clear` |
 | App scans QR but does nothing | Metro is in dev-client mode but you scanned with Expo Go (or vice versa) | Use `npm run start:dev-client` and scan with the **Field App** APK, not Expo Go. Or press `s` in Metro to toggle |
-| Build APK is 210 MB | Dev variant includes all 4 CPU architectures + ML Kit model + dev client UI | Normal. Production build is 30–60 MB; Play Store delivery is 15–30 MB |
+| Build APK is 100+ MB | Dev variant includes all 4 CPU architectures + dev client UI + react-native-svg + reanimated + vision-camera | Normal in dev. Production single-ABI build is 30–50 MB. Play Store / per-device delivery is 20–30 MB |
+| `Network request failed` on login | Wrong API base, or http:// blocked on Android 9+ without cleartext flag | Set `EXPO_PUBLIC_API_BASE_URL` to your engine URL (ngrok HTTPS is easiest). Cleartext is enabled in `app.json` (`usesCleartextTraffic: true`) but only takes effect after a dev-client rebuild |
+| `Cannot find native module 'RNSVGSvg…'` | `react-native-svg` (Lucide's peer) added without rebuilding the dev client | Run section 6's prebuild + rebuild |
+| Icons render as missing characters (□) | Someone reverted a Lucide swap back to a Unicode glyph that the Android font doesn't ship | See `CLAUDE.md` Conventions — only Lucide for chrome, never Unicode/emoji |
+| Login succeeds but reads return 401 | `x-site-id` mismatch with the engine | Either set `EXPO_PUBLIC_SITE_ID` to a site the backend knows about, or seed that site server-side. Default is `site-dev` |
 
 ---
 
@@ -369,14 +422,14 @@ That's a separate flow from development — covered when we get there.
 # JS change → already covered by Metro
 # (just save the file)
 
-# Native change → prebuild + rebuild
-npx expo prebuild --clean --platform android
-npx expo run:android                              # local, ~1 min after first
-# OR
-npx eas build --profile development --platform android   # cloud, ~10 min
+# Native change → EAS cloud build (default for this project)
+npx eas build --profile development --platform android   # ~10 min
+# open the URL it prints on the phone, install the APK, then:
+npm run start:dev-client                          # serve JS to the new APK
 
-# Start Metro
-npm run start:dev-client
+# (Local build alternative — only if you've set up Android Studio)
+# npx expo prebuild --clean --platform android
+# npx expo run:android                            # ~1 min after first build
 
 # Logs
 adb logcat *:S ReactNative:V ReactNativeJS:V
@@ -386,6 +439,9 @@ adb shell input keyevent 82                       # opens dev menu, then "Reload
 
 # Wipe local DB
 adb shell run-as com.officeops.fieldapp rm -rf /data/data/com.officeops.fieldapp/databases
+
+# Wipe everything (SQLite + AsyncStorage: session, theme/lang)
+adb shell pm clear com.officeops.fieldapp
 
 # Different Wi-Fi
 set -x EXPO_PACKAGER_HOSTNAME 10.0.0.X
