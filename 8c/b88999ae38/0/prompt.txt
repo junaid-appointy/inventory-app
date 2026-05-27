@@ -1,0 +1,108 @@
+continue
+
+---
+
+the login attempt shows network request failed in app
+
+---
+
+I think the app is hitting localhost of the mobile, for now lets use tunnel https://unyearning-olympia-unclimactic.ngrok-free.dev
+
+---
+
+shows login failed, I am using the same creds as guard in the admin dashboard
+
+---
+
+alright now connect the app to real database in backend, I do not want to see any dummy data, all the things like sync, stock issue, alert deliveries should work like they are in production
+
+---
+
+some changes, the issue feature is not working,I issued some items, and it did not deduct,  also apart from plus and minus buttons lets allow people to edit the actual value.
+
+---
+
+so did you fix it? do I need to restart server?
+
+---
+
+no, still not deduct.
+
+---
+
+the scanner should be working in all direction, can we make it like that?
+
+---
+
+more features, first tell me if its possible, I want to add OCR, like if the user want to put in name also by scanning the label, also add spelling suggestion, and some sort of assistance, like if spelling is written as watrmilan , it suggests watermelon, even if its hindi तरबूज़ or वाटरमेलन, it writes watermelon. first tell me if its possible, then tell me how its possible and how we will implement, we will be using high quality open source solution for this. so tell me best OCR in the market right now.
+
+---
+
+yes, this order: the order is:
+
+  1. Layer 2 alone (fuzzy match) — half a day. Covers misspellings of known catalog items. Doesn't need any new infra. Solves
+  60-70% of the pain.
+  2. Layer 3 (LLM normalization) — one day. Covers Hindi → English and unknown terms. Reuses your existing Gemini setup.
+  3. Layer 1 (OCR) — two-to-four days. Highest infra cost (PaddleOCR sidecar, Docker, deploy). Highest impact if labels are the
+  main entry point.
+ - Strict OSS or "open source preferred but Google ML Kit is OK"? Big difference in architecture — ML Kit means on-device, no
+  server round-trip, no PaddleOCR sidecar. any solution is okay if it is free to use, safe and reliable. 
+Are labels mostly English or mixed? Influences whether we need Devanagari OCR models loaded. - Mixed
+Do you have a Python deploy story in Bifrost? PaddleOCR is Python. If your engine container is Bun-only, we either add a
+  sidecar or pick a non-Python OCR (Surya has a JS-callable API path via ONNX, but it's less polished). - Not aware of this, for now lets assume its not.
+
+---
+
+will the size of the app decrease if I do not have a play store account, so I wont be able to use google play store
+
+---
+
+The scanner has become slower, lets remove the OCR for now, do we have the spelling suggestion for multiple lang enabled?
+
+---
+
+we meed to show better UX to the user, like whenever there is a loading find a subtle message or loading or skeleton to show in app. Also why is the AI based text suggestion so slow?
+
+---
+
+sometimes the barcode reader picks up wrong code, what to do in that case?
+
+---
+
+all 3
+
+---
+
+I do not know why the wrong code retry is wrong, what we can do is pick the scan, and give a button in next screen to scan again? what do you think? or pick the scan and show a little time to scan again or move? tell me best UX or you have better idea?
+
+---
+
+yes implement
+
+---
+
+I think we need to use different set of icons at all places, lets use professional and high quality icons which are easy to understand and good to look at
+
+---
+
+okay update this in the guide markdown file
+
+---
+
+actually update the DEVELOPMENT.md file also
+
+---
+
+wait did you give me right instruction, was the build supposed to happend on my device or expo cloud? and was I supposed to run npm run android or npm run start:dev-client
+
+---
+
+I ran the prebuild and it succeeded but I do not have android studio on my mac, previously I used expo cloud build and isntalled the apk on my phone using the link and then rand the npm run start dev client and then scanned the QR from the app.
+
+---
+
+okay update this info in the claude.md file and development.md file
+
+---
+
+alright lets commit the code, you add the files and write the commit message, but final commit command activation remain in my hand
