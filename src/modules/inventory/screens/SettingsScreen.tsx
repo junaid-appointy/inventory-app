@@ -3,7 +3,7 @@ import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../../auth';
 import { AppBar, Button, Card, Chip, spacing, Text } from '../../../design';
-import { useI18n } from '../../../i18n';
+import { useI18n, useT } from '../../../i18n';
 import type { Lang } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { useTheme, useThemeControls } from '../../../theme';
@@ -14,25 +14,26 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 const LANG_OPTIONS: Array<{ value: Lang; label: string }> = [
   { value: 'en', label: 'English' },
   { value: 'hi', label: 'हिंदी' },
-  { value: 'icons', label: 'Icons' },
-];
-
-const THEME_OPTIONS: Array<{ value: ThemeName; label: string }> = [
-  { value: 'steadyPurple', label: 'Steady' },
-  { value: 'bold', label: 'Bold' },
 ];
 
 export function SettingsScreen({ navigation }: Props) {
+  const t = useT();
   const { palette } = useTheme();
   const { themeName, setTheme } = useThemeControls();
   const { lang, setLang } = useI18n();
   const { session, logout } = useAuth();
 
+  // Theme options use translated labels
+  const themeOptions: Array<{ value: ThemeName; label: string }> = [
+    { value: 'steadyPurple', label: t('themeLight') },
+    { value: 'steadyPurpleDark', label: t('themeDark') },
+  ];
+
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
-      <AppBar title="Settings" onBack={() => navigation.goBack()} />
+      <AppBar title={t('settings')} onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Section title="LANGUAGE">
+        <Section title={t('langSection')}>
           <View style={styles.chipRow}>
             {LANG_OPTIONS.map((o) => (
               <Chip
@@ -43,14 +44,11 @@ export function SettingsScreen({ navigation }: Props) {
               />
             ))}
           </View>
-          <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.sm }}>
-            Icons-only mode hides text labels on tiles. Screen-reader strings stay in English.
-          </Text>
         </Section>
 
-        <Section title="THEME">
+        <Section title={t('appearanceSection')}>
           <View style={styles.chipRow}>
-            {THEME_OPTIONS.map((o) => (
+            {themeOptions.map((o) => (
               <Chip
                 key={o.value}
                 label={o.label}
@@ -62,18 +60,18 @@ export function SettingsScreen({ navigation }: Props) {
         </Section>
 
         {session && (
-          <Section title="ACCOUNT">
+          <Section title={t('accountSection')}>
             <Text variant="titleMedium">{session.guardName}</Text>
             <Text
               variant="bodyMedium"
               color={palette.onSurfaceVariant}
               style={{ marginTop: spacing.xs }}
             >
-              Signed in · {session.language}
+              {t('signedIn')} · {session.language}
             </Text>
             <View style={{ marginTop: spacing.lg }}>
               <Button
-                label="Sign out"
+                label={t('signOut')}
                 variant="outlined"
                 onPress={logout}
                 size="md"
@@ -110,3 +108,4 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });
+

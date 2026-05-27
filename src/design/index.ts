@@ -11,3 +11,7 @@ export { ListItem } from './ListItem';
 export { StatusPill } from './StatusPill';
 export { QtyStepper } from './QtyStepper';
 export { Skeleton } from './Skeleton';
+
+// Reactive palette hook — use this in screens instead of the static `palette`
+// import so colors update when the user switches theme.
+export { useTheme as usePalette } from '../theme';

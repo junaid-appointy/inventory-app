@@ -2,8 +2,9 @@ import type { Module } from '../types';
 import { AlertsScreen } from './screens/AlertsScreen';
 import { DeliverySummaryScreen } from './screens/DeliverySummaryScreen';
 import { HomeScreen } from './screens/HomeScreen';
-import { IssueScreen } from './screens/IssueScreen';
+import { DispenseScreen } from './screens/DispenseScreen';
 import { OrdersScreen } from './screens/OrdersScreen';
+import { OrderSessionScreen } from './screens/OrderSessionScreen';
 import { OutboxScreen } from './screens/OutboxScreen';
 import { ReceivingScreen } from './screens/ReceivingScreen';
 import { RegisterProductScreen } from './screens/RegisterProductScreen';
@@ -23,12 +24,14 @@ export const inventoryModule: Module = {
     { name: 'Scanner', component: ScannerScreen, options: { animation: 'fade' } },
     { name: 'Receiving', component: ReceivingScreen },
     { name: 'RegisterProduct', component: RegisterProductScreen },
+    { name: 'OrderSession', component: OrderSessionScreen },
     { name: 'DeliverySummary', component: DeliverySummaryScreen },
     { name: 'Outbox', component: OutboxScreen },
     { name: 'Orders', component: OrdersScreen },
     { name: 'Stock', component: StockScreen },
-    { name: 'Issue', component: IssueScreen },
+    { name: 'Dispense', component: DispenseScreen },
     { name: 'Alerts', component: AlertsScreen },
     { name: 'Settings', component: SettingsScreen },
   ],
 };
+

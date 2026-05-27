@@ -1,3 +1,4 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Keyboard, X, Zap, ZapOff } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,11 +21,13 @@ import {
   useCameraPermission,
   useCodeScanner,
 } from 'react-native-vision-camera';
-import { Button, IconButton, palette, radius, spacing, Text } from '../../../design';
+import { Button, IconButton, radius, spacing, Text } from '../../../design';
 import { findProduct, upsertProduct } from '../../../db/products';
+import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { haptic } from '../../../utils/haptics';
+import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 
@@ -47,24 +50,30 @@ const CODE_TYPES = [
   'aztec',
 ] as const;
 
-// Wait this long (ms) for a second identical read before accepting a code.
-// Filters single-frame misreads without making good reads feel sluggish.
-// If a wrong code still slips through, the user can tap "Scan again" on
-// the next screen — no need for a time-limited retry banner here.
-const CONFIRM_WINDOW_MS = 600;
+// ML Kit v4+ has strong internal confidence scoring. We no longer require
+// a 2-read confirmation gate — that was the main cause of "I have to wave
+// the barcode back and forth" sluggishness. A single valid decode is
+// accepted immediately.
 
 export function ScannerScreen({ navigation }: Props) {
+  const { palette } = useTheme();
+  const t = useT();
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const [torch, setTorch] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState('');
 
-  // Refs that survive renders but don't drive UI:
-  //   acceptedRef — true while a code is being routed; blocks further reads.
-  //   firstReadRef — last "saw it once" candidate; second matching read commits.
+  // acceptedRef — true while a code is being routed; blocks further reads.
   const acceptedRef = useRef(false);
-  const firstReadRef = useRef<{ value: string; at: number } | null>(null);
+
+  // Reset on every screen focus so returning from the order session flow
+  // allows scanning the next item without remounting the screen.
+  useFocusEffect(
+    useCallback(() => {
+      acceptedRef.current = false;
+    }, []),
+  );
 
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
@@ -150,22 +159,13 @@ export function ScannerScreen({ navigation }: Props) {
   const onCodeScanned = useCallback(
     (codes: Code[]) => {
       if (acceptedRef.current) return;
+      // Accept the first code with a non-empty value immediately.
+      // ML Kit v4+ has its own internal confidence scoring so a single
+      // detection is reliable. The old 2-read gate added 150-300ms
+      // latency and required the user to hold very still.
       const first = codes.find((c) => c.value);
       if (!first?.value) return;
-      const raw = first.value;
-
-      // Require two consecutive identical reads within the confirm window.
-      // ML Kit fires onCodeScanned repeatedly while a code is visible, so
-      // this typically costs ~one extra frame (~50ms) on real codes and
-      // rejects single-frame misreads outright.
-      const last = firstReadRef.current;
-      const now = Date.now();
-      if (!last || last.value !== raw || now - last.at > CONFIRM_WINDOW_MS) {
-        firstReadRef.current = { value: raw, at: now };
-        return;
-      }
-      firstReadRef.current = null;
-      acceptCode(raw);
+      acceptCode(first.value);
     },
     [acceptCode],
   );
@@ -191,20 +191,20 @@ export function ScannerScreen({ navigation }: Props) {
 
   if (!hasPermission) {
     return (
-      <SafeAreaView style={styles.permission}>
+      <SafeAreaView style={[styles.permission, { backgroundColor: palette.background }]}>
         <Text variant="headlineSmall" style={{ textAlign: 'center', marginBottom: spacing.md }}>
-          Camera access needed
+          {t('cameraNeeded')}
         </Text>
         <Text
           variant="bodyLarge"
           color={palette.onSurfaceVariant}
           style={{ textAlign: 'center', marginBottom: spacing.xl }}
         >
-          We use the camera only to read barcodes — no photos are taken.
+          {t('cameraHint')}
         </Text>
-        <Button label="Allow camera" onPress={requestPermission} size="lg" fullWidth />
+        <Button label={t('allowCamera')} onPress={requestPermission} size="lg" fullWidth />
         <Button
-          label="Not now"
+          label={t('notNow')}
           variant="text"
           onPress={() => navigation.goBack()}
           style={{ marginTop: spacing.sm }}
@@ -215,12 +215,12 @@ export function ScannerScreen({ navigation }: Props) {
 
   if (!device) {
     return (
-      <SafeAreaView style={styles.permission}>
+      <SafeAreaView style={[styles.permission, { backgroundColor: palette.background }]}>
         <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-          No camera available
+          {t('noCamera')}
         </Text>
         <Button
-          label="Back"
+          label={t('back')}
           variant="text"
           onPress={() => navigation.goBack()}
           style={{ marginTop: spacing.md }}
@@ -237,6 +237,15 @@ export function ScannerScreen({ navigation }: Props) {
         isActive
         torch={torch ? 'on' : 'off'}
         codeScanner={codeScanner}
+        // ----- Performance tuning -----
+        // YUV is the native camera format — skips RGBA conversion overhead.
+        pixelFormat="yuv"
+        // Disable stabilizer — it adds 1-2 frame latency.
+        videoStabilizationMode="off"
+        enableBufferCompression={true}
+        // Favor decode speed over photo quality.
+        photoQualityBalance="speed"
+        resizeMode="cover"
       />
 
       {/* Dimmed border around the reticle. Pure cosmetics — detection
@@ -283,7 +292,7 @@ export function ScannerScreen({ navigation }: Props) {
           color="#fff"
           style={{ textAlign: 'center', paddingHorizontal: spacing.xl }}
         >
-          Point at any barcode — any angle works.
+          Hold the barcode steady for a moment.
         </Text>
         <Pressable
           onPress={() => setManualOpen(true)}
@@ -322,7 +331,7 @@ export function ScannerScreen({ navigation }: Props) {
               <TextInput
                 value={manualValue}
                 onChangeText={setManualValue}
-                placeholder="e.g. 8901030875021"
+                placeholder={t('barcodeExample')}
                 placeholderTextColor={palette.onSurfaceVariant}
                 keyboardType="number-pad"
                 autoFocus
@@ -339,13 +348,13 @@ export function ScannerScreen({ navigation }: Props) {
               />
               <View style={styles.modalActions}>
                 <Button
-                  label="Cancel"
+                  label={t('cancel')}
                   variant="text"
                   size="md"
                   onPress={() => setManualOpen(false)}
                 />
                 <Button
-                  label="Use code"
+                  label={t('useCode')}
                   size="md"
                   disabled={manualValue.trim().length === 0}
                   onPress={submitManual}
@@ -362,13 +371,12 @@ export function ScannerScreen({ navigation }: Props) {
 // Reticle covers most of the screen width so the user has plenty of room
 // to frame a barcode at any rotation. Detection is full-frame regardless —
 // the reticle is purely a "look here" hint.
-const WINDOW = Math.min(Dimensions.get('window').width - 32, 340);
+const WINDOW = Math.min(Dimensions.get('window').width - 24, 400);
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   permission: {
     flex: 1,
-    backgroundColor: palette.background,
     padding: spacing.xl,
     justifyContent: 'center',
   },

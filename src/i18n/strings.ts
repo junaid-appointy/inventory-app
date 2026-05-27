@@ -2,30 +2,50 @@
 // (project/tokens.jsx STR). Each entry is [English, Hindi].
 // Add a new key here, then call useT()(key) in a screen.
 
-export type Lang = 'en' | 'hi' | 'icons';
+export type Lang = 'en' | 'hi';
 
 type Pair = readonly [string, string];
 
 export const STR = {
   // App
-  appName:         ['Office Ops',         'ऑफिस ऑप्स'],
+  appName:         ['Office Operations',  'ऑफिस ऑपरेशन्स'],
   receiveItem:     ['Receive item',       'सामान लें'],
   confirmReceived: ['Confirm received',   'मिलना पक्का'],
   saveAndContinue: ['Save & continue',    'सेव और आगे'],
   quantityReceived:['Quantity received',  'मिली गिनती'],
   syncQueue:       ['Sync queue',         'भेजने की कतार'],
+  syncQueueSub:    ['Review pending uploads', 'बाकी अपलोड देखें'],
   syncNow:         ['Sync now',           'अभी भेजें'],
   receipt:         ['Receipt',            'रसीद'],
   productMapping:  ['Product mapping',    'सामान मैपिंग'],
-  reorderRequest:  ['Reorder request',    'फिर मँगाने का अनुरोध'],
+  reorderRequest:  ['Reorder request',    'दोबारा मँगवाना'],
   mismatchFlag:    ['Mismatch flag',      'फ़र्क का चिह्न'],
   product:         ['Product',            'सामान'],
   unknownProduct:  ['Unknown product',    'अनजान सामान'],
   expectedShort:   ['Expected',           'अपेक्षित'],
   alreadyReceived: ['already received',   'पहले मिला'],
-  noMatchingOrder: ['No matching order — capture stands alone.', 'कोई ऑर्डर नहीं मिला — अकेला कैप्चर।'],
-  greet:           ['Hello',              'नमस्ते'],
+  noMatchingOrder: ['No matching order',   'कोई ऑर्डर नहीं मिला'],
+  greeting:        ['Hello',              'नमस्ते'],
   guard:           ['Guard at Gate',      'गेट सुरक्षाकर्मी'],
+  settings:        ['Settings',           'सेटिंग्स'],
+  signOut:         ['Sign out',           'लॉगआउट'],
+  signIn:          ['Sign in',            'लॉग इन'],
+  signedIn:        ['Signed in',          'लॉग-इन'],
+  langSection:     ['LANGUAGE',           'भाषा'],
+  appearanceSection:['APPEARANCE',        'दिखावट'],
+  accountSection:  ['ACCOUNT',            'खाता'],
+  themeLight:      ['Light',              'उजला'],
+  themeDark:       ['Dark',               'अंधेरा'],
+
+  // Filter labels
+  filterCategory:  ['Category',           'श्रेणी'],
+  filterStatus:    ['Status',             'स्थिति'],
+
+  // Receiving / scanning actions
+  tapToSelectDate: ['Tap to select date', 'तारीख चुनें'],
+  addToOrder:      ['Add to Order',       'ऑर्डर में जोड़ें'],
+  scanNextItem:    ['Scan Next Item',     'अगला स्कैन'],
+  cancelOrder:     ['Cancel Order',       'ऑर्डर रद्द'],
 
   // Modules / home tiles
   receiving:       ['Receiving',          'सामान आना'],
@@ -34,6 +54,8 @@ export const STR = {
   stockSub:        ['Check shelf counts', 'शेल्फ़ गिनती'],
   issue:           ['Issue',              'देना'],
   issueSub:        ['Record what was used','खर्च दर्ज करें'],
+  dispense:        ['Dispense',           'वितरण'],
+  dispenseSub:     ['Record what was used','खर्च दर्ज करें'],
   alerts:          ['Alerts',             'अलर्ट'],
   alertsSub:       ['Low stock & reorder','कम स्टॉक'],
 
@@ -84,7 +106,7 @@ export const STR = {
   mismatch:        ['Quantity mismatch',  'गिनती में फ़र्क'],
   shortBy:         ['short by',           'कम है'],
   extra:           ['extra',              'ज़्यादा'],
-  flagAndContinue: ['Flag & continue',    'चिह्न और आगे बढ़ें'],
+  flagAndContinue: ['Flag & continue',    'फ़्लैग करें'],
   recount:         ['Re-count',           'फिर गिनें'],
 
   // Register
@@ -101,7 +123,7 @@ export const STR = {
 
   // Summary
   deliveryDone:    ['Delivery received',  'डिलिवरी मिल गई'],
-  willSyncLater:   ['Will send when online','ऑनलाइन होते ही भेज देंगे'],
+  willSyncLater:   ['Will send when online','ऑनलाइन होने पर भेजेंगे'],
   backHome:        ['Back to home',       'होम पर जाएँ'],
 
   // Stock
@@ -131,6 +153,31 @@ export const STR = {
   unitBox:         ['Box',                'डिब्बा'],
   unitKg:          ['Kg',                 'किलो'],
   unitLitre:       ['Litre',              'लीटर'],
+
+  // Scanner permissions & manual entry
+  allowCamera:     ['Allow camera',       'कैमरा दें'],
+  notNow:          ['Not now',            'अभी नहीं'],
+  noCamera:        ['No camera available', 'कैमरा नहीं मिला'],
+  cameraNeeded:    ['Camera access needed','कैमरा चाहिए'],
+  useCode:         ['Use code',           'कोड डालें'],
+
+  // Dispense / issue form
+  nameOptional:    ['Name (optional)',    'नाम (वैकल्पिक)'],
+  submitOrder:     ['Submit Order',       'ऑर्डर भेजें'],
+
+  // Login
+  guardName:       ['Guard name',         'गार्ड का नाम'],
+  guardNameHint:   ['As registered by your supervisor', 'आपके सुपरवाइज़र ने जो लिखा'],
+  cameraHint:      ['We use the camera only to read barcodes — no photos are taken.', 'कैमरा सिर्फ़ बारकोड पढ़ने के लिए — कोई फ़ोटो नहीं।'],
+
+  // Login form extras
+  pin:             ['PIN',                'पिन'],
+  pinHint:         ['4–6 digits',         '4–6 अंक'],
+  select:          ['Select',             'चुनें'],
+
+  // Placeholders
+  productExample:  ['e.g. Tata Salt 1kg', 'जैसे टाटा नमक 1kg'],
+  barcodeExample:  ['e.g. 8901030875021', 'जैसे 8901030875021'],
 } as const satisfies Record<string, Pair>;
 
 export type StringKey = keyof typeof STR;
@@ -138,6 +185,5 @@ export type StringKey = keyof typeof STR;
 export function translate(key: StringKey, lang: Lang): string {
   const entry = STR[key];
   if (!entry) return key;
-  // Icons mode keeps English under the hood for screen readers; UI uses icons.
   return lang === 'hi' ? entry[1] : entry[0];
 }

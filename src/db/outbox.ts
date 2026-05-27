@@ -5,6 +5,7 @@ export type OutboxKind =
   | 'receipt'
   | 'product_registration'
   | 'issue'
+  | 'dispense'
   | 'reorder_request'
   | 'mismatch_flag';
 

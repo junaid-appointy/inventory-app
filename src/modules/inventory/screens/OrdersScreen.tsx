@@ -1,12 +1,13 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
-import { AppBar, Card, palette, Skeleton, spacing, StatusPill, Text } from '../../../design';
+import { AppBar, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { getOrderItems, listOpenOrders, Order, OrderItem } from '../../../db/orders';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
+import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Orders'>;
 type Enriched = Order & { items: OrderItem[] };
@@ -24,6 +25,7 @@ const SECTION_ORDER: Bucket[] = ['arrived', 'awaited', 'done'];
 
 export function OrdersScreen({ navigation }: Props) {
   const t = useT();
+  const { palette } = useTheme();
   const [orders, setOrders] = useState<Enriched[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -86,7 +88,7 @@ export function OrdersScreen({ navigation }: Props) {
   }, [orders, t]);
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('receiving')} subtitle={t('expectedToday')} onBack={() => navigation.goBack()} />
       {initialLoading && orders.length === 0 ? (
         <View style={styles.list}>
@@ -157,7 +159,7 @@ export function OrdersScreen({ navigation }: Props) {
                     key={i.id}
                     style={[
                       styles.itemRow,
-                      idx < item.items.length - 1 && styles.itemRowDivider,
+                      idx < item.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: palette.outlineVariant },
                     ]}
                   >
                     <View style={{ flex: 1 }}>
@@ -198,11 +200,10 @@ export function OrdersScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1 },
   list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   sectionHeader: { paddingBottom: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md },
-  itemRowDivider: { borderBottomWidth: 1, borderBottomColor: palette.outlineVariant },
   empty: { padding: spacing.xxl },
 });

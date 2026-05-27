@@ -1,92 +1,87 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AlertTriangle, Check } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import {
   AppBar,
   Button,
   Card,
-  palette,
   spacing,
-  StatusPill,
   Text,
 } from '../../../design';
 import { useT } from '../../../i18n';
-import { RootStackParamList } from '../../../navigation/types';
+import { RootStackParamList, DeliverySummaryItem } from '../../../navigation/types';
+import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DeliverySummary'>;
 
 export function DeliverySummaryScreen({ navigation, route }: Props) {
   const t = useT();
-  const { productName, qty, expected, flagged } = route.params;
-  const matched = expected !== null && qty === expected;
+  const { palette } = useTheme();
+  const { items, totalItems, totalQty } = route.params;
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('deliveryDone')} />
-      <View style={styles.body}>
-        <View style={styles.hero}>
-          <View style={styles.tick}>
-            <Check size={48} color={palette.onPrimary} strokeWidth={3} />
-          </View>
-          <Text variant="headlineMedium" style={{ marginTop: spacing.lg, textAlign: 'center' }}>
-            {t('deliveryDone')}
-          </Text>
-          <Text
-            variant="bodyLarge"
-            color={palette.onSurfaceVariant}
-            style={{ marginTop: spacing.sm, textAlign: 'center' }}
-          >
-            {t('willSyncLater')}
-          </Text>
-        </View>
 
-        <Card tone="elevated" padding="xl">
-          <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-            PRODUCT
-          </Text>
-          <Text variant="titleLarge" style={{ marginTop: spacing.xs }}>
-            {productName}
-          </Text>
-          <View style={styles.rowBetween}>
-            <Text variant="bodyLarge" color={palette.onSurfaceVariant}>
-              {t('scanned')}
-            </Text>
-            <Text variant="titleMedium">{qty}</Text>
-          </View>
-          {expected !== null && (
-            <View style={styles.rowBetween}>
-              <Text variant="bodyLarge" color={palette.onSurfaceVariant}>
-                {t('expected')}
-              </Text>
-              <Text variant="titleMedium">{expected}</Text>
+      <FlatList
+        data={items}
+        keyExtractor={(_, i) => String(i)}
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <View style={styles.hero}>
+            <View style={[styles.tick, { backgroundColor: palette.primary }]}>
+              <Check size={48} color={palette.onPrimary} strokeWidth={3} />
             </View>
-          )}
-          <View style={{ marginTop: spacing.md }}>
-            {flagged ? (
-              <StatusPill label={t('mismatch')} tone="danger" Icon={AlertTriangle} />
-            ) : matched ? (
-              <StatusPill label="Counts match" tone="success" Icon={Check} />
-            ) : (
-              <StatusPill label="Standalone receipt" tone="neutral" />
-            )}
+            <Text variant="headlineMedium" style={{ marginTop: spacing.lg, textAlign: 'center' }}>
+              {t('deliveryDone')}
+            </Text>
+            <Text
+              variant="bodyLarge"
+              color={palette.onSurfaceVariant}
+              style={{ marginTop: spacing.sm, textAlign: 'center' }}
+            >
+              {totalItems} item{totalItems === 1 ? '' : 's'} · {totalQty} total units
+            </Text>
+            <Text
+              variant="bodyMedium"
+              color={palette.onSurfaceVariant}
+              style={{ marginTop: spacing.xs, textAlign: 'center' }}
+            >
+              {t('willSyncLater')}
+            </Text>
           </View>
-        </Card>
-      </View>
+        }
+        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+        renderItem={({ item }: { item: DeliverySummaryItem }) => (
+          <Card tone="filled" padding="lg">
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text variant="titleMedium">{item.name}</Text>
+                {item.category && (
+                  <Text
+                    variant="bodyMedium"
+                    color={palette.onSurfaceVariant}
+                    style={{ marginTop: 2 }}
+                  >
+                    {item.category}
+                  </Text>
+                )}
+              </View>
+              <Text variant="titleLarge" color={palette.primary}>
+                {item.qty}
+              </Text>
+            </View>
+          </Card>
+        )}
+      />
 
-      <View style={styles.footer}>
-        <Button
-          label={t('startScanning')}
-          variant="tonal"
-          size="lg"
-          fullWidth
-          onPress={() => navigation.replace('Scanner')}
-        />
+      <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
         <Button
           label={t('backHome')}
-          variant="text"
+          size="lg"
+          fullWidth
           onPress={() => navigation.popToTop()}
-          style={{ marginTop: spacing.sm }}
         />
       </View>
     </View>
@@ -94,27 +89,25 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
-  body: { flex: 1, padding: spacing.xl, gap: spacing.xl },
-  hero: { alignItems: 'center', paddingVertical: spacing.lg },
+  safe: { flex: 1 },
+  list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  hero: { alignItems: 'center', paddingVertical: spacing.lg, marginBottom: spacing.lg },
   tick: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: palette.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowBetween: {
+  row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing.md,
+    gap: spacing.md,
   },
   footer: {
     padding: spacing.xl,
-    backgroundColor: palette.surface,
     borderTopWidth: 1,
-    borderTopColor: palette.outlineVariant,
   },
 });
+

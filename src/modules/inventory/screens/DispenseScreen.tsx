@@ -15,7 +15,6 @@ import {
   Button,
   Card,
   Chip,
-  palette,
   QtyStepper,
   radius,
   Skeleton,
@@ -24,27 +23,63 @@ import {
   TextField,
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
-import { adjustOnHand, findStock, listStock, StockRow } from '../../../db/stock';
+import { adjustOnHand, findStock, listStock, StockRow, statusFor } from '../../../db/stock';
+import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
+import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
+import { useTheme } from '../../../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Issue'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'Dispense'>;
 
 const REASONS = ['Office use', 'Pantry', 'Cleaning', 'Maintenance', 'Other'];
 
-export function IssueScreen({ route, navigation }: Props) {
+const STATUS_OPTIONS: FilterOption[] = [
+  { key: 'All', label: 'All Status' },
+  { key: 'In Stock', label: 'In Stock' },
+  { key: 'Low', label: 'Low' },
+  { key: 'Out', label: 'Out of Stock' },
+];
+
+/** Subtle background tint per stock health */
+function cardBg(row: StockRow): string {
+  const s = statusFor(row);
+  if (s === 'out') return 'rgba(229, 57, 53, 0.07)';
+  if (s === 'low') return 'rgba(249, 168, 37, 0.07)';
+  if (row.on_hand >= row.threshold * 2) return 'rgba(67, 160, 71, 0.06)';
+  return 'rgba(129, 199, 132, 0.06)';
+}
+
+/** Count text color per stock health */
+function countColor(row: StockRow): string {
+  const s = statusFor(row);
+  if (s === 'out') return '#E53935';
+  if (s === 'low') return '#F9A825';
+  if (row.on_hand >= row.threshold * 2) return '#43A047';
+  return '#66BB6A';
+}
+
+export function DispenseScreen({ route, navigation }: Props) {
   const t = useT();
+  const { palette } = useTheme();
   const initialBarcode = route.params?.barcode;
   const [selected, setSelected] = useState<StockRow | null>(null);
   const [all, setAll] = useState<StockRow[]>([]);
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState(REASONS[0]);
   const [who, setWho] = useState('');
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+
+  const categoryOptions = useMemo<FilterOption[]>(() => {
+    const cats = new Set(all.map((r) => r.category).filter(Boolean) as string[]);
+    return [{ key: 'All', label: 'All Categories' }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
+  }, [all]);
 
   useEffect(() => {
     listStock().then((rows) => {
@@ -62,30 +97,38 @@ export function IssueScreen({ route, navigation }: Props) {
   const results = useMemo(() => {
     if (selected) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return all.slice(0, 25);
     return all
-      .filter((r) => r.name.toLowerCase().includes(q) || r.barcode.includes(q))
-      .slice(0, 25);
-  }, [all, query, selected]);
+      .filter((r) => {
+        if (category !== 'All' && r.category !== category) return false;
+        if (statusFilter !== 'All') {
+          const s = statusFor(r);
+          if (statusFilter === 'In Stock' && s !== 'ok') return false;
+          if (statusFilter === 'Low' && s !== 'low') return false;
+          if (statusFilter === 'Out' && s !== 'out') return false;
+        }
+        if (!q) return true;
+        return r.name.toLowerCase().includes(q) || r.barcode.includes(q) || (r.category ?? '').toLowerCase().includes(q);
+      })
+      .slice(0, 30);
+  }, [all, query, selected, category, statusFilter]);
 
   const submit = async () => {
     if (!selected) return;
+    const session = getSession();
     setSaving(true);
     try {
-      await enqueue('issue', {
-        id: `iss_${nanoid(12)}`,
+      await enqueue('dispense', {
+        id: `dsp_${nanoid(12)}`,
         barcode: selected.barcode,
         product_name: selected.name,
         qty,
         reason,
         taken_by: who.trim() || null,
         issued_at: Date.now(),
+        performed_by: session?.guardId ?? null,
+        performed_by_name: session?.guardName ?? null,
       });
       await adjustOnHand(selected.barcode, -qty);
-      // Block on the flush so the Stock/Alerts screen we navigate back to
-      // sees the server-side deduction on its very first refetch. If the
-      // device is offline this resolves immediately (no-op) and the local
-      // adjustOnHand above stands until the next online flush.
       await flushOnce().catch(() => {});
       haptic.success();
       navigation.goBack();
@@ -96,16 +139,37 @@ export function IssueScreen({ route, navigation }: Props) {
 
   if (!selected) {
     return (
-      <View style={styles.safe}>
-        <AppBar title={t('issue')} subtitle={t('issueSub')} onBack={() => navigation.goBack()} />
+      <View style={[styles.safe, { backgroundColor: palette.background }]}>
+        <AppBar title={t('dispense')} subtitle={t('dispenseSub')} onBack={() => navigation.goBack()} />
         <View style={styles.search}>
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder={t('search')}
             placeholderTextColor={palette.onSurfaceVariant}
-            style={styles.searchInput}
+            style={[
+            styles.searchInput,
+            {
+              backgroundColor: palette.surfaceContainerLowest,
+              borderColor: palette.outlineVariant,
+              color: palette.onSurface,
+            },
+          ]}
             autoFocus
+          />
+        </View>
+        <View style={styles.filterRow}>
+          <FilterDropdown
+            label={t('filterCategory')}
+            options={categoryOptions}
+            selected={category}
+            onSelect={setCategory}
+          />
+          <FilterDropdown
+            label={t('filterStatus')}
+            options={STATUS_OPTIONS}
+            selected={statusFilter}
+            onSelect={setStatusFilter}
           />
         </View>
         {initialLoading && all.length === 0 ? (
@@ -127,15 +191,22 @@ export function IssueScreen({ route, navigation }: Props) {
             contentContainerStyle={styles.list}
             ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
             renderItem={({ item }) => (
-              <Card tone="filled" padding="lg" onPress={() => setSelected(item)}>
-                <Text variant="titleMedium">{item.name}</Text>
-                <Text
-                  variant="bodyMedium"
-                  color={palette.onSurfaceVariant}
-                  style={{ marginTop: 2 }}
-                >
-                  {item.category ?? '—'} · {item.on_hand} {item.unit ?? ''} {t('onHand')}
-                </Text>
+              <Card tone="filled" padding="lg" onPress={() => setSelected(item)} style={{ backgroundColor: cardBg(item) }}>
+                <View style={styles.pickerRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="titleMedium">{item.name}</Text>
+                    <Text
+                      variant="bodyMedium"
+                      color={palette.onSurfaceVariant}
+                      style={{ marginTop: 2 }}
+                    >
+                      {item.category ?? '—'}
+                    </Text>
+                  </View>
+                  <Text variant="titleLarge" color={countColor(item)} style={{ fontWeight: '700' }}>
+                    {item.on_hand}
+                  </Text>
+                </View>
               </Card>
             )}
             ListEmptyComponent={
@@ -152,9 +223,9 @@ export function IssueScreen({ route, navigation }: Props) {
   }
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar
-        title={t('issue')}
+        title={t('dispense')}
         subtitle={selected.name}
         onBack={() => setSelected(null)}
       />
@@ -197,12 +268,12 @@ export function IssueScreen({ route, navigation }: Props) {
             label={t('whoTook')}
             value={who}
             onChangeText={setWho}
-            placeholder="Name (optional)"
+            placeholder={t('nameOptional')}
             returnKeyType="done"
           />
         </View>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
           <Button
             label={t('confirm')}
             onPress={submit}
@@ -218,27 +289,29 @@ export function IssueScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1 },
   search: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  filterRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
   searchInput: {
-    backgroundColor: palette.surfaceContainerLowest,
     borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: palette.outlineVariant,
     paddingHorizontal: spacing.lg,
     minHeight: 52,
-    color: palette.onSurface,
     fontSize: 17,
   },
   list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   body: { flex: 1, padding: spacing.xl, gap: spacing.xl },
   qtySection: { gap: spacing.lg },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   empty: { padding: spacing.xxl },
   footer: {
     padding: spacing.xl,
-    backgroundColor: palette.surface,
     borderTopWidth: 1,
-    borderTopColor: palette.outlineVariant,
   },
 });

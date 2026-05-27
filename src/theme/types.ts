@@ -1,6 +1,6 @@
 import type { Palette } from '../design/tokens';
 
-export type ThemeName = 'steadyPurple' | 'bold';
+export type ThemeName = 'steadyPurple' | 'steadyPurpleDark';
 
 export type Theme = {
   name: ThemeName;

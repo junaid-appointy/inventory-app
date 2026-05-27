@@ -1,15 +1,17 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Bell, type LucideIcon, HandCoins, Package, RefreshCw, ScanLine, Settings as SettingsIcon, Truck } from 'lucide-react-native';
+import { QueueBadge } from '../components/QueueBadge';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, IconButton, palette, Skeleton, spacing, Text } from '../../../design';
+import { Button, Card, IconButton, Skeleton, spacing, Text } from '../../../design';
+import { useTheme } from '../../../theme';
+import { getSession } from '../../../auth/session';
 import { listOpenOrders } from '../../../db/orders';
 import { listProducts } from '../../../db/products';
 import { listLowOrOut } from '../../../db/stock';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
-import { QueueBadge } from '../components/QueueBadge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -21,6 +23,7 @@ type Stats = {
 
 export function HomeScreen({ navigation }: Props) {
   const t = useT();
+  const { palette } = useTheme();
   const [stats, setStats] = useState<Stats | null>(null);
 
   const load = useCallback(async () => {
@@ -35,22 +38,19 @@ export function HomeScreen({ navigation }: Props) {
   }, [navigation, load]);
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: palette.background }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
-              <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-                {t('guard').toUpperCase()}
+              <Text variant="headlineMedium">
+                {t('greeting')}, {getSession()?.guardName ?? ''}
               </Text>
-              <Text variant="displayMedium" style={{ marginTop: spacing.xs }}>
+              <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
                 {t('appName')}
               </Text>
             </View>
             <IconButton Icon={SettingsIcon} onPress={() => navigation.navigate('Settings')} />
-          </View>
-          <View style={{ marginTop: spacing.md }}>
-            <QueueBadge />
           </View>
         </View>
 
@@ -92,10 +92,10 @@ export function HomeScreen({ navigation }: Props) {
 
         <View style={styles.tilesRow}>
           <Tile
-            label={t('issue')}
-            sub={t('issueSub')}
+            label={t('dispense')}
+            sub={t('dispenseSub')}
             Icon={HandCoins}
-            onPress={() => navigation.navigate('Issue')}
+            onPress={() => navigation.navigate('Dispense')}
           />
           <Tile
             label={t('alerts')}
@@ -110,10 +110,11 @@ export function HomeScreen({ navigation }: Props) {
 
         <View style={styles.tilesRow}>
           <Tile
-            label="Sync queue"
-            sub="Review pending uploads"
+            label={t('syncQueue')}
+            sub={t('syncQueueSub')}
             Icon={RefreshCw}
             onPress={() => navigation.navigate('Outbox')}
+            trailing={<QueueBadge />}
           />
           <View style={{ flex: 1 }} />
         </View>
@@ -129,21 +130,26 @@ type TileProps = {
   sub: string;
   Icon: LucideIcon;
   tone?: 'neutral' | 'warn';
+  trailing?: React.ReactNode;
   onPress: () => void;
 };
 
-function Tile({ label, value, loading, sub, Icon, tone = 'neutral', onPress }: TileProps) {
+function Tile({ label, value, loading, sub, Icon, tone = 'neutral', trailing, onPress }: TileProps) {
+  const { palette } = useTheme();
   return (
     <Card tone="filled" onPress={onPress} style={styles.tile}>
       <View style={styles.tileHeader}>
         <Text variant="labelLarge" color={palette.onSurfaceVariant}>
           {label.toUpperCase()}
         </Text>
-        <Icon
-          size={22}
-          color={tone === 'warn' ? palette.error : palette.primary}
-          strokeWidth={2.2}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {trailing}
+          <Icon
+            size={22}
+            color={tone === 'warn' ? palette.error : palette.primary}
+            strokeWidth={2.2}
+          />
+        </View>
       </View>
       {loading ? (
         <View style={{ marginTop: spacing.xs, marginBottom: spacing.xs }}>
@@ -168,7 +174,7 @@ function Tile({ label, value, loading, sub, Icon, tone = 'neutral', onPress }: T
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1 },
   scroll: { paddingBottom: spacing.xxxl },
   header: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },

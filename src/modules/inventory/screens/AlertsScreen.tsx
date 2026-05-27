@@ -7,7 +7,6 @@ import {
   AppBar,
   Button,
   Card,
-  palette,
   Skeleton,
   spacing,
   StatusPill,
@@ -20,11 +19,13 @@ import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
+import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Alerts'>;
 
 export function AlertsScreen({ navigation }: Props) {
   const t = useT();
+  const { palette } = useTheme();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [initialLoading, setInitialLoading] = useState(true);
@@ -75,7 +76,7 @@ export function AlertsScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('alerts')} subtitle={t('alertsSub')} onBack={() => navigation.goBack()} />
       {initialLoading && rows.length === 0 ? (
         <View style={styles.list}>
@@ -156,7 +157,7 @@ export function AlertsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1 },
   list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   empty: { padding: spacing.xxl },

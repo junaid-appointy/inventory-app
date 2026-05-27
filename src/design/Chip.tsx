@@ -14,6 +14,14 @@ type Props = {
   Icon?: LucideIcon;
 };
 
+/**
+ * Chip — uses pure React press styling (no android_ripple) so that
+ * background colours update immediately when the theme context changes.
+ * android_ripple creates a native RippleDrawable that caches the
+ * background paint buffer and blocks re-renders from updating it until
+ * the next touch event, which is why language chips were staying in the
+ * old theme colours after switching appearance.
+ */
 export function Chip({ label, selected, onPress, Icon }: Props) {
   const { palette } = useTheme();
   return (
@@ -22,12 +30,16 @@ export function Chip({ label, selected, onPress, Icon }: Props) {
         haptic.tap();
         onPress();
       }}
-      android_ripple={{ color: palette.outlineVariant }}
-      style={[
+      style={({ pressed }) => [
         styles.base,
         {
-          backgroundColor: selected ? palette.secondaryContainer : palette.surface,
+          backgroundColor: selected
+            ? palette.secondaryContainer
+            : pressed
+            ? palette.surfaceContainerLow
+            : palette.surface,
           borderColor: selected ? palette.secondaryContainer : palette.outlineVariant,
+          opacity: pressed ? 0.88 : 1,
         },
       ]}
     >
@@ -40,6 +52,7 @@ export function Chip({ label, selected, onPress, Icon }: Props) {
         <Text
           variant="labelLarge"
           color={selected ? palette.onSecondaryContainer : palette.onSurface}
+          numberOfLines={1}
         >
           {label}
         </Text>
@@ -56,7 +69,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

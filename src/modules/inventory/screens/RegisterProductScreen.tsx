@@ -7,7 +7,6 @@ import {
   Button,
   Chip,
   IconButton,
-  palette,
   radius,
   spacing,
   Text,
@@ -16,6 +15,7 @@ import {
 import { enqueue } from '../../../db/outbox';
 import { upsertProduct } from '../../../db/products';
 import { useT } from '../../../i18n';
+import { useTheme } from '../../../theme';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
@@ -30,6 +30,7 @@ const UNITS = ['Piece', 'Kg', 'Litre', 'Pack', 'Box'];
 
 export function RegisterProductScreen({ route, navigation }: Props) {
   const t = useT();
+  const { palette } = useTheme();
   const { barcode } = route.params;
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Grocery');
@@ -108,7 +109,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
   };
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar
         title={t('newProduct')}
         subtitle={barcode}
@@ -130,7 +131,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
               label={t('productName')}
               value={name}
               onChangeText={setName}
-              placeholder="e.g. Tata Salt 1kg"
+              placeholder={t('productExample')}
               autoFocus
               returnKeyType="done"
             />
@@ -207,7 +208,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
           <Button
             label={t('saveAndContinue')}
             onPress={onSave}
@@ -229,7 +230,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1 },
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   suggestRow: {
@@ -248,8 +249,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: spacing.xl,
-    backgroundColor: palette.surface,
     borderTopWidth: 1,
-    borderTopColor: palette.outlineVariant,
   },
 });

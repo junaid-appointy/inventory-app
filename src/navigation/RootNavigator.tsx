@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { useAuth } from '../auth';
 import { getAllScreens } from '../modules';
+import { OrderSessionProvider } from '../modules/inventory/components/OrderSessionContext';
 import { LoginScreen } from '../modules/inventory/screens/LoginScreen';
 import { useTheme } from '../theme';
 
@@ -28,6 +29,7 @@ export function RootNavigator() {
   const screens = getAllScreens();
 
   return (
+    <OrderSessionProvider>
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
         screenOptions={{
@@ -50,5 +52,6 @@ export function RootNavigator() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    </OrderSessionProvider>
   );
 }

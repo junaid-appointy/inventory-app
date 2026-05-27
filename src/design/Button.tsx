@@ -155,7 +155,7 @@ export function Button({
       >
         <View style={[styles.row, { gap: s.gap }]}>
           {leadingIcon ? <View>{leadingIcon}</View> : null}
-          <Text variant={s.variant} color={t.fg}>
+          <Text variant={s.variant} color={t.fg} numberOfLines={1} adjustsFontSizeToFit>
             {loading ? 'Working…' : label}
           </Text>
           {trailingIcon ? <View>{trailingIcon}</View> : null}

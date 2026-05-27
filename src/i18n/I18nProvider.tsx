@@ -10,8 +10,6 @@ type Ctx = {
   setLang: (l: Lang) => void;
   /** Translate a string key. Unknown keys are returned verbatim. */
   t: (key: StringKey) => string;
-  /** True when the user has selected icons-only mode. */
-  iconsOnly: boolean;
 };
 
 const I18nContext = createContext<Ctx | null>(null);
@@ -21,7 +19,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((v) => {
-      if (v === 'en' || v === 'hi' || v === 'icons') setLangState(v);
+      if (v === 'en' || v === 'hi') setLangState(v as Lang);
     });
   }, []);
 
@@ -35,7 +33,6 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       lang,
       setLang,
       t: (key) => translate(key, lang),
-      iconsOnly: lang === 'icons',
     }),
     [lang, setLang]
   );
@@ -51,7 +48,6 @@ export function useI18n(): Ctx {
       lang: DEFAULT_LANG,
       setLang: () => {},
       t: (key) => translate(key, DEFAULT_LANG),
-      iconsOnly: false,
     };
   }
   return ctx;
