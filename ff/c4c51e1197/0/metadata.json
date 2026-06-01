@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "ffc4c51e1197",
+  "session_id": "c83fada0-043a-43ab-9026-91c5d8b4de12",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-01T09:56:02.188515Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/i18n/strings.ts",
+    "src/modules/inventory/screens/LoginScreen.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7",
+  "turn_id": "bda73c8e11dc",
+  "token_usage": {
+    "input_tokens": 6,
+    "cache_creation_tokens": 13504,
+    "cache_read_tokens": 14760,
+    "output_tokens": 1037,
+    "api_call_count": 2
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-01T09:56:02.183798Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 8,
+    "total_committed": 0,
+    "total_lines_changed": 8,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 24,
+      "user_lines_removed": 8,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "src/i18n/strings.ts": 3,
+        "src/modules/inventory/screens/LoginScreen.tsx": 21
+      },
+      "user_removed_per_file": {
+        "src/modules/inventory/screens/LoginScreen.tsx": 8
+      }
+    }
+  ]
+}
