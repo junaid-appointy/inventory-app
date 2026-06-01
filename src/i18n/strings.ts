@@ -174,6 +174,9 @@ export const STR = {
   pin:             ['PIN',                'पिन'],
   pinHint:         ['4–6 digits',         '4–6 अंक'],
   select:          ['Select',             'चुनें'],
+  signInWithPin:   ['Sign in with your name and PIN.', 'अपने नाम और पिन से लॉग इन करें।'],
+  signingIn:       ['Signing in…',        'लॉग-इन हो रहा…'],
+  fillDetailsError:['Please enter your name and a 4-6 digit PIN.', 'कृपया अपना नाम और 4-6 अंकों का पिन दर्ज करें।'],
 
   // Placeholders
   productExample:  ['e.g. Tata Salt 1kg', 'जैसे टाटा नमक 1kg'],

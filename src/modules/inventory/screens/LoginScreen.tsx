@@ -11,16 +11,18 @@ import { useAuth } from '../../../auth';
 import { config } from '../../../config';
 import {
   Button,
+  Chip,
   spacing,
   Text,
   TextField,
 } from '../../../design';
-import { useT } from '../../../i18n';
+import { useI18n, useT, Lang } from '../../../i18n';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
 
 export function LoginScreen() {
   const t = useT();
+  const { lang, setLang } = useI18n();
   const { palette } = useTheme();
   const { login } = useAuth();
   const [guardName, setGuardName] = useState('');
@@ -28,10 +30,15 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = guardName.trim().length > 0 && pin.trim().length >= 4 && !busy;
-
   const submit = async () => {
-    if (!canSubmit) return;
+    if (busy) return;
+    
+    if (guardName.trim().length === 0 || pin.trim().length < 4) {
+      setError(t('fillDetailsError'));
+      haptic.warn();
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -60,6 +67,11 @@ export function LoginScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.langRow}>
+            <Chip label="EN" selected={lang === 'en'} onPress={() => setLang('en')} />
+            <Chip label="हिं" selected={lang === 'hi'} onPress={() => setLang('hi')} />
+          </View>
+
           <View style={styles.header}>
             <Text variant="labelLarge" color={palette.onSurfaceVariant}>
               {t('guard').toUpperCase()}
@@ -72,7 +84,7 @@ export function LoginScreen() {
               color={palette.onSurfaceVariant}
               style={{ marginTop: spacing.md }}
             >
-            Sign in with your name and PIN.
+              {t('signInWithPin')}
             </Text>
           </View>
 
@@ -106,9 +118,9 @@ export function LoginScreen() {
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
           <Button
-            label={busy ? 'Signing in…' : t('signIn')}
+            label={busy ? t('signingIn') : t('signIn')}
             onPress={submit}
-            disabled={!canSubmit}
+            disabled={busy || guardName.trim().length === 0}
             loading={busy}
             size="lg"
             fullWidth
@@ -122,7 +134,8 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { padding: spacing.xl, flexGrow: 1 },
-  header: { marginTop: spacing.xxl },
+  langRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginBottom: spacing.sm },
+  header: { marginTop: spacing.xl },
   footer: {
     padding: spacing.xl,
     borderTopWidth: 1,
