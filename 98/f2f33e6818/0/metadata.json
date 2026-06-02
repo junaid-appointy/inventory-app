@@ -1,0 +1,80 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "98f2f33e6818",
+  "session_id": "2a08fe3a-7268-4299-a758-571d920a5495",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-02T19:06:56.139878Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/db/catalog.ts",
+    "src/db/database.ts",
+    "src/db/outbox.ts",
+    "src/modules/inventory/index.ts",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/navigation/types.ts",
+    "src/sync/api.ts",
+    "src/sync/syncService.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7",
+  "turn_id": "3a00e92c8132",
+  "token_usage": {
+    "input_tokens": 12,
+    "cache_creation_tokens": 310,
+    "cache_read_tokens": 55993,
+    "output_tokens": 526,
+    "api_call_count": 3
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-02T19:06:56.136939Z",
+    "agent_lines": 107,
+    "agent_removed": 4,
+    "human_added": 962,
+    "human_modified": 21,
+    "human_removed": 0,
+    "total_committed": 1090,
+    "total_lines_changed": 1246,
+    "agent_percentage": 8.908507223113965,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 302,
+      "user_lines_removed": 21,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "src/db/catalog.ts": 126,
+        "src/db/database.ts": 38,
+        "src/db/outbox.ts": 2,
+        "src/modules/inventory/index.ts": 2,
+        "src/modules/inventory/screens/ReceivingScreen.tsx": 37,
+        "src/modules/inventory/screens/ScannerScreen.tsx": 41,
+        "src/navigation/types.ts": 8,
+        "src/sync/api.ts": 18,
+        "src/sync/syncService.ts": 30
+      },
+      "user_removed_per_file": {
+        "src/db/catalog.ts": 1,
+        "src/db/database.ts": 1,
+        "src/db/outbox.ts": 1,
+        "src/modules/inventory/screens/ReceivingScreen.tsx": 14,
+        "src/modules/inventory/screens/ScannerScreen.tsx": 3,
+        "src/navigation/types.ts": 1
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 559,
+      "agent_lines_removed": 21
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+field
+
+---
+
+field app run commands, I have already installed the eas build from the lin
+
+---
+
+and for cloud eas build?
