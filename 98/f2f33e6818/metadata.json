@@ -3,19 +3,23 @@
   "checkpoint_id": "98f2f33e6818",
   "strategy": "manual-commit",
   "branch": "feature/bill-mapping",
-  "checkpoints_count": 3,
+  "checkpoints_count": 20,
   "files_touched": [
     "src/db/catalog.ts",
     "src/db/database.ts",
     "src/db/orders.ts",
     "src/db/outbox.ts",
+    "src/db/products.ts",
+    "src/i18n/strings.ts",
     "src/modules/inventory/components/OrderSessionContext.tsx",
     "src/modules/inventory/hooks/nameMatch.ts",
+    "src/modules/inventory/hooks/useCanonicalSuggest.ts",
     "src/modules/inventory/hooks/useCatalogSuggest.ts",
     "src/modules/inventory/index.ts",
     "src/modules/inventory/screens/CatalogPickerScreen.tsx",
     "src/modules/inventory/screens/OrdersScreen.tsx",
     "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
     "src/modules/inventory/screens/ScannerScreen.tsx",
     "src/navigation/types.ts",
     "src/sync/api.ts",
@@ -33,13 +37,19 @@
       "transcript": "/98/f2f33e6818/1/full.jsonl",
       "content_hash": "/98/f2f33e6818/1/content_hash.txt",
       "prompt": "/98/f2f33e6818/1/prompt.txt"
+    },
+    {
+      "metadata": "/98/f2f33e6818/2/metadata.json",
+      "transcript": "/98/f2f33e6818/2/full.jsonl",
+      "content_hash": "/98/f2f33e6818/2/content_hash.txt",
+      "prompt": "/98/f2f33e6818/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 251,
-    "cache_creation_tokens": 626406,
-    "cache_read_tokens": 22840299,
-    "output_tokens": 95161,
-    "api_call_count": 172
+    "input_tokens": 867,
+    "cache_creation_tokens": 1553707,
+    "cache_read_tokens": 145601865,
+    "output_tokens": 403132,
+    "api_call_count": 633
   }
 }

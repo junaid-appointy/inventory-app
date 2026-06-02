@@ -1,0 +1,199 @@
+tackle the pending tasks
+
+---
+
+allow bill to be pdf also in admin dashboard
+
+---
+
+extract and match button showed toast as failed to fetch
+
+---
+
+changes in the flow, we will not export an excel sheet, we will link a google sheet in inventory management. 
+Also when we put in the bill for scan, we are supposed to extract the items and show them in unresolved if they only do not match with any previously mapped items. 
+also why is the item with tick icon is being listed inside other item card as well, clicking on existing button does nothing. 
+also the catalog list is not being reflected in the app, nor in the pick product section.
+
+---
+
+x-site-id
+site-dev
+
+---
+
+where should I run this, in the terminal? psql "$DATABASE_URL" -c "SELECT site_id, count(*) FROM canonical_products GROUP BY site_id;"
+
+---
+
+set -a; source env.updated; set +a
+  psql "$DATABASE_URL" -c "SELECT site_id, count(*) FROM canonical_products GROUP BY site_id;"
+BUN_INSTALL /Users/appointy/.bun
+CMD_DURATION 18
+COLORTERM truecolor
+COLUMNS 113
+COMMAND_MODE unix2003
+EUID 501
+FISH_VERSION 4.6.0
+FNM_ARCH arm64
+FNM_COREPACK_ENABLED false
+FNM_DIR /Users/appointy/.local/share/fnm
+FNM_LOGLEVEL info
+FNM_MULTISHELL_PATH /Users/appointy/.local/state/fnm_multishells/38426_1780415379156
+FNM_NODE_DIST_MIRROR https://nodejs.org/dist
+FNM_RESOLVE_ENGINES true
+FNM_VERSION_FILE_STRATEGY local
+GHOSTTY_BIN_DIR /Applications/Ghostty.app/Contents/MacOS
+GHOSTTY_RESOURCES_DIR /Applications/Ghostty.app/Contents/Resources/ghostty
+GHOSTTY_SHELL_FEATURES cursor:blink,path,title
+HOME /Users/appointy
+IFS \n\ \t
+LANG en_IN.UTF-8
+LINES 78
+LOGNAME appointy
+MANPATH '/usr/share/man' '/usr/local/share/man' '/Applications/Ghost…
+NVM_DIR /Users/appointy/.nvm
+OSLogRateLimit 64
+PATH '/Users/appointy/.local/state/fnm_multishells/38426_17804153…
+PWD /Users/appointy/work/OfficeOperationsUmbrella/office-ops-engine
+RIGHT_TRANSIENT 0
+SHELL /opt/homebrew/bin/fish
+SHLVL 1
+SSH_AUTH_SOCK /var/run/com.apple.launchd.GVnNJ7IvVq/Listeners
+STARSHIP_JOBS 0
+STARSHIP_SESSION_KEY 1807326405101343
+STARSHIP_SHELL fish
+TERM xterm-ghostty
+TERMINFO /Applications/Ghostty.app/Contents/Resources/terminfo
+TERM_PROGRAM ghostty
+TERM_PROGRAM_VERSION 1.3.1
+TMPDIR /var/folders/tg/pwxljyfj2_1fbr3g_my5pcyr0000gn/T/
+TRANSIENT 0
+USER appointy
+VIRTUAL_ENV_DISABLE_PROMPT 1
+XDG_DATA_DIRS /usr/local/share:/usr/share:/Applications/Ghostty.app/Conten…
+XPC_FLAGS 0x0
+XPC_SERVICE_NAME 0
+_ set
+__CFBundleIdentifier com.mitchellh.ghostty
+__CF_USER_TEXT_ENCODING 0x0:0:2
+__fish_active_key_bindings fish_default_key_bindings
+__fish_added_user_paths '/Users/appointy/.antigravity/antigravity/bin' '/Users/appoi…
+__fish_bin_dir /opt/homebrew/Cellar/fish/4.6.0/bin
+__fish_cache_dir /Users/appointy/.cache/fish
+__fish_cd_direction prev
+__fish_config_dir /Users/appointy/.config/fish
+__fish_data_dir /opt/homebrew/Cellar/fish/4.6.0/share/fish
+__fish_help_dir /opt/homebrew/Cellar/fish/4.6.0/share/doc/fish
+__fish_initialized 4300
+__fish_man_dir /opt/homebrew/Cellar/fish/4.6.0/share/fish/man
+__fish_sysconf_dir /opt/homebrew/etc/fish
+__fish_user_data_dir /Users/appointy/.local/share/fish
+__fish_vendor_completionsdirs '/Users/appointy/.local/share/fish/vendor_completions.d' '/A…
+__fish_vendor_confdirs '/Users/appointy/.local/share/fish/vendor_conf.d' '/Applicat…
+__fish_vendor_functionsdirs '/Users/appointy/.local/share/fish/vendor_functions.d' '/App…
+__ghostty_prompt_start_mark '\\e]133;A;click_events=1\\a'
+__ghostty_prompt_state pre-exec
+_fisher_jorgebucaran_2F_fisher_files '~/.config/fish/functions/fisher.fish' '~/.config/fish/compl…
+_fisher_jorgebucaran_2F_nvm_2E_fish_files '~/.config/fish/functions/_nvm_index_update.fish' '~/.config…
+_fisher_plugins 'jorgebucaran/fisher' 'jorgebucaran/nvm.fish'
+_fisher_upgraded_to_4_4
+dirprev '/Users/appointy/work/OfficeOperationsUmbrella/field-app' '/…
+fish_bind_mode default
+fish_color_autosuggestion 'brblack' '--theme=default'
+fish_color_cancel '-r' '--theme=default'
+fish_color_command '--reset' '--theme=default'
+fish_color_comment 'red' '--theme=default'
+fish_color_cwd 'green' '--theme=default'
+fish_color_cwd_root 'red' '--theme=default'
+fish_color_end 'green' '--theme=default'
+fish_color_error 'brred' '--theme=default'
+fish_color_escape 'brcyan' '--theme=default'
+fish_color_history_current '--bold' '--theme=default'
+fish_color_host '--reset' '--theme=default'
+fish_color_host_remote 'yellow' '--theme=default'
+fish_color_normal '--reset' '--theme=default'
+fish_color_operator 'brcyan' '--theme=default'
+fish_color_param 'cyan' '--theme=default'
+fish_color_quote 'yellow' '--theme=default'
+fish_color_redirection 'cyan' '--bold' '--theme=default'
+fish_color_search_match 'white' '--background=brblack' '--bold' '--theme=default'
+fish_color_selection 'white' '--background=brblack' '--bold' '--theme=default'
+fish_color_status 'red' '--theme=default'
+fish_color_user 'brgreen' '--theme=default'
+fish_color_valid_path '--underline' '--theme=default'
+fish_complete_path '/Users/appointy/.config/fish/completions' '/opt/homebrew/et…
+fish_function_path '/Users/appointy/.config/fish/functions' '/opt/homebrew/etc/…
+fish_greeting Welcome\ to\ fish,\ the\ friendly\ interactive\ shell\nType\…
+fish_handle_reflow 1
+fish_key_bindings fish_default_key_bindings
+fish_kill_signal 0
+fish_killring
+fish_pager_color_description 'yellow' '--italics' '--theme=default'
+fish_pager_color_prefix '--bold' '--underline' '--theme=default'
+fish_pager_color_progress 'brwhite' '--background=cyan' '--bold' '--theme=default'
+fish_pager_color_selected_background '-r' '--theme=default'
+fish_pid 38419
+fish_terminal_color_theme dark
+fish_user_paths '/Users/appointy/.local/bin' '/Users/appointy/.antigravity-i…
+history 'cd office-ops-engine' 'cd ..' claude 'npm run dev' cd.. 'np…
+hostname Appointys-MacBook-Air.local
+nvm_data /Users/appointy/.local/share/nvm
+nvm_mirror https://nodejs.org/dist
+pipestatus 0
+status 0
+status_generation 2
+umask 0022
+version 4.6.0
+env.updated (line 2): Unsupported use of '='. In fish, please use 'set ADMIN_TELEGRAM_IDS 960495141'.
+ADMIN_TELEGRAM_IDS=960495141
+^~~~~~~~~~~~~~~~~~~~~~~~~~~^
+from sourcing file env.updated
+source: Error while reading file 'env.updated'
+set: +a: invalid variable name. See `help language#shell-variable-and-function-names`
+
+(Type 'help set' for related documentation)
+fish: Unknown command: psql
+fish:
+psql "$DATABASE_URL" -c "SELECT site_id, count(*) FROM canonical_products GROUP BY site_id;"
+^~~^
+
+---
+
+also make one more tab in the excel sheet, name catalog, where the product name, category, unit, unit value, price, barcode number, hsn number will be there.
+
+---
+
+no, did not fix the issue
+
+---
+
+not all items present in the catalog are coming as recommendation as I type, is the list cached once and forgot? also do not show scrollable recommendation of catalog list item, instead show drop down, only for spelling correct show the pill at bottom, and also one closest match, not like many.
+
+---
+
+not all items present in the catalog are coming as recommendation as I type, is the list cached once and forgot? also do not show scrollable recommendation of catalog list item, instead show drop down, only for spelling correct show the pill at bottom, and also one closest match, not like many. Apart from this, if a user selects an item from the catalog, its category, unit, and unit value will automatically set as per the values present in catalog for that item.
+
+---
+
+no, did not work
+
+---
+
+first of all not all items from the catalog are coming as search suggestion, then the search sugggestion are still in scrollable pill rather than drodown
+
+---
+
+no, there is definitely some mismatch, some misconfig, the catalog list we have I do not think the whole list is being used for item scan name search, clearly one item named fortune kach ghai must oil bottle 910 gm was  there in the catalog in admin dashboard, but in app I searched for fortune, it did not recommend me. also selecting any catalog app, did not update the other fields like category and units and unit value.
+
+---
+
+in the new product page , the changes we are making are not being reflected, do I need to rebuild the app?
+
+---
+
+the field app
+
+---
+
+in the field app, what I wanted is that when I am entering any new product name, I type anything, I should see search recommendation, and that recommendation would be from the catalog list of product we have in the database, which was created by admin using the admin dashboard and the bill extraction flow. But that is not happening, also I wanted the recommendation for the catalog item as a drop down and if the typed input does not match any catalog item, and has mis-spelling we show a best match spelling pill just below the input box. and if the person selects any recommendation from the dropdown list of catalog, that item category, unit, unit value, all gets updated in the form as well. This is not happening.
