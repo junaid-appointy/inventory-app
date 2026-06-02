@@ -5,12 +5,17 @@ import { trackExpiry } from '../../../db/expiry';
 import { adjustOnHand, findStock, upsertStock } from '../../../db/stock';
 import { findProduct } from '../../../db/products';
 import { addReceivedQty, findOpenItemByBarcode } from '../../../db/orders';
+import { findOpenItemByProductId, learnBarcode } from '../../../db/catalog';
 import { getSession } from '../../../auth/session';
-import { flushOnce } from '../../../sync/syncService';
+import { flushOnce, syncOrders } from '../../../sync/syncService';
 import { now } from '../../../db/database';
 
 export type OrderSessionItem = {
   barcode: string;
+  /** Canonical product id when the user picked one from the catalog. Lets
+   *  the receipt link back to the right order_item and lets us learn the
+   *  barcode → product mapping for next time. */
+  productId?: string | null;
   name: string;
   category: string | null;
   unit: string | null;
@@ -70,16 +75,26 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
     const performedBy = session?.guardId ?? null;
     const performedByName = session?.guardName ?? null;
 
+    // Make sure our local mirror of open orders is current before we try
+    // to resolve productId → order_item_id. Without this, the very first
+    // scan of the day misses the order link and the Received counter
+    // stays at 0 until the next periodic sync.
+    await syncOrders().catch(() => {});
+
     for (const item of items) {
       const receiptId = `rcp_${nanoid(12)}`;
 
-      // Check if there's a matching open order item
-      const orderItem = await findOpenItemByBarcode(item.barcode).catch(() => null);
+      // Prefer the canonical-product link (set when guard picked from the
+      // catalog); fall back to barcode lookup for legacy barcoded items.
+      const orderItem = item.productId
+        ? await findOpenItemByProductId(item.productId).catch(() => null)
+        : await findOpenItemByBarcode(item.barcode).catch(() => null);
 
       await enqueue('receipt', {
         id: receiptId,
         order_id: orderItem?.order_id ?? null,
         order_item_id: orderItem?.id ?? null,
+        product_id: item.productId ?? null,
         barcode: item.barcode,
         product_name: item.name,
         qty: item.qty,
@@ -93,6 +108,18 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
       // Update local order tracking if applicable
       if (orderItem) {
         await addReceivedQty(orderItem.id, item.qty);
+      }
+
+      // Barcode learning — remember this real barcode → canonical product
+      // so the next scan auto-resolves to the right item without the
+      // CatalogPicker. Skip synthetic "catalog_*" barcodes from picks
+      // with no physical barcode.
+      if (item.productId && !item.barcode.startsWith('catalog_')) {
+        await learnBarcode(item.barcode, item.productId, 'scan');
+        await enqueue('learn_barcode', {
+          barcode: item.barcode,
+          product_id: item.productId,
+        }).catch(() => {});
       }
 
       // Track expiry date for future alerts

@@ -115,6 +115,8 @@ export const STR = {
   productName:     ['What is this?',      'यह क्या है?'],
   pickCategory:    ['Pick a category',    'श्रेणी चुनें'],
   pickUnit:        ['Pick a unit',        'इकाई चुनें'],
+  unitValue:       ['Unit value',         'मात्रा'],
+  unitValueHint:   ['e.g. 1, 5, 500',     'जैसे 1, 5, 500'],
 
   // Proof
   proofPhoto:      ['Photo of delivery',  'डिलिवरी की फ़ोटो'],

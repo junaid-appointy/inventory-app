@@ -51,6 +51,7 @@ export type RemoteOrderItem = {
   id: string;
   order_id: string;
   barcode: string | null;
+  product_id: string | null;
   product_name: string;
   expected_qty: number;
   received_qty: number;
@@ -82,11 +83,24 @@ export type RemoteProduct = {
   name: string;
   category: string | null;
   unit: string | null;
+  pack_size: number | null;
 };
 
 export type RemoteCatalogHit = {
   product: RemoteProduct | null;
   openOrderItem: RemoteOrderItem | null;
+};
+
+export type RemoteCanonicalProduct = {
+  product_id: string;
+  site_id: string;
+  canonical_name: string;
+  category: string | null;
+  hsn_code: string | null;
+  unit: string;
+  pack_size: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export const api = {
@@ -132,6 +146,8 @@ export const api = {
       post('/api/inventory/reorder-requests', payload),
     mismatchFlag: (payload: object) =>
       post('/api/inventory/mismatch-flags', payload),
+    learnBarcode: (payload: object) =>
+      post('/api/inventory/canonical-products/learn-barcode', payload),
   },
 
   // Reads (called by screens).
@@ -156,5 +172,9 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ rawName }),
       }),
+    canonicalProducts: () =>
+      request<{ products: RemoteCanonicalProduct[] }>(
+        '/api/inventory/canonical-products',
+      ).then((r) => r.products),
   },
 };

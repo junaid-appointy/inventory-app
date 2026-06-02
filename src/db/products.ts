@@ -5,6 +5,7 @@ export type Product = {
   name: string;
   category: string | null;
   unit: string | null;
+  pack_size: number | null;
   updated_at: number;
 };
 
@@ -21,11 +22,15 @@ export async function upsertProduct(p: Omit<Product, 'updated_at'>): Promise<Pro
   const db = await getDb();
   const ts = now();
   await db.runAsync(
-    `INSERT INTO products (barcode, name, category, unit, updated_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO products (barcode, name, category, unit, pack_size, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(barcode) DO UPDATE SET
-       name=excluded.name, category=excluded.category, unit=excluded.unit, updated_at=excluded.updated_at`,
-    [p.barcode, p.name, p.category, p.unit, ts]
+       name=excluded.name,
+       category=excluded.category,
+       unit=excluded.unit,
+       pack_size=excluded.pack_size,
+       updated_at=excluded.updated_at`,
+    [p.barcode, p.name, p.category, p.unit, p.pack_size, ts]
   );
   return { ...p, updated_at: ts };
 }

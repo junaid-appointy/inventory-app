@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Keyboard, X, Zap, ZapOff } from 'lucide-react-native';
+import { Keyboard, List, X, Zap, ZapOff } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -23,6 +23,7 @@ import {
 } from 'react-native-vision-camera';
 import { Button, IconButton, radius, spacing, Text } from '../../../design';
 import { findProduct, upsertProduct } from '../../../db/products';
+import { findCanonicalProductByBarcode } from '../../../db/catalog';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -119,11 +120,26 @@ export function ScannerScreen({ navigation }: Props) {
    */
   const routeFor = useCallback(
     async (raw: string) => {
+      // First check: canonical product catalog (barcode → product_id)
+      const canonical = await findCanonicalProductByBarcode(raw).catch(() => null);
+      if (canonical) {
+        navigation.replace('Receiving', {
+          barcode: raw,
+          productId: canonical.product_id,
+          productName: canonical.canonical_name,
+          unit: canonical.unit,
+        });
+        return;
+      }
+
+      // Second check: legacy local products table
       const local = await findProduct(raw).catch(() => null);
       if (local) {
         navigation.replace('Receiving', { barcode: raw });
         return;
       }
+
+      // Third check: backend catalog
       try {
         const hit = await api.fetch.catalog(raw);
         if (hit.product) {
@@ -132,13 +148,21 @@ export function ScannerScreen({ navigation }: Props) {
             name: hit.product.name,
             category: hit.product.category,
             unit: hit.product.unit,
+            pack_size: hit.product.pack_size ?? null,
           });
-          navigation.replace('Receiving', { barcode: raw });
+          navigation.replace('Receiving', {
+            barcode: raw,
+            packSize: hit.product.pack_size ?? undefined,
+          });
           return;
         }
       } catch {
-        // Offline / 401 — fall through to local registration flow.
+        // Offline / 401 — fall through.
       }
+
+      // Barcode not in any catalog — go straight to the registration form
+      // so the user can name + categorise the product. The catalog list is
+      // surfaced inline as fuzzy suggestions on the name input itself.
       navigation.replace('RegisterProduct', { barcode: raw });
     },
     [navigation],
@@ -305,6 +329,24 @@ export function ScannerScreen({ navigation }: Props) {
           <Keyboard size={18} color="#fff" strokeWidth={2.2} />
           <Text variant="labelLarge" color="#fff">
             Type code
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (acceptedRef.current) return;
+            acceptedRef.current = true;
+            haptic.tap();
+            navigation.replace('CatalogPicker', { barcode: undefined });
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={({ pressed }) => [
+            styles.typeBtn,
+            { backgroundColor: pressed ? '#ffffff22' : '#ffffff11', marginTop: spacing.sm },
+          ]}
+        >
+          <List size={18} color="#fff" strokeWidth={2.2} />
+          <Text variant="labelLarge" color="#fff">
+            No barcode
           </Text>
         </Pressable>
       </SafeAreaView>

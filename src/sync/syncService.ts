@@ -2,6 +2,8 @@ import * as Network from 'expo-network';
 import { config } from '../config';
 import { OutboxKind } from '../db/outbox';
 import { markFailed, markSending, markSent, nextBatch, pendingCount } from '../db/outbox';
+import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
+import { upsertOrdersFromRemote } from '../db/orders';
 import { api } from './api';
 
 type Listener = (count: number, lastSyncAt: number | null) => void;
@@ -36,6 +38,7 @@ const DISPATCH: Record<OutboxKind, (payload: object) => Promise<unknown>> = {
   dispense: api.send.issue, // same endpoint, renamed in-app
   reorder_request: api.send.reorderRequest,
   mismatch_flag: api.send.mismatchFlag,
+  learn_barcode: api.send.learnBarcode,
 };
 
 export async function flushOnce(): Promise<{ sent: number; failed: number }> {
@@ -72,6 +75,14 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
     if (sent > 0 || failed > 0) {
       _lastSyncAt = Date.now();
     }
+
+    // Pull latest canonical products catalog on each sync cycle.
+    // This is lightweight (just a GET) and ensures guards always
+    // have the latest admin-curated product names.
+    await syncCanonicalProducts().catch(() => {});
+    // Also mirror the open-orders list so ReceivingScreen can resolve
+    // catalog picks to the right order item without a round-trip.
+    await syncOrders().catch(() => {});
   } finally {
     running = false;
     await notify();
@@ -84,6 +95,68 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
   }
 
   return { sent, failed };
+}
+
+/**
+ * Pull the canonical product catalog from the backend and replace
+ * the local SQLite cache. Guards pick from this list — keeping it
+ * fresh is essential for the catalog-only gate flow.
+ *
+ * Returns the counts so the picker UI can surface "X of Y synced" and
+ * the user can detect cache mismatches without having to dig into logs.
+ */
+let _lastCatalogSync: { remote: number; written: number; failed: number; error: string | null } = {
+  remote: 0, written: 0, failed: 0, error: null,
+};
+export function getLastCatalogSync() { return _lastCatalogSync; }
+
+export async function syncCanonicalProducts(): Promise<{ remote: number; written: number; failed: number }> {
+  try {
+    const remote = await api.fetch.canonicalProducts();
+    const local: CanonicalProduct[] = remote.map((r) => ({
+      product_id: r.product_id,
+      canonical_name: r.canonical_name,
+      category: r.category,
+      hsn_code: r.hsn_code,
+      unit: r.unit,
+      pack_size: r.pack_size,
+      updated_at: Date.now(),
+    }));
+    const result = await replaceCanonicalProducts(local);
+    _lastCatalogSync = {
+      remote: remote.length,
+      written: result.ok,
+      failed: result.failed,
+      error: result.firstError ?? null,
+    };
+    if (result.failed > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(`[catalog] sync wrote ${result.ok}/${remote.length}; ${result.failed} failed. First error: ${result.firstError}`);
+    }
+    return { remote: remote.length, written: result.ok, failed: result.failed };
+  } catch (err) {
+    _lastCatalogSync = {
+      ..._lastCatalogSync,
+      error: err instanceof Error ? err.message : String(err),
+    };
+    // eslint-disable-next-line no-console
+    console.warn('[catalog] sync failed:', err);
+    return { remote: 0, written: 0, failed: 0 };
+  }
+}
+
+/**
+ * Pull the current open-orders list from the backend and mirror it into
+ * the local orders/order_items tables. Lets ReceivingScreen resolve a
+ * catalog pick to the right order item locally.
+ */
+export async function syncOrders(): Promise<void> {
+  try {
+    const remote = await api.fetch.orders();
+    await upsertOrdersFromRemote(remote);
+  } catch {
+    // Non-fatal: ReceivingScreen falls back to "no matching order".
+  }
 }
 
 export function startSync(): void {

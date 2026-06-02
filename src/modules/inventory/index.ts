@@ -1,5 +1,6 @@
 import type { Module } from '../types';
 import { AlertsScreen } from './screens/AlertsScreen';
+import { CatalogPickerScreen } from './screens/CatalogPickerScreen';
 import { DeliverySummaryScreen } from './screens/DeliverySummaryScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { DispenseScreen } from './screens/DispenseScreen';
@@ -24,6 +25,7 @@ export const inventoryModule: Module = {
     { name: 'Scanner', component: ScannerScreen, options: { animation: 'fade' } },
     { name: 'Receiving', component: ReceivingScreen },
     { name: 'RegisterProduct', component: RegisterProductScreen },
+    { name: 'CatalogPicker', component: CatalogPickerScreen },
     { name: 'OrderSession', component: OrderSessionScreen },
     { name: 'DeliverySummary', component: DeliverySummaryScreen },
     { name: 'Outbox', component: OutboxScreen },

@@ -6,7 +6,7 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
  * Current schema version. Bump this and add a migration block in
  * `runMigrations()` whenever you need additive schema changes.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 4;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
@@ -20,6 +20,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       name TEXT NOT NULL,
       category TEXT,
       unit TEXT,
+      pack_size REAL,
       updated_at INTEGER NOT NULL
     );
 
@@ -151,6 +152,55 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       PRAGMA user_version = 2;
     `);
     version = 2;
+  }
+
+  if (version < 3) {
+    await db.execAsync(`
+      -- Canonical product catalog (synced from backend).
+      -- Guards pick from this list — no free-text product names.
+      CREATE TABLE IF NOT EXISTS canonical_products (
+        product_id TEXT PRIMARY KEY,
+        canonical_name TEXT NOT NULL,
+        category TEXT,
+        hsn_code TEXT,
+        unit TEXT NOT NULL DEFAULT 'pcs',
+        pack_size REAL NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_canonical_name ON canonical_products(canonical_name);
+      CREATE INDEX IF NOT EXISTS idx_canonical_hsn ON canonical_products(hsn_code);
+
+      -- Learned barcode → canonical product mappings.
+      -- Populated when guard scans a barcode + picks from catalog.
+      CREATE TABLE IF NOT EXISTS product_barcodes (
+        barcode TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        learned_from TEXT NOT NULL DEFAULT 'scan',
+        learned_at INTEGER NOT NULL,
+        FOREIGN KEY (product_id) REFERENCES canonical_products(product_id) ON DELETE CASCADE
+      );
+
+      -- Link order items to canonical products for name-based matching
+      ALTER TABLE order_items ADD COLUMN product_id TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items(product_id);
+
+      PRAGMA user_version = 3;
+    `);
+    version = 3;
+  }
+
+  if (version < 4) {
+    await db.execAsync(`
+      -- Unit value (pack size) captured during product registration.
+      -- e.g. unit=Kg, pack_size=5 → a 5kg pack. Optional; older rows
+      -- stay NULL and the UI treats that as "unknown" rather than 1.
+      ALTER TABLE products ADD COLUMN pack_size REAL;
+
+      PRAGMA user_version = 4;
+    `);
+    version = 4;
   }
 }
 

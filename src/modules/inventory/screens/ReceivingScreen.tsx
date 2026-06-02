@@ -19,6 +19,7 @@ import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../../../db/or
 import { enqueue } from '../../../db/outbox';
 import { trackExpiry } from '../../../db/expiry';
 import { findProduct, Product } from '../../../db/products';
+import { learnBarcode, findOpenItemByProductId } from '../../../db/catalog';
 import { adjustOnHand, findStock, upsertStock } from '../../../db/stock';
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
@@ -56,7 +57,7 @@ const QUICK_MONTHS = [
 export function ReceivingScreen({ route, navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
-  const { barcode } = route.params;
+  const { barcode, productId, productName: paramProductName, unit: paramUnit, packSize: paramPackSize } = route.params;
   const orderSession = useOrderSession();
   const [product, setProduct] = useState<Product | null>(null);
   const [item, setItem] = useState<OrderItem | null>(null);
@@ -68,12 +69,27 @@ export function ReceivingScreen({ route, navigation }: Props) {
   const [noExpiry, setNoExpiry] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 
+  // Resolved product name: canonical name takes priority over legacy product name
+  const resolvedName = paramProductName ?? product?.name ?? 'Unknown';
+  const resolvedUnit = paramUnit ?? product?.unit ?? null;
+  const resolvedPackSize = paramPackSize ?? null;
+  const packDisplay =
+    resolvedPackSize != null && resolvedUnit
+      ? `${resolvedPackSize} ${resolvedUnit}`
+      : resolvedUnit ?? null;
+
   useEffect(() => {
     (async () => {
       setProduct(await findProduct(barcode));
-      setItem(await findOpenItemByBarcode(barcode));
+      // If we have a productId from catalog, look up order item by product_id
+      if (productId) {
+        const byProduct = await findOpenItemByProductId(productId);
+        setItem(byProduct as OrderItem | null);
+      } else {
+        setItem(await findOpenItemByBarcode(barcode));
+      }
     })();
-  }, [barcode]);
+  }, [barcode, productId]);
 
   // Auto-fill expiry from last scanned item in the order session
   useEffect(() => {
@@ -113,8 +129,9 @@ export function ReceivingScreen({ route, navigation }: Props) {
       id,
       order_id: item?.order_id ?? null,
       order_item_id: item?.id ?? null,
+      product_id: productId ?? null,
       barcode,
-      product_name: product?.name ?? 'Unknown',
+      product_name: resolvedName,
       qty,
       expiry_date: expiryDate,
       flagged,
@@ -122,6 +139,17 @@ export function ReceivingScreen({ route, navigation }: Props) {
       performed_by: session?.guardId ?? null,
       performed_by_name: session?.guardName ?? null,
     });
+
+    // Barcode learning: if this receipt was resolved via canonical catalog,
+    // permanently map this barcode to the product_id for auto-resolution.
+    if (productId && !barcode.startsWith('catalog_')) {
+      await learnBarcode(barcode, productId, 'scan');
+      // Also tell the backend to learn it
+      await enqueue('learn_barcode', {
+        barcode,
+        product_id: productId,
+      }).catch(() => {});
+    }
     if (flagged) {
       await enqueue('mismatch_flag', {
         id: `flg_${nanoid(12)}`,
@@ -141,9 +169,9 @@ export function ReceivingScreen({ route, navigation }: Props) {
     } else {
       await upsertStock({
         barcode,
-        name: product?.name ?? 'Unknown',
+        name: resolvedName,
         category: product?.category ?? null,
-        unit: product?.unit ?? null,
+        unit: resolvedUnit,
         on_hand: qty,
         threshold: 0,
       });
@@ -155,7 +183,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
     if (expiryDate) {
       await trackExpiry({
         barcode,
-        productName: product?.name ?? 'Unknown',
+        productName: resolvedName,
         expiryDate,
         qty,
         receiptId: id,
@@ -169,9 +197,10 @@ export function ReceivingScreen({ route, navigation }: Props) {
   const addToSession = () => {
     orderSession.addItem({
       barcode,
-      name: product?.name ?? 'Unknown',
+      productId: productId ?? null,
+      name: resolvedName,
       category: product?.category ?? null,
-      unit: product?.unit ?? null,
+      unit: resolvedUnit,
       qty,
       expiryDate,
     });
@@ -186,10 +215,10 @@ export function ReceivingScreen({ route, navigation }: Props) {
       await persistStandalone(false);
       haptic.success();
       navigation.replace('DeliverySummary', {
-        items: [{ name: product?.name ?? 'Unknown', category: product?.category ?? null, qty }],
+        items: [{ name: resolvedName, category: product?.category ?? null, qty }],
         totalItems: 1,
         totalQty: qty,
-        productName: product?.name ?? 'Unknown',
+        productName: resolvedName,
         qty,
         expected: item?.expected_qty ?? null,
         flagged: false,
@@ -205,10 +234,10 @@ export function ReceivingScreen({ route, navigation }: Props) {
       await persistStandalone(true);
       haptic.warn();
       navigation.replace('DeliverySummary', {
-        items: [{ name: product?.name ?? 'Unknown', category: product?.category ?? null, qty }],
+        items: [{ name: resolvedName, category: product?.category ?? null, qty }],
         totalItems: 1,
         totalQty: qty,
-        productName: product?.name ?? 'Unknown',
+        productName: resolvedName,
         qty,
         expected: item?.expected_qty ?? null,
         flagged: true,
@@ -246,9 +275,16 @@ export function ReceivingScreen({ route, navigation }: Props) {
           <Text variant="labelLarge" color={palette.onSurfaceVariant}>
             {t('product').toUpperCase()}
           </Text>
-          <Text variant="headlineSmall" style={{ marginTop: spacing.xs }}>
-            {product?.name ?? t('unknownProduct')}
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: spacing.xs, gap: spacing.md }}>
+            <Text variant="headlineSmall" style={{ flex: 1 }}>
+              {resolvedName}
+            </Text>
+            {packDisplay ? (
+              <Text variant="titleMedium" color={palette.onSurfaceVariant}>
+                {packDisplay}
+              </Text>
+            ) : null}
+          </View>
           <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
             {barcode}
           </Text>

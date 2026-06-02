@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
 import { AppBar, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
-import { getOrderItems, listOpenOrders, Order, OrderItem } from '../../../db/orders';
+import { getOrderItems, listOpenOrders, Order, OrderItem, upsertOrdersFromRemote } from '../../../db/orders';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -37,6 +37,10 @@ export function OrdersScreen({ navigation }: Props) {
     // Prefer remote when available — orders are managed server-side.
     try {
       const remote = await api.fetch.orders();
+      // Mirror remote into local SQLite so the ReceivingScreen can
+      // resolve a guard's catalog pick to the right order_item even
+      // when offline, and addReceivedQty() works locally.
+      await upsertOrdersFromRemote(remote).catch(() => {});
       setOrders(
         remote.map((o) => ({
           id: o.id,
