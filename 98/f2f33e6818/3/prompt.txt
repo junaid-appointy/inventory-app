@@ -1,0 +1,9 @@
+I need to distribute this app, but I am not registered on play store, how do I make sure that the build file is as small as it would be when downloaded from playstore?
+
+---
+
+the last time I build the apk, it was 224 mb, how much small it would become if we follow all the optimisation?
+
+---
+
+okay check
