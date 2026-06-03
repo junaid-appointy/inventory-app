@@ -1,0 +1,6 @@
+ERROR  VirtualizedLists should never be nested inside plain ScrollViews with the same orientation because it can break windowing and other functionality - use another VirtualizedList-backed container instead.
+
+---
+
+in admin dashboard, in the orders list, allow users to edit unit type and unit value . and this is wrong way to show received info, show total quantity vs total received. 00000000000000000000000000000000000000 / 0521122411115122224541122111232252510221
+why there is a seperate button to sync catalog, the catalog tab on excel sheet will always be there, and it will keep on updating as the scaning and mapping barcodes. Also why the manual entries are not reflected. like if a field-app user scans an item and it is not in the catalog nor in the orders list, so they put the name, unit and category and quantity and submit, but it is not reflected anywhere.

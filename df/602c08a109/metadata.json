@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "df602c08a109",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "app.json",
+    "build_and_distribute.md",
+    "eas.json",
+    "package-lock.json",
+    "package.json",
+    "src/db/maintenance.ts",
+    "src/db/stock.ts",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/modules/inventory/screens/SettingsScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "tsconfig.tsbuildinfo"
+  ],
+  "sessions": [
+    {
+      "metadata": "/df/602c08a109/0/metadata.json",
+      "transcript": "/df/602c08a109/0/full.jsonl",
+      "content_hash": "/df/602c08a109/0/content_hash.txt",
+      "prompt": "/df/602c08a109/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 395,
+    "cache_creation_tokens": 1979118,
+    "cache_read_tokens": 168126225,
+    "output_tokens": 159159,
+    "api_call_count": 271
+  }
+}
