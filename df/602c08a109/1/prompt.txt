@@ -1,0 +1,9 @@
+I want to build two version, development (what you built — 224 MB) │ 224 MB for my own testing, and production AAB → bundletool split APK │ 22–30 MB for distribution, also will I be able to give them OTA updates or I need to give them new apk everytime? Answer these
+
+---
+
+I have already done npx expo install expo-updates, now you do all the config and setup
+
+---
+
+add all our research and instruction in a doc named build_and_distribute.md
