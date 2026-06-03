@@ -13,7 +13,7 @@ import {
   Text,
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
-import { listLowOrOut, statusFor, StockRow, syncStockFromRemote } from '../../../db/stock';
+import { listLowOrOut, statusFor, StockRow, replaceStockFromRemote } from '../../../db/stock';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -34,18 +34,19 @@ export function AlertsScreen({ navigation }: Props) {
     // Flush pending writes first so the remote reflects the latest state.
     await flushOnce().catch(() => {});
     try {
-      const remote = await api.fetch.alerts();
-      await Promise.all(
-        remote.map((r) =>
-          syncStockFromRemote({
-            barcode: r.barcode,
-            name: r.name,
-            category: r.category,
-            unit: r.unit,
-            on_hand: Number(r.on_hand),
-            threshold: Number(r.threshold),
-          }),
-        ),
+      // Pull the full stock snapshot (not just the alerts subset) so we
+      // can replace authoritatively — wiped items disappear instead of
+      // lingering. We compute alerts locally via listLowOrOut.
+      const remote = await api.fetch.stock();
+      await replaceStockFromRemote(
+        remote.map((r) => ({
+          barcode: r.barcode,
+          name: r.name,
+          category: r.category,
+          unit: r.unit,
+          on_hand: Number(r.on_hand),
+          threshold: Number(r.threshold),
+        })),
       );
     } catch {
       // Fall back to local SQLite cache.

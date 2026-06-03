@@ -3,7 +3,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RefreshCw, ScanLine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -199,25 +198,23 @@ export function RegisterProductScreen({ route, navigation }: Props) {
             />
 
             {dropdownOpen && matches.length > 0 && (
-              <View
+              <ScrollView
                 style={{
                   marginTop: spacing.xs,
                   borderWidth: 1,
                   borderColor: palette.outlineVariant,
                   borderRadius: radius.md,
                   backgroundColor: palette.surface,
-                  overflow: 'hidden',
                   maxHeight: 280,
                 }}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
               >
-                <FlatList
-                  data={matches}
-                  keyExtractor={(p) => p.product_id}
-                  keyboardShouldPersistTaps="handled"
-                  ItemSeparatorComponent={() => (
-                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: palette.outlineVariant }} />
-                  )}
-                  renderItem={({ item: p }) => (
+                {matches.map((p, idx) => (
+                  <React.Fragment key={p.product_id}>
+                    {idx > 0 && (
+                      <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: palette.outlineVariant }} />
+                    )}
                     <Pressable
                       onPress={() => acceptCatalog(p)}
                       android_ripple={{ color: palette.surfaceContainerLowest }}
@@ -246,9 +243,9 @@ export function RegisterProductScreen({ route, navigation }: Props) {
                         {p.pack_size} {p.unit}
                       </Text>
                     </Pressable>
-                  )}
-                />
-              </View>
+                  </React.Fragment>
+                ))}
+              </ScrollView>
             )}
 
             {dropdownOpen && matches.length === 0 && suggestion && (

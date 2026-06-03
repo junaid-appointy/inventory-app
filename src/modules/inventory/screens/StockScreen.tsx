@@ -9,7 +9,7 @@ import {
   spacing,
   Text,
 } from '../../../design';
-import { listStock, statusFor, StockRow, syncStockFromRemote } from '../../../db/stock';
+import { listStock, statusFor, StockRow, replaceStockFromRemote } from '../../../db/stock';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -62,17 +62,18 @@ export function StockScreen({ navigation }: Props) {
     await flushOnce().catch(() => {});
     try {
       const remote = await api.fetch.stock();
-      await Promise.all(
-        remote.map((r) =>
-          syncStockFromRemote({
-            barcode: r.barcode,
-            name: r.name,
-            category: r.category,
-            unit: r.unit,
-            on_hand: Number(r.on_hand),
-            threshold: Number(r.threshold),
-          }),
-        ),
+      // Replace mirrors the remote authoritatively — items the admin
+      // wiped on the server disappear locally too, instead of lingering
+      // as zombies in the Stock list.
+      await replaceStockFromRemote(
+        remote.map((r) => ({
+          barcode: r.barcode,
+          name: r.name,
+          category: r.category,
+          unit: r.unit,
+          on_hand: Number(r.on_hand),
+          threshold: Number(r.threshold),
+        })),
       );
     } catch {
       // Offline fallback

@@ -7,6 +7,14 @@
     "userInterfaceStyle": "light",
     "scheme": "fieldapp",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5428db61-c637-4123-8b90-65c1bd684799",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "splash": {
       "backgroundColor": "#0F7B3E",
       "resizeMode": "contain"
@@ -41,6 +49,17 @@
         {
           "cameraPermissionText": "Field App uses the camera to scan barcodes at the gate.",
           "enableCodeScanner": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResources": true,
+            "buildArchs": ["arm64-v8a"],
+            "extraProguardRules": "-keep class com.facebook.hermes.** { *; }\n-keep class com.swmansion.reanimated.** { *; }\n-keep class com.mrousavy.camera.** { *; }"
+          }
         }
       ]
     ],

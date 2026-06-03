@@ -35,6 +35,12 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 // Vision-camera / ML Kit format names. Order doesn't affect decoding —
 // every frame is tried against every requested format. Listed broadly so
 // dense GS1-128 SSCC labels, EAN/UPC products, QR, DataMatrix all work.
+// Product barcodes are always 1D symbologies. We deliberately do NOT
+// scan QR / data-matrix / PDF-417 / Aztec — they're 2D codes used for
+// things like Expo's dev-client launch QR or general-purpose URLs, and
+// the camera would happily route those into the Receiving form as if
+// they were barcodes (seen with `exp+field-app://expo-development-client/…`
+// in field testing).
 const CODE_TYPES = [
   'code-128',
   'code-39',
@@ -45,10 +51,6 @@ const CODE_TYPES = [
   'itf',
   'upc-a',
   'upc-e',
-  'qr',
-  'data-matrix',
-  'pdf-417',
-  'aztec',
 ] as const;
 
 // ML Kit v4+ has strong internal confidence scoring. We no longer require
@@ -168,14 +170,37 @@ export function ScannerScreen({ navigation }: Props) {
     [navigation],
   );
 
+  /** A scanned code is only a usable product barcode if it looks like
+   *  one — UPC/EAN/ITF/Code128 are alphanumeric (mostly digits) with
+   *  no whitespace. We already restrict the scanner to 1D code types,
+   *  but defense in depth: also reject any URI-scheme string
+   *  (http://, exp+field-app://, mailto:, tel:, etc.) in case a 1D
+   *  barcode ever carried URL-like text. */
+  const looksLikeBarcode = (raw: string): boolean => {
+    const v = raw.trim();
+    if (v.length < 4 || v.length > 32) return false;
+    // Any URI scheme — "scheme:" or "scheme://" — is not a product barcode.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return false;
+    if (/\s/.test(v)) return false;
+    // Allow alphanumerics, dashes, underscores (covers EAN/UPC + serials).
+    return /^[A-Za-z0-9_-]+$/.test(v);
+  };
+
   /** Entry point for both camera scans (after the 2-read gate) and manual entry. */
   const acceptCode = useCallback(
     (raw: string) => {
       if (acceptedRef.current) return;
+      if (!looksLikeBarcode(raw)) {
+        // Soft-reject: brief haptic so the user knows the read fired,
+        // but don't navigate. The camera will detect again on the next
+        // frame, hopefully landing on the actual product barcode.
+        haptic.warn();
+        return;
+      }
       acceptedRef.current = true;
       haptic.success();
       flash();
-      routeFor(raw);
+      routeFor(raw.trim());
     },
     [flash, routeFor],
   );
@@ -202,6 +227,12 @@ export function ScannerScreen({ navigation }: Props) {
   const submitManual = useCallback(() => {
     const v = manualValue.trim();
     if (!v) return;
+    // Apply the same shape check as camera scans — paste-from-clipboard
+    // or autofill can drop a URL into the manual field too.
+    if (!looksLikeBarcode(v)) {
+      haptic.warn();
+      return;
+    }
     setManualOpen(false);
     setManualValue('');
     if (acceptedRef.current) return;

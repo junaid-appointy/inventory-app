@@ -34,3 +34,35 @@ export async function resetLocalCacheOnce(): Promise<void> {
   `);
   await AsyncStorage.setItem(FLAG, '1');
 }
+
+/**
+ * Manual full local-cache reset, invoked from Settings → Clear local data.
+ * Wipes every read-side cache so the next screen focus pulls fresh data
+ * from the backend. Use this after the admin wipes inventory data on the
+ * server, so stale stock / orders / catalog / outbox rows don't linger.
+ *
+ * What gets cleared:
+ *   - stock_levels (read cache populated from /stock)
+ *   - orders + order_items (read cache populated from /orders)
+ *   - canonical_products + product_barcodes (catalog cache + learned barcodes)
+ *   - products (legacy local catalog the Scanner consults)
+ *   - outbox (pending writes — destroyed because they likely target
+ *     deleted server rows after a wipe)
+ *
+ * What is preserved:
+ *   - receipts (local audit of what the guard scanned)
+ *   - the session token (guard stays logged in)
+ *   - app preferences (language, theme)
+ */
+export async function clearAllLocalCache(): Promise<void> {
+  const db = await getDb();
+  await db.execAsync(`
+    DELETE FROM stock_levels;
+    DELETE FROM order_items;
+    DELETE FROM orders;
+    DELETE FROM product_barcodes;
+    DELETE FROM canonical_products;
+    DELETE FROM products;
+    DELETE FROM outbox;
+  `);
+}

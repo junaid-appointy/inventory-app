@@ -92,6 +92,35 @@ export async function syncStockFromRemote(row: {
   );
 }
 
+/**
+ * Replace the local stock cache with whatever the remote returned.
+ * Upsert every remote row, then drop locally-cached rows the remote
+ * no longer knows about. Prevents stale items lingering after an admin
+ * wipes inventory data on the server.
+ */
+export async function replaceStockFromRemote(
+  rows: Array<{
+    barcode: string;
+    name: string;
+    category: string | null;
+    unit: string | null;
+    on_hand: number;
+    threshold: number;
+  }>,
+): Promise<void> {
+  const db = await getDb();
+  for (const row of rows) {
+    await syncStockFromRemote(row);
+  }
+  if (rows.length === 0) {
+    // Remote is empty — wipe local too.
+    await db.runAsync(`DELETE FROM stock_levels`);
+    return;
+  }
+  const ids = rows.map((r) => `'${String(r.barcode).replace(/'/g, "''")}'`).join(',');
+  await db.runAsync(`DELETE FROM stock_levels WHERE barcode NOT IN (${ids})`);
+}
+
 export async function adjustOnHand(barcode: string, delta: number): Promise<void> {
   const db = await getDb();
   await db.runAsync(
