@@ -1,0 +1,227 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "44649e771074",
+  "session_id": "7cd3e3b3-a8c3-49f3-982d-1c9479b0218d",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T07:57:08.231136Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 14,
+  "files_touched": [
+    "package-lock.json",
+    "src/db/outbox.ts",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/OrdersScreen.tsx",
+    "src/modules/inventory/screens/OutboxScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/syncService.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-haiku-4-5-20251001",
+  "turn_id": "37493bd5f1a9",
+  "token_usage": {
+    "input_tokens": 680,
+    "cache_creation_tokens": 100084,
+    "cache_read_tokens": 3331530,
+    "output_tokens": 21192,
+    "api_call_count": 82
+  },
+  "session_metrics": {
+    "turn_count": 14
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T07:57:08.199391Z",
+    "agent_lines": 0,
+    "agent_removed": 538,
+    "human_added": 751,
+    "human_modified": 1844,
+    "human_removed": 0,
+    "total_committed": 1285,
+    "total_lines_changed": 3133,
+    "agent_percentage": 17.172039578678582,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 838,
+      "user_lines_removed": 186,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "src/db/outbox.ts": 27,
+        "src/design/QtyStepper.tsx": 12,
+        "src/design/TextField.tsx": 51,
+        "src/i18n/strings.ts": 46,
+        "src/modules/inventory/components/DatePickerModal.tsx": 164,
+        "src/modules/inventory/components/SyncRefreshButton.tsx": 98,
+        "src/modules/inventory/screens/AlertsScreen.tsx": 14,
+        "src/modules/inventory/screens/CatalogPickerScreen.tsx": 21,
+        "src/modules/inventory/screens/DispenseScreen.tsx": 15,
+        "src/modules/inventory/screens/HomeScreen.tsx": 58,
+        "src/modules/inventory/screens/OrdersScreen.tsx": 14,
+        "src/modules/inventory/screens/OutboxScreen.tsx": 42,
+        "src/modules/inventory/screens/ReceivingScreen.tsx": 148,
+        "src/modules/inventory/screens/RegisterProductScreen.tsx": 44,
+        "src/modules/inventory/screens/SettingsScreen.tsx": 3,
+        "src/modules/inventory/screens/StockScreen.tsx": 14,
+        "src/sync/api.ts": 23,
+        "src/sync/syncService.ts": 44
+      },
+      "user_removed_per_file": {
+        "src/db/outbox.ts": 2,
+        "src/design/QtyStepper.tsx": 5,
+        "src/design/TextField.tsx": 25,
+        "src/modules/inventory/components/DatePickerModal.tsx": 57,
+        "src/modules/inventory/screens/AlertsScreen.tsx": 1,
+        "src/modules/inventory/screens/CatalogPickerScreen.tsx": 17,
+        "src/modules/inventory/screens/DispenseScreen.tsx": 10,
+        "src/modules/inventory/screens/HomeScreen.tsx": 9,
+        "src/modules/inventory/screens/OrdersScreen.tsx": 1,
+        "src/modules/inventory/screens/OutboxScreen.tsx": 5,
+        "src/modules/inventory/screens/ReceivingScreen.tsx": 22,
+        "src/modules/inventory/screens/RegisterProductScreen.tsx": 23,
+        "src/modules/inventory/screens/SettingsScreen.tsx": 5,
+        "src/modules/inventory/screens/StockScreen.tsx": 1,
+        "src/sync/api.ts": 1,
+        "src/sync/syncService.ts": 2
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1508,
+      "agent_lines_removed": 794
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 54,
+      "user_lines_removed": 7,
+      "agent_lines_added": 1530,
+      "agent_lines_removed": 789,
+      "user_added_per_file": {
+        "package-lock.json": 53,
+        "package.json": 1
+      },
+      "user_removed_per_file": {
+        "app.json": 6,
+        "babel.config.js": 1
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1545,
+      "agent_lines_removed": 746
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1545,
+      "agent_lines_removed": 746
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 19,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1545,
+      "agent_lines_removed": 746,
+      "user_added_per_file": {
+        "Build_And_Run.md": 19
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 19,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 19
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 19,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 19
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 57,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 57
+      }
+    },
+    {
+      "checkpoint_number": 10,
+      "user_lines_added": 57,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 57
+      }
+    },
+    {
+      "checkpoint_number": 11,
+      "user_lines_added": 57,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 57
+      }
+    },
+    {
+      "checkpoint_number": 12,
+      "user_lines_added": 183,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 183
+      }
+    },
+    {
+      "checkpoint_number": 13,
+      "user_lines_added": 183,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1544,
+      "agent_lines_removed": 745,
+      "user_added_per_file": {
+        "Build_And_Run.md": 183
+      }
+    },
+    {
+      "checkpoint_number": 14,
+      "user_lines_added": 183,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1534,
+      "agent_lines_removed": 735,
+      "user_added_per_file": {
+        "Build_And_Run.md": 183
+      }
+    },
+    {
+      "checkpoint_number": 15,
+      "user_lines_added": 183,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1534,
+      "agent_lines_removed": 735,
+      "user_added_per_file": {
+        "Build_And_Run.md": 183
+      }
+    }
+  ]
+}
