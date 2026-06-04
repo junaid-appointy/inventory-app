@@ -1,0 +1,60 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "ece8c7a8334d",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "Build_And_Run.md",
+    "app.json",
+    "assets/appointy.svg",
+    "assets/icon-120x120.png",
+    "assets/icon-144x144.png",
+    "assets/icon-152x152.png",
+    "assets/icon-167x167.png",
+    "assets/icon-180x180.png",
+    "assets/icon-192x192.png",
+    "assets/icon-72x72.png",
+    "assets/icon-96x96.png",
+    "assets/splash.png",
+    "babel.config.js",
+    "generate-assets.js",
+    "package.json",
+    "src/db/database.ts",
+    "src/design/QtyStepper.tsx",
+    "src/design/TextField.tsx",
+    "src/hooks/useKeyboardHeight.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/DatePickerModal.tsx",
+    "src/modules/inventory/components/SyncRefreshButton.tsx",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/CatalogPickerScreen.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/LoginScreen.tsx",
+    "src/modules/inventory/screens/OrdersScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/modules/inventory/screens/SettingsScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/cacheTime.ts",
+    "src/sync/syncService.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ec/e8c7a8334d/0/metadata.json",
+      "transcript": "/ec/e8c7a8334d/0/full.jsonl",
+      "content_hash": "/ec/e8c7a8334d/0/content_hash.txt",
+      "prompt": "/ec/e8c7a8334d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 48,
+    "cache_creation_tokens": 43306,
+    "cache_read_tokens": 1693964,
+    "output_tokens": 14266,
+    "api_call_count": 38
+  }
+}
