@@ -1,0 +1,69 @@
+in the field-app when I open the keyboard, a lot of the screen elements and fields gets hidden, I want to be able to scroll and see them, but when the keyboard is closed or hidden, the screen stays normal.
+
+---
+
+2
+
+---
+
+not fixed, the actual issue is that when I scan a barcode and I am entering details and the unit value input field is at the bottom, when I click on it, the keyboard opens, and it hides the input field, I do not see the input field. I want the input field to come up or I can manually scroll while the keyboard is open and bring the unit value input field in my visible sight. that is not happenign right now, even after your fix.
+
+---
+
+did not work. when I try to scroll to see the hidden input field, the keyboard closes.
+
+---
+
+fix the buttons, a lot of buttons turn grey or never turn into active color even when fields are filled. The buttons at all places in field-app(auxilio) should only be greyed when a required condition is not fulfilled, otherwise they should stay in active colour or turn into active colour. Also do we not have proper state management set up in the app?
+
+---
+
+the vision of the app is to become a super app that could handle RBAC, only show sections which a user is permitted to, and have high quality UX and offline working property, the app will be used for visitor management, simple cafeteria orders, daily SOP tasks, and inventory management. Right now also, after scanning and filling the details of a product, if I go to next page to enter quantity and expiry, and I press the back button it sends me to home screen, not the previous screen, is that also due to lack of proper state management. should we add a state management,which would suit our needs best?
+
+---
+
+fix the back button flow
+
+---
+
+the suggestion list of product, the last item always gets cropped out by the suggestion list boundary itself. fix that, this usually happens when I am searching through the list or typed something in the input field of product name.
+
+---
+
+no, did not fix, the last item in the list is still cropped out.
+
+---
+
+no, this should not be like this, the list needs to be in its view, if we allow outer scroll, this will extremely bad UX if the list is 50+ items.
+
+---
+
+no the cropping of suggestion list item is not because of the keyboard, it is because of the boundary of window of suggestion list.
+
+---
+
+ERROR  VirtualizedLists should never be nested inside plain ScrollViews with the same orientation because it can break windowing and other functionality - use another VirtualizedList-backed container instead. also the last item cropping is still not fixed, should we give some padding or marging to the last item in the list?
+
+---
+
+the last item clipping is fixed when nothing is there in the input box, but as soon as I type something and the list changes or item decreases maybe, the last item is again in clipped form. what is the issue here?
+
+---
+
+I think that was the main issue, now we can remove the extra padding or margin we added at the bottom
+
+---
+
+did we remove the correct spelling suggestion pill feature?
+
+---
+
+what does the clear local data button do?
+
+---
+
+I think we should not give it to user, they may press it by mistake, they are not tech savvy
+
+---
+
+❯ I think we should not give it to user, they may press it by mistake, they are not tech savvy
