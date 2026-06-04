@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import {
   AppBar,
   Button,
@@ -29,6 +29,7 @@ export function AlertsScreen({ navigation }: Props) {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     // Flush pending writes first so the remote reflects the latest state.
@@ -60,6 +61,15 @@ export function AlertsScreen({ navigation }: Props) {
     const unsub = navigation.addListener('focus', load);
     return unsub;
   }, [navigation, load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
 
   const reorder = async (row: StockRow) => {
     haptic.tap();
@@ -102,6 +112,9 @@ export function AlertsScreen({ navigation }: Props) {
         data={rows}
         keyExtractor={(r) => r.barcode}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
+        }
         ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         renderItem={({ item }) => {
           const status = statusFor(item);

@@ -1,15 +1,16 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { AppBar, Button, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { getDb } from '../../../db/database';
-import { OutboxRow } from '../../../db/outbox';
+import { INTERNAL_OUTBOX_KINDS, OutboxRow } from '../../../db/outbox';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce, getLastSyncAt } from '../../../sync/syncService';
 import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Outbox'>;
+
 
 const STATUS_LABEL: Record<string, string> = {
   queued: 'Waiting',
@@ -42,10 +43,10 @@ function describeItem(kind: string, payloadStr: string): string {
       case 'mismatch_flag':
         return `Mismatch: ${p.received_total ?? '?'} vs ${p.expected ?? '?'} expected`;
       default:
-        return kind;
+        return 'Inventory update';
     }
   } catch {
-    return kind;
+    return 'Inventory update';
   }
 }
 
@@ -73,11 +74,14 @@ export function OutboxScreen({ navigation }: Props) {
     // Delete all sent items immediately — only show what's pending
     await db.runAsync(`DELETE FROM outbox WHERE status = 'sent'`);
 
+    const hiddenList = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
     setRows(
       await db.getAllAsync<OutboxRow>(
-        `SELECT * FROM outbox WHERE status != 'sent'
+        `SELECT * FROM outbox
+         WHERE status != 'sent' AND kind NOT IN (${hiddenList})
          ORDER BY CASE status WHEN 'failed' THEN 0 WHEN 'sending' THEN 1 ELSE 2 END, created_at DESC
          LIMIT 200`,
+        INTERNAL_OUTBOX_KINDS as string[],
       ),
     );
     setInitialLoading(false);
@@ -90,6 +94,27 @@ export function OutboxScreen({ navigation }: Props) {
   const failedCount = useMemo(() => rows.filter((r) => r.status === 'failed').length, [rows]);
 
   const lastSyncAt = getLastSyncAt();
+
+  const clearQueue = () => {
+    if (rows.length === 0) return;
+    Alert.alert(
+      'Clear sync queue?',
+      `${rows.length} pending item${rows.length === 1 ? '' : 's'} will be permanently deleted. They will NOT be sent to the server.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            const db = await getDb();
+            await db.runAsync(`DELETE FROM outbox WHERE status != 'sent'`);
+            await load();
+            setSyncResult('Queue cleared');
+          },
+        },
+      ],
+    );
+  };
 
   const sync = async () => {
     setBusy(true);
@@ -191,6 +216,18 @@ export function OutboxScreen({ navigation }: Props) {
       )}
       <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
         <Button label={t('syncNow')} onPress={sync} loading={busy} size="lg" fullWidth />
+        {rows.length > 0 ? (
+          <View style={{ height: spacing.sm }} />
+        ) : null}
+        {rows.length > 0 ? (
+          <Button
+            label="Clear queue"
+            onPress={clearQueue}
+            variant="tonal"
+            size="md"
+            fullWidth
+          />
+        ) : null}
       </View>
     </View>
   );

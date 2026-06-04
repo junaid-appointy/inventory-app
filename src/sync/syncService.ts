@@ -1,7 +1,7 @@
 import * as Network from 'expo-network';
 import { config } from '../config';
 import { OutboxKind } from '../db/outbox';
-import { markFailed, markSending, markSent, nextBatch, pendingCount } from '../db/outbox';
+import { markFailed, markSending, markSent, nextBatch, pendingCount, recoverOrphanedSending } from '../db/outbox';
 import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
 import { upsertOrdersFromRemote } from '../db/orders';
 import { api } from './api';
@@ -53,6 +53,10 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
   try {
     const net = await Network.getNetworkStateAsync().catch(() => ({ isConnected: false }));
     if (!net.isConnected) return { sent, failed };
+
+    // Recover anything orphaned by a prior crash/kill before picking
+    // the batch — otherwise the stuck row will be skipped again.
+    await recoverOrphanedSending().catch(() => 0);
 
     const batch = await nextBatch(config.outboxBatchSize);
     for (const row of batch) {
@@ -161,7 +165,20 @@ export async function syncOrders(): Promise<void> {
 
 export function startSync(): void {
   if (timer) return;
-  flushOnce().catch(() => {});
+  // Recover anything left mid-flight by a previous process before the
+  // first flush, otherwise nextBatch skips them and they stay stuck on
+  // "Sending…" forever.
+  recoverOrphanedSending()
+    .then((n) => {
+      if (n > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`[sync] recovered ${n} orphaned 'sending' row${n === 1 ? '' : 's'}`);
+      }
+    })
+    .catch(() => {})
+    .finally(() => {
+      flushOnce().catch(() => {});
+    });
   timer = setInterval(() => {
     flushOnce().catch(() => {});
   }, config.syncIntervalMs);

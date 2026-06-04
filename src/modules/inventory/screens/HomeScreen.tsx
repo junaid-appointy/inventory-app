@@ -2,22 +2,23 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Bell, type LucideIcon, HandCoins, Package, RefreshCw, ScanLine, Settings as SettingsIcon, Truck } from 'lucide-react-native';
 import { QueueBadge } from '../components/QueueBadge';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, IconButton, Skeleton, spacing, Text } from '../../../design';
 import { useTheme } from '../../../theme';
 import { getSession } from '../../../auth/session';
-import { listOpenOrders } from '../../../db/orders';
-import { listProducts } from '../../../db/products';
-import { listLowOrOut } from '../../../db/stock';
+import { listOpenOrders, upsertOrdersFromRemote } from '../../../db/orders';
+import { listLowOrOut, listStock, replaceStockFromRemote } from '../../../db/stock';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
+import { api } from '../../../sync/api';
+import { flushOnce } from '../../../sync/syncService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 type Stats = {
   orders: number;
-  products: number;
+  stock: number;
   alerts: number;
 };
 
@@ -25,10 +26,44 @@ export function HomeScreen({ navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [p, o, a] = await Promise.all([listProducts(1000), listOpenOrders(), listLowOrOut()]);
-    setStats({ products: p.length, orders: o.length, alerts: a.length });
+    // Mirror the screens' own load flow so the tile counts match what
+    // the user sees after tapping in: flush outbox, pull remote, replace
+    // local cache, then count from local. Falls back to local-only when
+    // offline so the tiles still show something useful.
+    await flushOnce().catch(() => {});
+
+    try {
+      const remote = await api.fetch.stock();
+      await replaceStockFromRemote(
+        remote.map((r) => ({
+          barcode: r.barcode,
+          name: r.name,
+          category: r.category,
+          unit: r.unit,
+          on_hand: Number(r.on_hand),
+          threshold: Number(r.threshold),
+        })),
+      );
+    } catch {
+      // offline — keep local cache
+    }
+
+    try {
+      const remoteOrders = await api.fetch.orders();
+      await upsertOrdersFromRemote(remoteOrders).catch(() => {});
+    } catch {
+      // offline — keep local cache
+    }
+
+    const [stock, openOrders, alerts] = await Promise.all([
+      listStock(),
+      listOpenOrders(),
+      listLowOrOut(),
+    ]);
+    setStats({ stock: stock.length, orders: openOrders.length, alerts: alerts.length });
   }, []);
 
   useEffect(() => {
@@ -37,9 +72,23 @@ export function HomeScreen({ navigation }: Props) {
     return unsub;
   }, [navigation, load]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: palette.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
+        }
+      >
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
@@ -82,7 +131,7 @@ export function HomeScreen({ navigation }: Props) {
           />
           <Tile
             label={t('stock')}
-            value={stats?.products}
+            value={stats?.stock}
             loading={!stats}
             sub={t('stockSub')}
             Icon={Package}

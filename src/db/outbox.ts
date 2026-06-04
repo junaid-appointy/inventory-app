@@ -33,10 +33,21 @@ export async function enqueue(kind: OutboxKind, payload: object): Promise<string
   return id;
 }
 
+/**
+ * Outbox kinds that the user shouldn't see in the Sync Queue UI or
+ * count in the Home badge. They still flush in the background; they're
+ * just internal plumbing (e.g. teaching the server a new barcode →
+ * product alias) that the user never explicitly triggered.
+ */
+export const INTERNAL_OUTBOX_KINDS: readonly OutboxKind[] = ['learn_barcode'];
+
 export async function pendingCount(): Promise<number> {
   const db = await getDb();
+  const placeholders = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
   const row = await db.getFirstAsync<{ c: number }>(
-    `SELECT COUNT(*) as c FROM outbox WHERE status IN ('queued', 'failed')`
+    `SELECT COUNT(*) as c FROM outbox
+     WHERE status IN ('queued', 'failed') AND kind NOT IN (${placeholders})`,
+    INTERNAL_OUTBOX_KINDS as string[]
   );
   return row?.c ?? 0;
 }
@@ -53,9 +64,23 @@ export async function nextBatch(limit: number): Promise<OutboxRow[]> {
 export async function markSending(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `UPDATE outbox SET status = 'sending', updated_at = ? WHERE id = ?`,
+    `UPDATE outbox SET status = 'sending', last_error = NULL, updated_at = ? WHERE id = ?`,
     [now(), id]
   );
+}
+
+/**
+ * Reset rows orphaned mid-flight (process killed, OS reclaim, crash)
+ * back to 'queued' so the next flush picks them up. Without this they
+ * stay 'sending' forever — `nextBatch` only selects queued/failed.
+ */
+export async function recoverOrphanedSending(): Promise<number> {
+  const db = await getDb();
+  const result = await db.runAsync(
+    `UPDATE outbox SET status = 'queued', updated_at = ? WHERE status = 'sending'`,
+    [now()]
+  );
+  return result.changes ?? 0;
 }
 
 export async function markSent(id: string): Promise<void> {

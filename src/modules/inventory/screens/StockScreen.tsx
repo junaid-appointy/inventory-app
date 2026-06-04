@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 import {
   AppBar,
   Card,
@@ -52,6 +52,7 @@ export function StockScreen({ navigation }: Props) {
   const [category, setCategory] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const categoryOptions = useMemo<FilterOption[]>(() => {
     const cats = new Set(rows.map((r) => r.category).filter(Boolean) as string[]);
@@ -87,6 +88,15 @@ export function StockScreen({ navigation }: Props) {
     const unsub = navigation.addListener('focus', load);
     return unsub;
   }, [navigation, load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -161,6 +171,9 @@ export function StockScreen({ navigation }: Props) {
         data={filtered}
         keyExtractor={(r) => r.barcode}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
+        }
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         renderItem={({ item }) => (
           <Card tone="filled" padding="lg" style={{ backgroundColor: cardBg(item) }}>

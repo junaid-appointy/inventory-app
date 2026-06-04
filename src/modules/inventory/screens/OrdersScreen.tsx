@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { SectionList, StyleSheet, View } from 'react-native';
+import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { AppBar, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { getOrderItems, listOpenOrders, Order, OrderItem, upsertOrdersFromRemote } from '../../../db/orders';
 import { useT } from '../../../i18n';
@@ -28,6 +28,7 @@ export function OrdersScreen({ navigation }: Props) {
   const { palette } = useTheme();
   const [orders, setOrders] = useState<Enriched[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     // Flush pending writes (e.g. receipts that updated received_qty) so
@@ -76,6 +77,15 @@ export function OrdersScreen({ navigation }: Props) {
     return unsub;
   }, [navigation, load]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
   const sections = useMemo(() => {
     const groups: Record<Bucket, Enriched[]> = { arrived: [], awaited: [], done: [] };
     for (const o of orders) groups[bucketOf(o)].push(o);
@@ -122,6 +132,9 @@ export function OrdersScreen({ navigation }: Props) {
         sections={sections}
         keyExtractor={(o) => o.id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
+        }
         stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
