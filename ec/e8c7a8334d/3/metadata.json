@@ -1,0 +1,96 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "ece8c7a8334d",
+  "session_id": "7cd3e3b3-a8c3-49f3-982d-1c9479b0218d",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T12:02:00.890645Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "app.json",
+    "assets/appointy.svg",
+    "assets/icon-120x120.png",
+    "assets/icon-144x144.png",
+    "assets/icon-152x152.png",
+    "assets/icon-167x167.png",
+    "assets/icon-180x180.png",
+    "assets/icon-192x192.png",
+    "assets/icon-72x72.png",
+    "assets/icon-96x96.png",
+    "assets/splash.png",
+    "babel.config.js",
+    "generate-assets.js",
+    "package.json",
+    "src/design/QtyStepper.tsx",
+    "src/design/TextField.tsx",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/DatePickerModal.tsx",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/CatalogPickerScreen.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/OrdersScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/SettingsScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/cacheTime.ts",
+    "src/sync/syncService.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-haiku-4-5-20251001",
+  "turn_id": "e220cacab0f4",
+  "token_usage": {
+    "input_tokens": 1054,
+    "cache_creation_tokens": 136235,
+    "cache_read_tokens": 7251886,
+    "output_tokens": 39454,
+    "api_call_count": 128
+  },
+  "session_metrics": {
+    "turn_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T12:02:00.862575Z",
+    "agent_lines": 920,
+    "agent_removed": 365,
+    "human_added": 142,
+    "human_modified": 10,
+    "human_removed": 0,
+    "total_committed": 1072,
+    "total_lines_changed": 1460,
+    "agent_percentage": 88.01369863013699,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1062,
+      "agent_lines_removed": 219
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1130,
+      "agent_lines_removed": 272
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1130,
+      "agent_lines_removed": 272
+    }
+  ]
+}
