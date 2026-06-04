@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "e65afc612db3",
+  "session_id": "2bd78ce2-c9b8-47e7-b70d-e4a73992a5be",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T12:02:12.533829Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md",
+    "eas.json",
+    "package.json",
+    "src/modules/inventory/components/OrderSessionContext.tsx",
+    "src/modules/inventory/screens/OrderSessionScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "d5779cd3cf05",
+  "token_usage": {
+    "input_tokens": 48,
+    "cache_creation_tokens": 43306,
+    "cache_read_tokens": 1693964,
+    "output_tokens": 14266,
+    "api_call_count": 38
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T12:02:12.528025Z",
+    "agent_lines": 151,
+    "agent_removed": 41,
+    "human_added": 466,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 617,
+    "total_lines_changed": 1621,
+    "agent_percentage": 11.844540407156076,
+    "metric_version": 2
+  }
+}
