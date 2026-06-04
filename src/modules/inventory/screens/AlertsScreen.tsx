@@ -20,6 +20,7 @@ import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
+import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Alerts'>;
 
@@ -31,13 +32,9 @@ export function AlertsScreen({ navigation }: Props) {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    // Flush pending writes first so the remote reflects the latest state.
+  const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
     try {
-      // Pull the full stock snapshot (not just the alerts subset) so we
-      // can replace authoritatively — wiped items disappear instead of
-      // lingering. We compute alerts locally via listLowOrOut.
       const remote = await api.fetch.stock();
       await replaceStockFromRemote(
         remote.map((r) => ({
@@ -49,23 +46,34 @@ export function AlertsScreen({ navigation }: Props) {
           threshold: Number(r.threshold),
         })),
       );
+      await setLastSyncTime('alerts');
     } catch {
       // Fall back to local SQLite cache.
     }
-    setRows(await listLowOrOut());
-    setInitialLoading(false);
   }, []);
 
+  const load = useCallback(async (forceRefresh = false) => {
+    const lastSync = await getLastSyncTime('alerts');
+    const stale = isCacheStale(lastSync);
+
+    if (forceRefresh || stale) {
+      await fetchRemote();
+    }
+
+    setRows(await listLowOrOut());
+    setInitialLoading(false);
+  }, [fetchRemote]);
+
   useEffect(() => {
-    load();
-    const unsub = navigation.addListener('focus', load);
+    load(false);
+    const unsub = navigation.addListener('focus', () => load(false));
     return unsub;
   }, [navigation, load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } finally {
       setRefreshing(false);
     }

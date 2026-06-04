@@ -1,13 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import React from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../../auth';
-import { clearAllLocalCache } from '../../../db/maintenance';
 import { AppBar, Button, Card, Chip, spacing, Text } from '../../../design';
 import { useI18n, useT } from '../../../i18n';
 import type { Lang } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
-import { syncCanonicalProducts, syncOrders } from '../../../sync/syncService';
 import { useTheme, useThemeControls } from '../../../theme';
 import type { ThemeName } from '../../../theme';
 
@@ -24,36 +22,6 @@ export function SettingsScreen({ navigation }: Props) {
   const { themeName, setTheme } = useThemeControls();
   const { lang, setLang } = useI18n();
   const { session, logout } = useAuth();
-  const [clearing, setClearing] = useState(false);
-
-  const onClearLocal = () => {
-    Alert.alert(
-      'Clear local data?',
-      'Wipes cached stock, orders, catalog, learned barcodes, and any pending writes in the sync queue. ' +
-        'Receipts already scanned are kept. Use this after the admin resets inventory on the server.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setClearing(true);
-              await clearAllLocalCache();
-              // Re-hydrate from server immediately so the next screen
-              // doesn't show a blank state until the periodic sync.
-              await Promise.all([syncCanonicalProducts(), syncOrders()]).catch(() => {});
-              Alert.alert('Done', 'Local data cleared and re-fetched from the server.');
-            } catch (err) {
-              Alert.alert('Failed', err instanceof Error ? err.message : String(err));
-            } finally {
-              setClearing(false);
-            }
-          },
-        },
-      ],
-    );
-  };
 
   // Theme options use translated labels
   const themeOptions: Array<{ value: ThemeName; label: string }> = [
@@ -112,24 +80,6 @@ export function SettingsScreen({ navigation }: Props) {
             </View>
           </Section>
         )}
-
-        <Section title="Data">
-          <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-            Wipes cached stock, orders, catalog, learned barcodes, and pending sync writes.
-            Receipts you've scanned are kept. Use this after the admin resets inventory data
-            on the server.
-          </Text>
-          <View style={{ marginTop: spacing.lg }}>
-            <Button
-              label={clearing ? 'Clearing…' : 'Clear local data'}
-              variant="outlined"
-              onPress={onClearLocal}
-              size="md"
-              fullWidth
-              disabled={clearing}
-            />
-          </View>
-        </Section>
       </ScrollView>
     </View>
   );

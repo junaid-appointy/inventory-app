@@ -5,6 +5,7 @@ import { markFailed, markSending, markSent, nextBatch, pendingCount, recoverOrph
 import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
 import { upsertOrdersFromRemote } from '../db/orders';
 import { api } from './api';
+import { getSession } from '../auth/session';
 
 type Listener = (count: number, lastSyncAt: number | null) => void;
 
@@ -80,13 +81,17 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
       _lastSyncAt = Date.now();
     }
 
-    // Pull latest canonical products catalog on each sync cycle.
-    // This is lightweight (just a GET) and ensures guards always
-    // have the latest admin-curated product names.
-    await syncCanonicalProducts().catch(() => {});
-    // Also mirror the open-orders list so ReceivingScreen can resolve
-    // catalog picks to the right order item without a round-trip.
-    await syncOrders().catch(() => {});
+    // Skip pulls when not logged in — they'd 401 and only add log noise.
+    // Login screen / AuthProvider will trigger a flush after a successful login.
+    if (getSession()?.token) {
+      // Pull latest canonical products catalog on each sync cycle.
+      // This is lightweight (just a GET) and ensures guards always
+      // have the latest admin-curated product names.
+      await syncCanonicalProducts().catch(() => {});
+      // Also mirror the open-orders list so ReceivingScreen can resolve
+      // catalog picks to the right order item without a round-trip.
+      await syncOrders().catch(() => {});
+    }
   } finally {
     running = false;
     await notify();
@@ -163,6 +168,9 @@ export async function syncOrders(): Promise<void> {
   }
 }
 
+let netSub: { remove: () => void } | null = null;
+let wasOnline = true;
+
 export function startSync(): void {
   if (timer) return;
   // Recover anything left mid-flight by a previous process before the
@@ -182,9 +190,31 @@ export function startSync(): void {
   timer = setInterval(() => {
     flushOnce().catch(() => {});
   }, config.syncIntervalMs);
+
+  // Trigger a flush the moment connectivity returns, instead of waiting
+  // up to syncIntervalMs for the next timer tick. This makes "I just
+  // walked out from a dead zone" reliably catch up in ~1s.
+  try {
+    netSub = Network.addNetworkStateListener((state) => {
+      const online = !!state.isConnected;
+      if (online && !wasOnline) {
+        // eslint-disable-next-line no-console
+        console.log('[sync] connectivity returned — triggering flush');
+        flushOnce().catch(() => {});
+      }
+      wasOnline = online;
+    });
+  } catch {
+    // Listener API not available on this platform / SDK version; the
+    // periodic timer still picks things up.
+  }
 }
 
 export function stopSync(): void {
   if (timer) clearInterval(timer);
   timer = null;
+  if (netSub) {
+    try { netSub.remove(); } catch { /* ignore */ }
+    netSub = null;
+  }
 }

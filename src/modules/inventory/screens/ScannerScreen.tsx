@@ -125,7 +125,7 @@ export function ScannerScreen({ navigation }: Props) {
       // First check: canonical product catalog (barcode → product_id)
       const canonical = await findCanonicalProductByBarcode(raw).catch(() => null);
       if (canonical) {
-        navigation.replace('Receiving', {
+        navigation.push('Receiving', {
           barcode: raw,
           productId: canonical.product_id,
           productName: canonical.canonical_name,
@@ -137,7 +137,7 @@ export function ScannerScreen({ navigation }: Props) {
       // Second check: legacy local products table
       const local = await findProduct(raw).catch(() => null);
       if (local) {
-        navigation.replace('Receiving', { barcode: raw });
+        navigation.push('Receiving', { barcode: raw });
         return;
       }
 
@@ -152,7 +152,7 @@ export function ScannerScreen({ navigation }: Props) {
             unit: hit.product.unit,
             pack_size: hit.product.pack_size ?? null,
           });
-          navigation.replace('Receiving', {
+          navigation.push('Receiving', {
             barcode: raw,
             packSize: hit.product.pack_size ?? undefined,
           });
@@ -165,7 +165,7 @@ export function ScannerScreen({ navigation }: Props) {
       // Barcode not in any catalog — go straight to the registration form
       // so the user can name + categorise the product. The catalog list is
       // surfaced inline as fuzzy suggestions on the name input itself.
-      navigation.replace('RegisterProduct', { barcode: raw });
+      navigation.push('RegisterProduct', { barcode: raw });
     },
     [navigation],
   );
@@ -292,14 +292,6 @@ export function ScannerScreen({ navigation }: Props) {
         isActive
         torch={torch ? 'on' : 'off'}
         codeScanner={codeScanner}
-        // ----- Performance tuning -----
-        // YUV is the native camera format — skips RGBA conversion overhead.
-        pixelFormat="yuv"
-        // Disable stabilizer — it adds 1-2 frame latency.
-        videoStabilizationMode="off"
-        enableBufferCompression={true}
-        // Favor decode speed over photo quality.
-        photoQualityBalance="speed"
         resizeMode="cover"
       />
 
@@ -367,7 +359,7 @@ export function ScannerScreen({ navigation }: Props) {
             if (acceptedRef.current) return;
             acceptedRef.current = true;
             haptic.tap();
-            navigation.replace('CatalogPicker', { barcode: undefined });
+            navigation.push('CatalogPicker', { barcode: undefined });
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={({ pressed }) => [

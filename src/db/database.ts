@@ -192,14 +192,17 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   }
 
   if (version < 4) {
-    await db.execAsync(`
-      -- Unit value (pack size) captured during product registration.
-      -- e.g. unit=Kg, pack_size=5 → a 5kg pack. Optional; older rows
-      -- stay NULL and the UI treats that as "unknown" rather than 1.
-      ALTER TABLE products ADD COLUMN pack_size REAL;
-
-      PRAGMA user_version = 4;
-    `);
+    // Fresh installs already have pack_size from the initial CREATE TABLE;
+    // only older DBs (created before the column was added to the base schema)
+    // need the ALTER. Probe table_info to decide.
+    const cols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(products)',
+    );
+    const hasPackSize = cols.some((c) => c.name === 'pack_size');
+    if (!hasPackSize) {
+      await db.execAsync(`ALTER TABLE products ADD COLUMN pack_size REAL;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 4;`);
     version = 4;
   }
 }

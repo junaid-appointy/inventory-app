@@ -19,11 +19,13 @@ import {
 import { useI18n, useT, Lang } from '../../../i18n';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
+import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 
 export function LoginScreen() {
   const t = useT();
   const { lang, setLang } = useI18n();
   const { palette } = useTheme();
+  const kbHeight = useKeyboardHeight();
   const { login } = useAuth();
   const [guardName, setGuardName] = useState('');
   const [pin, setPin] = useState('');
@@ -66,7 +68,10 @@ export function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: spacing.xl + kbHeight }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.langRow}>
             <Chip label="EN" selected={lang === 'en'} onPress={() => setLang('en')} />
             <Chip label="हिं" selected={lang === 'hi'} onPress={() => setLang('hi')} />
@@ -120,7 +125,7 @@ export function LoginScreen() {
           <Button
             label={busy ? t('signingIn') : t('signIn')}
             onPress={submit}
-            disabled={busy || guardName.trim().length === 0}
+            disabled={busy || guardName.trim().length === 0 || pin.trim().length < 4}
             loading={busy}
             size="lg"
             fullWidth

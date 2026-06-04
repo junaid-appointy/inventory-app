@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { RefreshCw, ScanLine } from 'lucide-react-native';
+import { ScanLine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -20,6 +20,7 @@ import {
   Text,
   TextField,
 } from '../../../design';
+import { SyncRefreshButton } from '../components/SyncRefreshButton';
 import { learnBarcode, type CanonicalProduct } from '../../../db/catalog';
 import { enqueue } from '../../../db/outbox';
 import { upsertProduct } from '../../../db/products';
@@ -33,6 +34,7 @@ import {
 } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useCanonicalSuggest } from '../hooks/useCanonicalSuggest';
+import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RegisterProduct'>;
 
@@ -43,6 +45,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
   const { barcode } = route.params;
+  const kbHeight = useKeyboardHeight();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Grocery');
@@ -123,7 +126,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
         await enqueue('learn_barcode', { barcode, product_id: pickedProductId }).catch(() => {});
         flushOnce().catch(() => {});
         haptic.success();
-        navigation.replace('Receiving', {
+        navigation.push('Receiving', {
           barcode,
           productId: pickedProductId,
           productName: trimmedName,
@@ -143,7 +146,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
         });
         flushOnce().catch(() => {});
         haptic.success();
-        navigation.replace('Receiving', {
+        navigation.push('Receiving', {
           barcode,
           packSize: parsedPackSize ?? undefined,
         });
@@ -153,14 +156,17 @@ export function RegisterProductScreen({ route, navigation }: Props) {
     }
   };
 
+  // Subtitle is the scanned barcode — that's the primary identifier
+  // for this screen and the guard expects to see it. We deliberately
+  // do NOT surface background sync errors here: a transient backend
+  // hiccup shouldn't make the field-app look broken when the local
+  // catalog still works. Sync status lives on the refresh icon (red
+  // dot when stale) and in the Sync queue screen.
   const syncStatus = getLastCatalogSync();
-  const subtitle = (() => {
-    if (syncStatus.remote > 0 && syncStatus.written !== syncStatus.remote) {
-      return `${catalog.length} cached · sync ${syncStatus.written}/${syncStatus.remote}`;
-    }
-    if (syncStatus.error) return `${catalog.length} cached · sync error`;
-    return barcode;
-  })();
+  const subtitle = barcode;
+  const syncStale =
+    syncStatus.error != null ||
+    (syncStatus.remote > 0 && syncStatus.written !== syncStatus.remote);
 
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -170,23 +176,28 @@ export function RegisterProductScreen({ route, navigation }: Props) {
         onBack={() => navigation.goBack()}
         trailing={
           <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-            <IconButton Icon={RefreshCw} onPress={() => void refresh()} />
+            <SyncRefreshButton onPress={refresh} stale={syncStale} />
             <IconButton Icon={ScanLine} onPress={() => navigation.replace('Scanner')} />
           </View>
         }
       />
+      {/*
+        On iOS we use padding to lift the footer above the keyboard.
+        On Android we rely on the system's android:windowSoftInputMode
+        adjustResize (set in app.json) — wrapping with a KAV here was
+        adding phantom bottom space when the keyboard was NOT shown.
+      */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: spacing.lg + kbHeight }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text variant="headlineMedium">{t('productName')}</Text>
-          <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
-            Start typing — we'll match it against the {catalog.length}-item catalog. Pick one to auto-fill
-            category, unit and pack size.
-          </Text>
 
-          <View style={{ marginTop: spacing.xl }}>
+          <View style={{ marginTop: spacing.lg }}>
             <TextField
               label={t('productName')}
               value={name}
@@ -195,57 +206,64 @@ export function RegisterProductScreen({ route, navigation }: Props) {
               placeholder={t('productExample')}
               autoFocus
               returnKeyType="done"
+              clearable
             />
 
             {dropdownOpen && matches.length > 0 && (
-              <ScrollView
+              <View
                 style={{
                   marginTop: spacing.xs,
                   borderWidth: 1,
                   borderColor: palette.outlineVariant,
                   borderRadius: radius.md,
                   backgroundColor: palette.surface,
+                  overflow: 'hidden',
                   maxHeight: 280,
                 }}
-                nestedScrollEnabled
-                keyboardShouldPersistTaps="handled"
               >
-                {matches.map((p, idx) => (
-                  <React.Fragment key={p.product_id}>
-                    {idx > 0 && (
-                      <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: palette.outlineVariant }} />
-                    )}
-                    <Pressable
-                      onPress={() => acceptCatalog(p)}
-                      android_ripple={{ color: palette.surfaceContainerLowest }}
-                      style={({ pressed }) => [{
-                        paddingHorizontal: spacing.md,
-                        paddingVertical: spacing.sm,
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: spacing.md,
-                        backgroundColor: pressed ? palette.surfaceContainerLowest : 'transparent',
-                      }]}
-                    >
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="bodyLarge" numberOfLines={1}>{p.canonical_name}</Text>
-                        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 2, flexWrap: 'wrap' }}>
-                          {p.category ? (
-                            <Text variant="labelMedium" color={palette.onSurfaceVariant}>{p.category}</Text>
-                          ) : null}
-                          {p.hsn_code ? (
-                            <Text variant="labelMedium" color={palette.onSurfaceVariant}>HSN {p.hsn_code}</Text>
-                          ) : null}
+                <ScrollView
+                  key={matches.length}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingTop: spacing.xs }}
+                >
+                  {matches.slice(0, 50).map((p, idx) => (
+                    <React.Fragment key={p.product_id}>
+                      {idx > 0 && (
+                        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: palette.outlineVariant }} />
+                      )}
+                      <Pressable
+                        onPress={() => acceptCatalog(p)}
+                        android_ripple={{ color: palette.surfaceContainerLowest }}
+                        style={({ pressed }) => [{
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: spacing.sm,
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: spacing.md,
+                          backgroundColor: pressed ? palette.surfaceContainerLowest : 'transparent',
+                        }]}
+                      >
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text variant="bodyLarge" numberOfLines={1}>{p.canonical_name}</Text>
+                          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 2, flexWrap: 'wrap' }}>
+                            {p.category ? (
+                              <Text variant="labelMedium" color={palette.onSurfaceVariant}>{p.category}</Text>
+                            ) : null}
+                            {p.hsn_code ? (
+                              <Text variant="labelMedium" color={palette.onSurfaceVariant}>HSN {p.hsn_code}</Text>
+                            ) : null}
+                          </View>
                         </View>
-                      </View>
-                      <Text variant="labelLarge" color={palette.onSurface}>
-                        {p.pack_size} {p.unit}
-                      </Text>
-                    </Pressable>
-                  </React.Fragment>
-                ))}
-              </ScrollView>
+                        <Text variant="labelLarge" color={palette.onSurface}>
+                          {p.pack_size} {p.unit}
+                        </Text>
+                      </Pressable>
+                    </React.Fragment>
+                  ))}
+                </ScrollView>
+              </View>
             )}
 
             {dropdownOpen && matches.length === 0 && suggestion && (
@@ -275,29 +293,34 @@ export function RegisterProductScreen({ route, navigation }: Props) {
 
             {pickedProductId && (
               <View style={{ marginTop: spacing.sm }}>
-                <Text variant="labelMedium" color={palette.primary}>
-                  ✓ Mapped to catalog — saving will link this barcode.
+                <Text variant="bodyMedium" color={palette.primary}>
+                  {t('barcodeWillBeLinked')} {name}
                 </Text>
               </View>
             )}
           </View>
 
-          <View style={{ marginTop: spacing.xl }}>
+          {/* When the row is mapped to a catalog product, category /
+              unit / pack-size belong to that product's definition and
+              cannot be edited here. Edits to the catalog are done from
+              the admin dashboard. We still RENDER the fields so the
+              guard can see what the picked product carries. */}
+          <View style={{ marginTop: spacing.xl, opacity: pickedProductId ? 0.6 : 1 }}>
             <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ marginBottom: spacing.sm }}>
               {t('category').toUpperCase()}
             </Text>
-            <View style={styles.chipRow}>
+            <View style={styles.chipRow} pointerEvents={pickedProductId ? 'none' : 'auto'}>
               {visibleCategories.map((c) => (
                 <Chip key={c} label={c} selected={c === category} onPress={() => setCategory(c)} />
               ))}
             </View>
           </View>
 
-          <View style={{ marginTop: spacing.xl }}>
+          <View style={{ marginTop: spacing.xl, opacity: pickedProductId ? 0.6 : 1 }}>
             <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ marginBottom: spacing.sm }}>
               {t('unit').toUpperCase()}
             </Text>
-            <View style={styles.chipRow}>
+            <View style={styles.chipRow} pointerEvents={pickedProductId ? 'none' : 'auto'}>
               {visibleUnits.map((u) => (
                 <Chip key={u} label={u} selected={u === unit} onPress={() => setUnit(u)} />
               ))}
@@ -312,13 +335,15 @@ export function RegisterProductScreen({ route, navigation }: Props) {
               placeholder={t('unitValueHint')}
               keyboardType="decimal-pad"
               returnKeyType="done"
+              editable={!pickedProductId}
+              style={pickedProductId ? { opacity: 0.6 } : undefined}
             />
           </View>
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
           <Button
-            label={pickedProductId ? 'Link to catalog & continue' : t('saveAndContinue')}
+            label={pickedProductId ? t('linkAndContinue') : t('saveAndContinue')}
             onPress={onSave}
             disabled={!canSave}
             loading={saving}
@@ -339,7 +364,10 @@ export function RegisterProductScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  // padding: just the standard screen padding; the sticky footer below
+  // provides its own spacing. Earlier `paddingBottom: xxxl` was leaving
+  // a phantom dead zone above the buttons.
+  scroll: { padding: spacing.xl, paddingBottom: spacing.lg },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   footer: {
     padding: spacing.xl,

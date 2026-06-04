@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "Field App",
+    "name": "Auxilio",
     "slug": "field-app",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "scheme": "fieldapp",
+    "scheme": "auxilio",
+    "icon": "./assets/icon-192x192.png",
     "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"
@@ -16,14 +17,15 @@
       "fallbackToCacheTimeout": 0
     },
     "splash": {
-      "backgroundColor": "#0F7B3E",
-      "resizeMode": "contain"
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#92288E"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "android": {
-      "package": "com.officeops.fieldapp",
+      "package": "com.officeops.auxilio",
       "permissions": [
         "CAMERA",
         "ACCESS_NETWORK_STATE",
@@ -33,21 +35,23 @@
       ],
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#0F7B3E"
+        "foregroundImage": "./assets/icon-192x192.png",
+        "backgroundColor": "#92288E"
       }
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.officeops.fieldapp",
+      "bundleIdentifier": "com.officeops.auxilio",
+      "icon": "./assets/icon-180x180.png",
       "infoPlist": {
-        "NSCameraUsageDescription": "Field App uses the camera to scan barcodes at the gate."
+        "NSCameraUsageDescription": "Auxilio uses the camera to scan barcodes at the gate."
       }
     },
     "plugins": [
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Field App uses the camera to scan barcodes at the gate.",
+          "cameraPermissionText": "Auxilio uses the camera to scan barcodes at the gate.",
           "enableCodeScanner": true
         }
       ],

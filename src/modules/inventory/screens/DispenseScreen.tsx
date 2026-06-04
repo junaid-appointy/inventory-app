@@ -6,6 +6,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -20,7 +21,6 @@ import {
   Skeleton,
   spacing,
   Text,
-  TextField,
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
 import { adjustOnHand, findStock, listStock, StockRow, statusFor } from '../../../db/stock';
@@ -29,6 +29,7 @@ import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
+import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
 import { useTheme } from '../../../theme';
 
@@ -64,6 +65,7 @@ function countColor(row: StockRow): string {
 export function DispenseScreen({ route, navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
+  const kbHeight = useKeyboardHeight();
   const initialBarcode = route.params?.barcode;
   const [selected, setSelected] = useState<StockRow | null>(null);
   const [all, setAll] = useState<StockRow[]>([]);
@@ -72,7 +74,6 @@ export function DispenseScreen({ route, navigation }: Props) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState(REASONS[0]);
-  const [who, setWho] = useState('');
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -123,7 +124,10 @@ export function DispenseScreen({ route, navigation }: Props) {
         product_name: selected.name,
         qty,
         reason,
-        taken_by: who.trim() || null,
+        // taken_by is now always the logged-in guard — no separate
+        // free-text "who" field. Removes one mandatory input from the
+        // dispense flow.
+        taken_by: session?.guardName ?? null,
         issued_at: Date.now(),
         performed_by: session?.guardId ?? null,
         performed_by_name: session?.guardName ?? null,
@@ -233,7 +237,10 @@ export function DispenseScreen({ route, navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <View style={styles.body}>
+        <ScrollView
+          contentContainerStyle={[styles.body, { paddingBottom: spacing.xl + kbHeight }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <Card tone="elevated" padding="xl">
             <Text variant="labelLarge" color={palette.onSurfaceVariant}>
               PRODUCT
@@ -264,14 +271,18 @@ export function DispenseScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          <TextField
-            label={t('whoTook')}
-            value={who}
-            onChangeText={setWho}
-            placeholder={t('nameOptional')}
-            returnKeyType="done"
-          />
-        </View>
+          {/* Who took it: always the logged-in guard. No need for a
+              text input; just surface their name so they know the
+              record will be filed under them. */}
+          <View style={{ marginTop: spacing.md }}>
+            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
+              {t('whoTook').toUpperCase()}
+            </Text>
+            <Text variant="titleMedium" style={{ marginTop: spacing.xs }}>
+              {getSession()?.guardName ?? '—'}
+            </Text>
+          </View>
+        </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
           <Button
@@ -306,7 +317,7 @@ const styles = StyleSheet.create({
   },
   list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   pickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  body: { flex: 1, padding: spacing.xl, gap: spacing.xl },
+  body: { flexGrow: 1, padding: spacing.xl, gap: spacing.xl },
   qtySection: { gap: spacing.lg },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   empty: { padding: spacing.xxl },

@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   AppBar,
   Card,
@@ -16,6 +16,7 @@ import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
 import { useTheme } from '../../../theme';
+import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
@@ -59,13 +60,10 @@ export function StockScreen({ navigation }: Props) {
     return [{ key: 'All', label: 'All Categories' }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
   }, [rows]);
 
-  const load = useCallback(async () => {
+  const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
     try {
       const remote = await api.fetch.stock();
-      // Replace mirrors the remote authoritatively — items the admin
-      // wiped on the server disappear locally too, instead of lingering
-      // as zombies in the Stock list.
       await replaceStockFromRemote(
         remote.map((r) => ({
           barcode: r.barcode,
@@ -76,23 +74,34 @@ export function StockScreen({ navigation }: Props) {
           threshold: Number(r.threshold),
         })),
       );
+      await setLastSyncTime('stock');
     } catch {
       // Offline fallback
     }
-    setRows(await listStock());
-    setInitialLoading(false);
   }, []);
 
+  const load = useCallback(async (forceRefresh = false) => {
+    const lastSync = await getLastSyncTime('stock');
+    const stale = isCacheStale(lastSync);
+
+    if (forceRefresh || stale) {
+      await fetchRemote();
+    }
+
+    setRows(await listStock());
+    setInitialLoading(false);
+  }, [fetchRemote]);
+
   useEffect(() => {
-    load();
-    const unsub = navigation.addListener('focus', load);
+    load(false);
+    const unsub = navigation.addListener('focus', () => load(false));
     return unsub;
   }, [navigation, load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } finally {
       setRefreshing(false);
     }
@@ -116,8 +125,11 @@ export function StockScreen({ navigation }: Props) {
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('stock')} subtitle={t('stockSub')} onBack={() => navigation.goBack()} />
-
-      <View style={styles.search}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <View style={styles.search}>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -217,6 +229,7 @@ export function StockScreen({ navigation }: Props) {
         }
       />
       )}
+      </KeyboardAvoidingView>
     </View>
   );
 }

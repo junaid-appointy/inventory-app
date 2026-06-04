@@ -11,6 +11,8 @@ type Props = {
   onChange: (n: number) => void;
   min?: number;
   max?: number;
+  /** Allow fractional values (e.g. 0.5 kg). +/- still nudge by 1. */
+  decimal?: boolean;
 };
 
 /**
@@ -18,7 +20,7 @@ type Props = {
  * display: tapping the number swaps it for an inline TextInput so power
  * users can type the qty directly. Commits on blur or submit.
  */
-export function QtyStepper({ value, onChange, min = 1, max }: Props) {
+export function QtyStepper({ value, onChange, min = 1, max, decimal = true }: Props) {
   const { palette } = useTheme();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
@@ -54,18 +56,23 @@ export function QtyStepper({ value, onChange, min = 1, max }: Props) {
    * the latest qty. The local `draft` keeps the literal text so partial
    * states like "" don't snap the display while typing.
    */
+  const parseValue = (text: string) => decimal ? parseFloat(text) : parseInt(text, 10);
+  const validText = (text: string) =>
+    decimal ? /^-?\d*\.?\d*$/.test(text) : /^-?\d*$/.test(text);
+
   const onTextChange = (text: string) => {
+    if (!validText(text)) return; // reject stray characters
     setDraft(text);
-    if (text.trim() === '') {
+    if (text.trim() === '' || text === '.' || text === '-') {
       // Don't push min on every backspace; wait for commit.
       return;
     }
-    const parsed = parseInt(text, 10);
+    const parsed = parseValue(text);
     if (!Number.isNaN(parsed)) onChange(clamp(parsed));
   };
 
   const commit = () => {
-    const next = clamp(parseInt(draft, 10));
+    const next = clamp(parseValue(draft));
     onChange(next);
     setDraft(String(next));
     setEditing(false);
@@ -81,7 +88,7 @@ export function QtyStepper({ value, onChange, min = 1, max }: Props) {
           onChangeText={onTextChange}
           onBlur={commit}
           onSubmitEditing={commit}
-          keyboardType="number-pad"
+          keyboardType={decimal ? "decimal-pad" : "number-pad"}
           selectTextOnFocus
           returnKeyType="done"
           style={[

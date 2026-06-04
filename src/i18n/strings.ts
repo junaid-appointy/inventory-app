@@ -183,6 +183,52 @@ export const STR = {
   // Placeholders
   productExample:  ['e.g. Tata Salt 1kg', 'जैसे टाटा नमक 1kg'],
   barcodeExample:  ['e.g. 8901030875021', 'जैसे 8901030875021'],
+
+  // Catalog picker / search
+  pickProduct:        ['Pick product',                       'सामान चुनें'],
+  itemsInCatalog:     ['items in catalog',                   'कैटलॉग में'],
+  itemInCatalog:      ['item in catalog',                    'कैटलॉग में'],
+  searchPlaceholder:  ['Type product name, category or HSN…','सामान का नाम, श्रेणी या HSN टाइप करें…'],
+  noExactMatch:       ['No exact match. Tap "Did you mean" below or flag with a photo.', 'कोई मेल नहीं। नीचे "क्या आपका मतलब" पर टैप करें या फ़ोटो से फ़्लैग करें।'],
+  didYouMean:         ['Did you mean:',                      'क्या आपका मतलब:'],
+  notInList:          ['Not in this list? Flag with a photo','सूची में नहीं? फ़ोटो से फ़्लैग करें'],
+  expectedFromOrders: ['Expected from open orders',          'खुले ऑर्डर से अपेक्षित'],
+
+  // Register product / scan
+  barcodeWillBeLinked: ['Barcode will be linked to',         'बारकोड जुड़ जाएगा:'],
+  saveCustom:         ['Save & continue',                    'सेव और आगे'],
+  linkAndContinue:    ['Link & continue',                    'जोड़ें और आगे'],
+  registerNewProduct: ['Register new product',               'नया सामान दर्ज करें'],
+  noProductsCached:   ['No products cached yet',             'कैटलॉग खाली है'],
+
+  // Misc
+  refresh:            ['Refresh',                            'रिफ़्रेश'],
+  clear:              ['Clear',                              'मिटाएँ'],
+  remove:             ['Remove',                             'हटाएँ'],
+  add:                ['Add',                                'जोड़ें'],
+  edit:               ['Edit',                               'बदलें'],
+  noExpiry:           ['No expiry date',                     'कोई एक्सपायरी नहीं'],
+  perPackExpiry:      ['Different expiry per pack',          'हर पैक की अलग एक्सपायरी'],
+  pack:               ['Pack',                               'पैक'],
+  expiryDate:         ['Expiry date',                        'एक्सपायरी की तारीख'],
+  packsLabel:         ['packs',                               'पैक'],
+
+  // Settings → Data section
+  dataSection:        ['DATA',                                'डेटा'],
+  clearLocalData:     ['Clear local data',                    'स्थानीय डेटा मिटाएँ'],
+  clearLocalDataHelp: [
+    'Wipes cached stock, orders, catalog, learned barcodes, and pending sync writes. Receipts you have scanned are kept. Use this after the admin resets inventory data on the server.',
+    'स्थानीय स्टॉक, ऑर्डर, कैटलॉग, सीखे गए बारकोड और भेजने वाले डेटा को मिटा देगा। आपके स्कैन की गई रसीदें सुरक्षित रहेंगी। इसका उपयोग तब करें जब एडमिन ने सर्वर पर डेटा रीसेट किया हो।',
+  ],
+  clearing:           ['Clearing…',                           'मिटाया जा रहा…'],
+
+  // Dispense
+  quantityToTake:     ['How many to take?',                  'कितने लेने हैं?'],
+
+  // Errors
+  errorOccurred:      ['Something went wrong',               'कुछ गड़बड़ हुई'],
+  tryAgain:           ['Try again',                          'फिर कोशिश करें'],
+  networkOffline:     ['Offline — will sync when online',    'ऑफ़लाइन — ऑनलाइन होने पर भेजेंगे'],
 } as const satisfies Record<string, Pair>;
 
 export type StringKey = keyof typeof STR;

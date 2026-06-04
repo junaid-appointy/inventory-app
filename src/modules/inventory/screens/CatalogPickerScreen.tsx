@@ -1,16 +1,16 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Camera, RefreshCw, Search } from 'lucide-react-native';
+import { Camera, Search, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   AppBar,
-  IconButton,
   radius,
   Skeleton,
   spacing,
   Text,
 } from '../../../design';
+import { SyncRefreshButton } from '../components/SyncRefreshButton';
 import {
   CanonicalProduct,
   learnBarcode,
@@ -21,6 +21,8 @@ import { getDb } from '../../../db/database';
 import { RootStackParamList } from '../../../navigation/types';
 import { getLastCatalogSync, syncCanonicalProducts, syncOrders } from '../../../sync/syncService';
 import { useTheme } from '../../../theme';
+import { useT } from '../../../i18n';
+import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CatalogPicker'>;
 
@@ -53,6 +55,7 @@ function similarity(a: string, b: string): number {
 
 export function CatalogPickerScreen({ navigation, route }: Props) {
   const { palette } = useTheme();
+  const t = useT();
   const incomingBarcode = route.params?.barcode;
   const [products, setProducts] = useState<CanonicalProduct[]>([]);
   const [openItemMap, setOpenItemMap] = useState<Record<string, OpenOrderItem>>({});
@@ -76,14 +79,21 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
     setLoading(false);
   }, []);
 
-  const refresh = useCallback(async () => {
-    await Promise.all([syncCanonicalProducts(), syncOrders()]);
+  const refresh = useCallback(async (forceRefresh = false) => {
+    const lastSync = await getLastSyncTime('catalog');
+    const stale = isCacheStale(lastSync);
+
+    if (forceRefresh || stale) {
+      await Promise.all([syncCanonicalProducts(), syncOrders()]);
+      await setLastSyncTime('catalog');
+    }
+
     await loadFromCache();
   }, [loadFromCache]);
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
+      void refresh(false);
     }, [refresh]),
   );
 
@@ -165,7 +175,7 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
       }
     }
     const barcode = incomingBarcode ?? `catalog_${product.product_id}`;
-    navigation.replace('Receiving', {
+    navigation.push('Receiving', {
       barcode,
       productId: product.product_id,
       productName: product.canonical_name,
@@ -177,21 +187,22 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar
-        title="Pick product"
-        subtitle={(() => {
-          const s = getLastCatalogSync();
-          if (s.remote > 0 && s.written !== s.remote) {
-            return `${products.length} cached · sync ${s.written}/${s.remote}${s.failed ? ` (${s.failed} failed)` : ''}`;
-          }
-          if (s.error) {
-            return `${products.length} cached · sync error`;
-          }
-          return `${products.length} item${products.length === 1 ? '' : 's'} in catalog`;
-        })()}
-        onBack={() => navigation.goBack()}
-        trailing={<IconButton Icon={RefreshCw} onPress={() => void refresh()} />}
-      />
+          title={t('pickProduct')}
+          subtitle={`${products.length} ${products.length === 1 ? t('itemInCatalog') : t('itemsInCatalog')}`}
+          onBack={() => navigation.goBack()}
+          trailing={(() => {
+            const s = getLastCatalogSync();
+            const stale =
+              s.error != null ||
+              (s.remote > 0 && s.written !== s.remote);
+            return <SyncRefreshButton onPress={refresh} stale={stale} />;
+          })()}
+        />
 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
       <View style={{ padding: spacing.md }}>
         <View
           style={{
@@ -209,13 +220,18 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Type product name, category or HSN…"
+            placeholder={t('searchPlaceholder')}
             placeholderTextColor={palette.onSurfaceVariant}
             style={{ flex: 1, paddingVertical: spacing.md, color: palette.onSurface, fontSize: 15 }}
             autoCorrect={false}
             autoCapitalize="none"
             autoFocus
           />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+              <X size={18} color={palette.onSurfaceVariant} strokeWidth={2.2} />
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -290,7 +306,7 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
               ListEmptyComponent={
                 <View style={{ padding: spacing.lg, alignItems: 'center' }}>
                   <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
-                    No exact match. Tap "Did you mean" below or flag with a photo.
+                    {t('noExactMatch')}
                   </Text>
                 </View>
               }
@@ -314,7 +330,7 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
                     gap: spacing.xs,
                   }}
                 >
-                  <Text variant="labelMedium" color={palette.onSurfaceVariant}>Did you mean:</Text>
+                  <Text variant="labelMedium" color={palette.onSurfaceVariant}>{t('didYouMean')}</Text>
                   <Text variant="labelLarge" color={palette.onSurface}>{suggestion.canonical_name}</Text>
                   <Text variant="labelMedium" color={palette.onSurfaceVariant}>
                     · {suggestion.pack_size} {suggestion.unit}
@@ -337,13 +353,14 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
               >
                 <Camera size={18} color={palette.onSurfaceVariant} strokeWidth={2.2} />
                 <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-                  Not in this list? Flag with a photo
+                  {t('notInList')}
                 </Text>
               </View>
             </Pressable>
           </View>
         </View>
       )}
+      </KeyboardAvoidingView>
     </View>
   );
 }

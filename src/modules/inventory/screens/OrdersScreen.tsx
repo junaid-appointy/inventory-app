@@ -8,6 +8,7 @@ import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { useTheme } from '../../../theme';
+import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Orders'>;
 type Enriched = Order & { items: OrderItem[] };
@@ -30,17 +31,11 @@ export function OrdersScreen({ navigation }: Props) {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    // Flush pending writes (e.g. receipts that updated received_qty) so
-    // the orders list reflects them on the very first remote fetch.
+  const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
 
-    // Prefer remote when available — orders are managed server-side.
     try {
       const remote = await api.fetch.orders();
-      // Mirror remote into local SQLite so the ReceivingScreen can
-      // resolve a guard's catalog pick to the right order_item even
-      // when offline, and addReceivedQty() works locally.
       await upsertOrdersFromRemote(remote).catch(() => {});
       setOrders(
         remote.map((o) => ({
@@ -59,28 +54,42 @@ export function OrdersScreen({ navigation }: Props) {
           })),
         })),
       );
-      setInitialLoading(false);
-      return;
+      await setLastSyncTime('orders');
+      return true;
     } catch {
-      // Offline / unauthenticated — fall through to local cache.
+      return false;
     }
+  }, []);
+
+  const load = useCallback(async (forceRefresh = false) => {
+    const lastSync = await getLastSyncTime('orders');
+    const stale = isCacheStale(lastSync);
+
+    if (forceRefresh || stale) {
+      const success = await fetchRemote();
+      if (success) {
+        setInitialLoading(false);
+        return;
+      }
+    }
+
     const list = await listOpenOrders();
     setOrders(
       await Promise.all(list.map(async (o) => ({ ...o, items: await getOrderItems(o.id) })))
     );
     setInitialLoading(false);
-  }, []);
+  }, [fetchRemote]);
 
   useEffect(() => {
-    load();
-    const unsub = navigation.addListener('focus', load);
+    load(false);
+    const unsub = navigation.addListener('focus', () => load(false));
     return unsub;
   }, [navigation, load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } finally {
       setRefreshing(false);
     }

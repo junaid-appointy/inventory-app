@@ -13,6 +13,7 @@ import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
+import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -28,11 +29,7 @@ export function HomeScreen({ navigation }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    // Mirror the screens' own load flow so the tile counts match what
-    // the user sees after tapping in: flush outbox, pull remote, replace
-    // local cache, then count from local. Falls back to local-only when
-    // offline so the tiles still show something useful.
+  const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
 
     try {
@@ -58,24 +55,35 @@ export function HomeScreen({ navigation }: Props) {
       // offline — keep local cache
     }
 
+    await setLastSyncTime('home');
+  }, []);
+
+  const load = useCallback(async (forceRefresh = false) => {
+    const lastSync = await getLastSyncTime('home');
+    const stale = isCacheStale(lastSync);
+
+    if (forceRefresh || stale) {
+      await fetchRemote();
+    }
+
     const [stock, openOrders, alerts] = await Promise.all([
       listStock(),
       listOpenOrders(),
       listLowOrOut(),
     ]);
     setStats({ stock: stock.length, orders: openOrders.length, alerts: alerts.length });
-  }, []);
+  }, [fetchRemote]);
 
   useEffect(() => {
-    load();
-    const unsub = navigation.addListener('focus', load);
+    load(false);
+    const unsub = navigation.addListener('focus', () => load(false));
     return unsub;
   }, [navigation, load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } finally {
       setRefreshing(false);
     }

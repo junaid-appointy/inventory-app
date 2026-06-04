@@ -20,6 +20,27 @@ export class ApiError extends Error {
   constructor(public status: number, message: string, public body?: string) {
     super(message);
   }
+  /** Friendly composite for surfaces that only see `err.message` — e.g.
+   *  the outbox's `last_error` column. Pulls the server's
+   *  `{ error: "..." }` body when present so the guard sees a real
+   *  reason instead of just "HTTP 500". */
+  static format(status: number, path: string, body: string | undefined): string {
+    if (body) {
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed && typeof parsed.error === 'string') {
+          return `HTTP ${status} on ${path} — ${parsed.error}`;
+        }
+      } catch {
+        // not JSON, fall through
+      }
+      const trimmed = body.trim();
+      if (trimmed.length > 0) {
+        return `HTTP ${status} on ${path} — ${trimmed.slice(0, 180)}`;
+      }
+    }
+    return `HTTP ${status} on ${path}`;
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -36,7 +57,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new ApiError(res.status, `HTTP ${res.status} on ${path}`, text.slice(0, 500));
+    const body = text.slice(0, 500);
+    throw new ApiError(res.status, ApiError.format(res.status, path, body), body);
   }
   return res.json() as Promise<T>;
 }

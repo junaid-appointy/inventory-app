@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <style type="text/css">.cls-0 {fill:url(#SVGID_1_);}</style>
+  <linearGradient id="SVGID_1_" x1="14.82" x2="85.18" y1="16.92" y2="85.83" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#66248F" offset="0"/>
+    <stop stop-color="#C71585" offset="1"/>
+  </linearGradient>
+  <path class="cls-0" d="m98.6 47.4c-1-22.6-21.2-46.1-48.6-46.1-26.7 0-48.3 22.8-48.3 47.7-0.3 22.9 16.5 50 47.4 50h42.9c4.6 0 6.7-3.5 6.7-6.4 0 0 0-41-0.1-45.2zm-6 41.5c0 2.3-1.8 4.4-4.3 4.4h-30.8c-16.2 0-31.7-13.5-31.7-33.2 0-15.5 13.1-33.5 33.7-33.5 16.2 0 33.1 13.4 33.2 32.8v29.5z"/>
+  <linearGradient id="SVGID_00000155852644368470567480000001980572955948349198_" x1="46.26" x2="71.94" y1="48.9" y2="71.89" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#881E84" offset="0"/>
+    <stop stop-color="#A11C80" offset="1"/>
+  </linearGradient>
+  <path d="m59.2 43.6c-8.6 0-16.6 6.7-16.6 16.3 0 7 5.2 17 16.7 17 9.5 0 16.7-7.4 16.7-16.8 0-8-6.9-16.5-16.8-16.5z" fill="url(#SVGID_00000155852644368470567480000001980572955948349198_)"/>
+</svg>
