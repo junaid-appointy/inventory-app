@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "e65afc612db3",
+  "session_id": "6bf09c93-67e5-4cd1-a12d-722f96dfad8a",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T12:02:12.593351Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "package.json",
+    "src/modules/inventory/screens/ReceivingScreen.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "881dceec5f4d",
+  "checkpoint_transcript_start": 66,
+  "transcript_lines_at_start": 66,
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T12:02:12.592189Z",
+    "agent_lines": 11,
+    "agent_removed": 3,
+    "human_added": 543,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 554,
+    "total_lines_changed": 1558,
+    "agent_percentage": 0.8985879332477535,
+    "metric_version": 2
+  }
+}
