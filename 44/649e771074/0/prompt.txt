@@ -244,3 +244,7 @@ npm ci --include=dev exited with non-zero code: 1
 ---
 
 in the field-app on each tab press, I see a lot of api calls, is it necessary or just a bad flow that we have implemented?
+
+---
+
+yes
