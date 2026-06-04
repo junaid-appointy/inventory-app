@@ -1,0 +1,55 @@
+bill date is wrong in the excel sheet, in both the tabs, the received and the ordered tabs. we will also store timestamp of when it was added, for both the received and ordered tab, the time will always be in IST, we can store the time in UTC, but always show time everywhere in IST. This is what I am getting in bill date : Date
+46176
+46176
+46176
+46176
+46176
+
+---
+
+which one is better strategy, storing in utc and displaying in IST, or storing and displaying both in IST?
+
+---
+
+instead of showing full timestamp with date at the end, lets add a column after the Date , name it Time and show only the time. in the linked excel sheet. this is for both, the ordered and recieved tab.
+
+---
+
+in the field-app the stock tab button count is wrong, in the stock list the items were 9, but on the stock tab button it showed 20, check if such discrepancy is with other tab as well.
+
+---
+
+lets give pull to refresh feature in all the tabs in field-app
+
+---
+
+there is an item in field-app in the sync queue, no matter how much I press sync now, it is stuck at sending and there is an error : Network request failed
+
+---
+
+for now lets wipe that pending sync-queue item. we will try fresh
+
+---
+
+in the field-app why in the sync queue, there is learn_barcode , we should only see the unsycned inventory related thing like item scan, item used or any other related to inventory, nor these confusing events or keywords or internal actions.
+
+---
+
+@build_and_distribute.md lets create the optimised build for smaller size
+
+---
+
+field-app on  feature/bill-mapping [$+] via  v22.22.3
+❯ ! eas login
+fish: Unknown command: eas
+fish:
+! eas login
+  ^~^
+
+---
+
+logged in, lets go with the preview build profile
+
+---
+
+I created the build, installed, the app is 39 MB, now if I make changes in field app it will not be reflected in this built app?
