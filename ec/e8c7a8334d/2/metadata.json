@@ -1,9 +1,11 @@
 {
   "cli_version": "0.6.2",
   "checkpoint_id": "ece8c7a8334d",
+  "session_id": "6bf09c93-67e5-4cd1-a12d-722f96dfad8a",
   "strategy": "manual-commit",
+  "created_at": "2026-06-04T12:02:00.461981Z",
   "branch": "feature/bill-mapping",
-  "checkpoints_count": 4,
+  "checkpoints_count": 1,
   "files_touched": [
     "Build_And_Run.md",
     "app.json",
@@ -20,53 +22,53 @@
     "babel.config.js",
     "generate-assets.js",
     "package.json",
-    "src/db/database.ts",
     "src/design/QtyStepper.tsx",
     "src/design/TextField.tsx",
-    "src/hooks/useKeyboardHeight.ts",
     "src/i18n/strings.ts",
     "src/modules/inventory/components/DatePickerModal.tsx",
     "src/modules/inventory/components/SyncRefreshButton.tsx",
-    "src/modules/inventory/screens/AlertsScreen.tsx",
     "src/modules/inventory/screens/CatalogPickerScreen.tsx",
     "src/modules/inventory/screens/DispenseScreen.tsx",
     "src/modules/inventory/screens/HomeScreen.tsx",
-    "src/modules/inventory/screens/LoginScreen.tsx",
-    "src/modules/inventory/screens/OrdersScreen.tsx",
     "src/modules/inventory/screens/ReceivingScreen.tsx",
     "src/modules/inventory/screens/RegisterProductScreen.tsx",
-    "src/modules/inventory/screens/ScannerScreen.tsx",
     "src/modules/inventory/screens/SettingsScreen.tsx",
-    "src/modules/inventory/screens/StockScreen.tsx",
     "src/sync/api.ts",
     "src/sync/cacheTime.ts",
     "src/sync/syncService.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/ec/e8c7a8334d/0/metadata.json",
-      "transcript": "/ec/e8c7a8334d/0/full.jsonl",
-      "content_hash": "/ec/e8c7a8334d/0/content_hash.txt",
-      "prompt": "/ec/e8c7a8334d/0/prompt.txt"
-    },
-    {
-      "metadata": "/ec/e8c7a8334d/1/metadata.json",
-      "transcript": "/ec/e8c7a8334d/1/full.jsonl",
-      "content_hash": "/ec/e8c7a8334d/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/ec/e8c7a8334d/2/metadata.json",
-      "transcript": "/ec/e8c7a8334d/2/full.jsonl",
-      "content_hash": "/ec/e8c7a8334d/2/content_hash.txt",
-      "prompt": ""
-    }
-  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "881dceec5f4d",
   "token_usage": {
-    "input_tokens": 197,
-    "cache_creation_tokens": 116943,
-    "cache_read_tokens": 3381950,
-    "output_tokens": 31360,
-    "api_call_count": 77
-  }
+    "input_tokens": 108,
+    "cache_creation_tokens": 19007,
+    "cache_read_tokens": 313025,
+    "output_tokens": 2725,
+    "api_call_count": 13
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T12:02:00.458736Z",
+    "agent_lines": 1137,
+    "agent_removed": 331,
+    "human_added": 108,
+    "human_modified": 10,
+    "human_removed": 0,
+    "total_committed": 1255,
+    "total_lines_changed": 1643,
+    "agent_percentage": 89.34875228241023,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
 }
