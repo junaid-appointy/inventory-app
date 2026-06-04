@@ -1,0 +1,242 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "ece8c7a8334d",
+  "session_id": "ddfa5244-ec50-4d9a-9d9f-e3a862826789",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T12:02:03.78564Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 16,
+  "files_touched": [
+    "app.json",
+    "babel.config.js",
+    "package.json",
+    "src/db/database.ts",
+    "src/design/QtyStepper.tsx",
+    "src/design/TextField.tsx",
+    "src/hooks/useKeyboardHeight.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/DatePickerModal.tsx",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/CatalogPickerScreen.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/LoginScreen.tsx",
+    "src/modules/inventory/screens/OrdersScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/modules/inventory/screens/SettingsScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/syncService.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-haiku-4-5-20251001",
+  "turn_id": "b9c474d874a7",
+  "token_usage": {
+    "input_tokens": 263,
+    "cache_creation_tokens": 195274,
+    "cache_read_tokens": 8408692,
+    "output_tokens": 65936,
+    "api_call_count": 88
+  },
+  "session_metrics": {
+    "turn_count": 16
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T12:02:03.764555Z",
+    "agent_lines": 0,
+    "agent_removed": 116,
+    "human_added": 0,
+    "human_modified": 5,
+    "human_removed": 277,
+    "total_committed": 130,
+    "total_lines_changed": 398,
+    "agent_percentage": 29.145728643216078,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1130,
+      "user_lines_removed": 272,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "Build_And_Run.md": 183,
+        "app.json": 13,
+        "assets/appointy.svg": 14,
+        "generate-assets.js": 77,
+        "package.json": 5,
+        "src/design/QtyStepper.tsx": 12,
+        "src/design/TextField.tsx": 51,
+        "src/i18n/strings.ts": 46,
+        "src/modules/inventory/components/DatePickerModal.tsx": 164,
+        "src/modules/inventory/components/SyncRefreshButton.tsx": 98,
+        "src/modules/inventory/screens/AlertsScreen.tsx": 17,
+        "src/modules/inventory/screens/CatalogPickerScreen.tsx": 44,
+        "src/modules/inventory/screens/DispenseScreen.tsx": 15,
+        "src/modules/inventory/screens/HomeScreen.tsx": 17,
+        "src/modules/inventory/screens/OrdersScreen.tsx": 23,
+        "src/modules/inventory/screens/ReceivingScreen.tsx": 194,
+        "src/modules/inventory/screens/RegisterProductScreen.tsx": 44,
+        "src/modules/inventory/screens/SettingsScreen.tsx": 3,
+        "src/modules/inventory/screens/StockScreen.tsx": 27,
+        "src/sync/api.ts": 23,
+        "src/sync/cacheTime.ts": 35,
+        "src/sync/syncService.ts": 25
+      },
+      "user_removed_per_file": {
+        "app.json": 9,
+        "babel.config.js": 1,
+        "package.json": 1,
+        "src/design/QtyStepper.tsx": 5,
+        "src/design/TextField.tsx": 25,
+        "src/modules/inventory/components/DatePickerModal.tsx": 57,
+        "src/modules/inventory/screens/AlertsScreen.tsx": 9,
+        "src/modules/inventory/screens/CatalogPickerScreen.tsx": 27,
+        "src/modules/inventory/screens/DispenseScreen.tsx": 10,
+        "src/modules/inventory/screens/HomeScreen.tsx": 9,
+        "src/modules/inventory/screens/OrdersScreen.tsx": 14,
+        "src/modules/inventory/screens/ReceivingScreen.tsx": 63,
+        "src/modules/inventory/screens/RegisterProductScreen.tsx": 23,
+        "src/modules/inventory/screens/SettingsScreen.tsx": 5,
+        "src/modules/inventory/screens/StockScreen.tsx": 13,
+        "src/sync/api.ts": 1
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1130,
+      "agent_lines_removed": 272
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1132,
+      "agent_lines_removed": 270
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1177,
+      "agent_lines_removed": 271
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1173,
+      "agent_lines_removed": 271
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1174,
+      "agent_lines_removed": 272
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1174,
+      "agent_lines_removed": 272
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1182,
+      "agent_lines_removed": 280,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1184,
+      "agent_lines_removed": 280,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 10,
+      "user_lines_added": 9,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1187,
+      "agent_lines_removed": 286,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7,
+        "src/modules/inventory/screens/RegisterProductScreen.tsx": 2
+      }
+    },
+    {
+      "checkpoint_number": 11,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1198,
+      "agent_lines_removed": 291,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 12,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1225,
+      "agent_lines_removed": 318,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 13,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1227,
+      "agent_lines_removed": 318,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 14,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1226,
+      "agent_lines_removed": 318,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 15,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1226,
+      "agent_lines_removed": 318,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 16,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1254,
+      "agent_lines_removed": 341,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    }
+  ]
+}
