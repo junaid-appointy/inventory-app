@@ -232,14 +232,21 @@ export function ReceivingScreen({ route, navigation }: Props) {
 
   /** Add to order session */
   const addToSession = () => {
+    // Per-pack expiry → N qty=1 batches each with its own date.
+    // Single-expiry → one batch with the full qty.
+    const batches = perPackExpiry
+      ? perPackExpiries.map((d) => ({ qty: 1, expiry: d ? toISO(d) : null }))
+      : [{ qty, expiry: expiryDate }];
+    const totalQty = batches.reduce((s, b) => s + b.qty, 0);
+
     orderSession.addItem({
       barcode,
       productId: productId ?? null,
       name: resolvedName,
       category: product?.category ?? null,
       unit: resolvedUnit,
-      qty,
-      expiryDate,
+      qty: totalQty,
+      batches,
     });
     haptic.success();
     navigation.navigate('OrderSession');

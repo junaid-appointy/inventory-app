@@ -15,6 +15,10 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://ops-engine-dev-330299.bifrost.saastack.site",
+        "EXPO_PUBLIC_SITE_ID": "site-dev"
+      },
       "android": {
         "buildType": "apk"
       }

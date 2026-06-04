@@ -10,6 +10,11 @@ import { getSession } from '../../../auth/session';
 import { flushOnce, syncOrders } from '../../../sync/syncService';
 import { now } from '../../../db/database';
 
+export type OrderBatch = {
+  qty: number;
+  expiry: string | null; // ISO date, e.g. "2027-03-15"
+};
+
 export type OrderSessionItem = {
   barcode: string;
   /** Canonical product id when the user picked one from the catalog. Lets
@@ -19,8 +24,11 @@ export type OrderSessionItem = {
   name: string;
   category: string | null;
   unit: string | null;
+  /** Total qty across all batches. Kept in sync with sum(batches[].qty). */
   qty: number;
-  expiryDate: string | null; // ISO date, e.g. "2027-03-15"
+  /** One row per distinct expiry. Single-expiry receipts have one batch;
+   *  per-pack-expiry receipts have N batches of qty=1. */
+  batches: OrderBatch[];
 };
 
 type OrderSessionCtx = {
@@ -42,13 +50,23 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
   const [lastExpiry, setLastExpiry] = useState<string | null>(null);
 
   const addItem = useCallback((item: OrderSessionItem) => {
-    if (item.expiryDate) setLastExpiry(item.expiryDate);
+    // "Same as last" auto-fill uses the most recent non-null expiry the
+    // guard explicitly set, regardless of which batch it came from.
+    const lastNonNull = [...item.batches].reverse().find((b) => b.expiry)?.expiry;
+    if (lastNonNull) setLastExpiry(lastNonNull);
     setItems((prev) => {
-      // If same barcode already in session, merge quantities
       const existing = prev.find((i) => i.barcode === item.barcode);
       if (existing) {
+        // Merge by concatenating batches so distinct expiries survive a
+        // re-scan of the same product.
         return prev.map((i) =>
-          i.barcode === item.barcode ? { ...i, qty: i.qty + item.qty } : i,
+          i.barcode === item.barcode
+            ? {
+                ...i,
+                qty: i.qty + item.qty,
+                batches: [...i.batches, ...item.batches],
+              }
+            : i,
         );
       }
       return [...prev, item];
@@ -60,8 +78,18 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const updateItemQty = useCallback((barcode: string, qty: number) => {
+    // Collapses batches into a single batch carrying the earliest expiry —
+    // safe default since manual qty edits can't reconcile against multiple
+    // distinct expiries.
     setItems((prev) =>
-      prev.map((i) => (i.barcode === barcode ? { ...i, qty } : i)),
+      prev.map((i) => {
+        if (i.barcode !== barcode) return i;
+        const earliest = i.batches
+          .map((b) => b.expiry)
+          .filter((e): e is string => !!e)
+          .sort()[0] ?? null;
+        return { ...i, qty, batches: [{ qty, expiry: earliest }] };
+      }),
     );
   }, []);
 
@@ -82,30 +110,46 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
     await syncOrders().catch(() => {});
 
     for (const item of items) {
-      const receiptId = `rcp_${nanoid(12)}`;
-
       // Prefer the canonical-product link (set when guard picked from the
       // catalog); fall back to barcode lookup for legacy barcoded items.
       const orderItem = item.productId
         ? await findOpenItemByProductId(item.productId).catch(() => null)
         : await findOpenItemByBarcode(item.barcode).catch(() => null);
 
-      await enqueue('receipt', {
-        id: receiptId,
-        order_id: orderItem?.order_id ?? null,
-        order_item_id: orderItem?.id ?? null,
-        product_id: item.productId ?? null,
-        barcode: item.barcode,
-        product_name: item.name,
-        qty: item.qty,
-        expiry_date: item.expiryDate,
-        flagged: false,
-        scanned_at: now(),
-        performed_by: performedBy,
-        performed_by_name: performedByName,
-      });
+      // One receipt per batch so each distinct expiry survives end-to-end
+      // (outbox → backend → dashboard → Excel).
+      const batches = item.batches.length > 0 ? item.batches : [{ qty: item.qty, expiry: null }];
+      for (const batch of batches) {
+        const receiptId = `rcp_${nanoid(12)}`;
+        await enqueue('receipt', {
+          id: receiptId,
+          order_id: orderItem?.order_id ?? null,
+          order_item_id: orderItem?.id ?? null,
+          product_id: item.productId ?? null,
+          barcode: item.barcode,
+          product_name: item.name,
+          qty: batch.qty,
+          expiry_date: batch.expiry,
+          flagged: false,
+          scanned_at: now(),
+          performed_by: performedBy,
+          performed_by_name: performedByName,
+        });
 
-      // Update local order tracking if applicable
+        if (batch.expiry) {
+          await trackExpiry({
+            barcode: item.barcode,
+            productName: item.name,
+            expiryDate: batch.expiry,
+            qty: batch.qty,
+            receiptId,
+            performedBy,
+            performedByName,
+          });
+        }
+      }
+
+      // Update local order tracking if applicable (once per item — uses summed qty)
       if (orderItem) {
         await addReceivedQty(orderItem.id, item.qty);
       }
@@ -122,20 +166,7 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
         }).catch(() => {});
       }
 
-      // Track expiry date for future alerts
-      if (item.expiryDate) {
-        await trackExpiry({
-          barcode: item.barcode,
-          productName: item.name,
-          expiryDate: item.expiryDate,
-          qty: item.qty,
-          receiptId: receiptId,
-          performedBy,
-          performedByName,
-        });
-      }
-
-      // Roll qty into on-hand stock
+      // Roll qty into on-hand stock (once per item — total qty across batches)
       const existing = await findStock(item.barcode);
       if (existing) {
         await adjustOnHand(item.barcode, item.qty);

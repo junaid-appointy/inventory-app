@@ -13,7 +13,7 @@ import {
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { haptic } from '../../../utils/haptics';
-import { useOrderSession, OrderSessionItem } from '../components/OrderSessionContext';
+import { useOrderSession, OrderSessionItem, OrderBatch } from '../components/OrderSessionContext';
 import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OrderSession'>;
@@ -92,7 +92,7 @@ export function OrderSessionScreen({ navigation }: Props) {
               style={{ marginTop: 2 }}
             >
               {item.category ?? '—'}
-              {item.expiryDate ? ` · Exp: ${formatDate(item.expiryDate)}` : ''}
+              {formatBatches(item.batches)}
             </Text>
           </View>
           <View style={[styles.qtyBadge, { backgroundColor: palette.primaryContainer }]}>
@@ -177,6 +177,14 @@ export function OrderSessionScreen({ navigation }: Props) {
       </View>
     </View>
   );
+}
+
+function formatBatches(batches: OrderBatch[]): string {
+  const dated = batches.filter((b) => b.expiry);
+  if (dated.length === 0) return '';
+  const unique = Array.from(new Set(dated.map((b) => b.expiry as string))).sort();
+  if (unique.length === 1) return ` · Exp: ${formatDate(unique[0])}`;
+  return ` · ${unique.length} expiries (earliest ${formatDate(unique[0])})`;
 }
 
 function formatDate(iso: string): string {
