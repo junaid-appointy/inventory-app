@@ -1,0 +1,143 @@
+the development build is giving error, ! npx eas build --profile development --platform android : Startup failed, call to function 'NativeDatabase.execAsync' has been rejected. Caused by: duplicate column name : pack_size.
+
+---
+
+WARN  [catalog] sync failed: [Error: HTTP 401 on /api/inventory/canonical-products — Missing x-guard-token or admin Bearer token]
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+
+---
+
+scanning worked on this.
+
+---
+
+LOG  Loading react-native-worklets-core...
+ LOG  Worklets loaded successfully
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+
+---
+
+is the fix reliable, we will not have such issues furhter?
+
+---
+
+what is worklets core used for?
+
+---
+
+why we would need frame processors?
+
+---
+
+LOG  Loading react-native-worklets-core...
+ LOG  Worklets loaded successfully
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+
+---
+
+this issue was not there earlier , came after recent changes
+
+---
+
+WARN  The package /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/use-latest-callback contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).
+Reason: The resolution for "/Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/use-latest-callback" defined in "exports" is /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/use-latest-callback/esm.mjs, however this file does not exist. Falling back to file-based resolution.
+Android Bundling failed 11436ms index.ts (3228 modules)
+Unable to resolve "base64-js" from "node_modules/react-native/Libraries/Utilities/binaryToBase64.js"
+
+undefined
+
+---
+
+I had done rm -rf node modules and package lock json, then I did npm install, then this error is coming
+
+---
+
+WARN  The package /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/use-latest-callback contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).
+Reason: The resolution for "/Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/use-latest-callback" defined in "exports" is /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/use-latest-callback/esm.mjs, however this file does not exist. Falling back to file-based resolution.
+Android Bundling failed 18764ms index.ts (3213 modules)
+Unable to resolve "base64-js" from "node_modules/react-native/Libraries/Utilities/binaryToBase64.js"
+
+---
+
+issue fixed, but what was this no matches error: field-app on  feature/bill-mapping [$!+?⇡] via  v22.22.3 took 2m0s
+❯ watchman watch-del-all 2>/dev/null
+  rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-*
+  npx expo start -c
+{
+    "version": "2026.05.18.00",
+    "roots": [
+        "/Users/appointy/work/OfficeOperationsUmbrella"
+    ]
+}
+fish: No matches for wildcard '$TMPDIR/haste-map-*'. See `help language#wildcards-globbing`.
+rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-*
+                       ^~~~~~~~~~~~~~~~~~^
+
+---
+
+okay now I want to make the preview build to give to some early tester, the backend url will be of deployed backend, what changes or commands need to be run?
+
+---
+
+the backend url : https://ops-engine-dev-330299.bifrost.saastack.site
+
+---
+
+Running "npm ci --include=dev" in /home/expo/workingdir/build directory
+npm error code EUSAGE
+npm error
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+npm error
+npm error Missing: @react-native/metro-config@0.85.3 from lock file
+npm error Missing: @react-native/js-polyfills@0.85.3 from lock file
+npm error Missing: @react-native/metro-babel-transformer@0.85.3 from lock file
+npm error Missing: metro-config@0.84.4 from lock file
+npm error Missing: metro-runtime@0.84.4 from lock file
+npm error Missing: @react-native/babel-preset@0.85.3 from lock file
+npm error Missing: hermes-parser@0.33.3 from lock file
+npm error Missing: @react-native/babel-plugin-codegen@0.85.3 from lock file
+npm error Missing: babel-plugin-syntax-hermes-parser@0.33.3 from lock file
+npm error Missing: react-refresh@0.14.2 from lock file
+npm error Missing: @react-native/codegen@0.85.3 from lock file
+npm error Missing: hermes-estree@0.33.3 from lock file
+npm error Missing: metro@0.84.4 from lock file
+npm error Missing: metro-cache@0.84.4 from lock file
+npm error Missing: metro-core@0.84.4 from lock file
+npm error Missing: yaml@2.9.0 from lock file
+npm error Missing: accepts@2.0.0 from lock file
+npm error Missing: hermes-parser@0.35.0 from lock file
+npm error Missing: metro-babel-transformer@0.84.4 from lock file
+npm error Missing: metro-cache-key@0.84.4 from lock file
+npm error Missing: metro-file-map@0.84.4 from lock file
+npm error Missing: metro-resolver@0.84.4 from lock file
+npm error Missing: metro-source-map@0.84.4 from lock file
+npm error Missing: metro-symbolicate@0.84.4 from lock file
+npm error Missing: metro-transform-plugins@0.84.4 from lock file
+npm error Missing: metro-transform-worker@0.84.4 from lock file
+npm error Missing: mime-types@3.0.2 from lock file
+npm error Missing: negotiator@1.0.0 from lock file
+npm error Missing: hermes-estree@0.35.0 from lock file
+npm error Missing: https-proxy-agent@7.0.6 from lock file
+npm error Missing: agent-base@7.1.4 from lock file
+npm error Missing: ob1@0.84.4 from lock file
+npm error Missing: metro-minify-terser@0.84.4 from lock file
+npm error Missing: mime-db@1.54.0 from lock file
+npm error
+npm error Clean install a project
+npm error
+npm error Usage:
+npm error npm ci
+npm error
+npm error Options:
+npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+npm error [--no-bin-links] [--no-fund] [--dry-run]
+npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+npm error
+npm error aliases: clean-install, ic, install-clean, isntall-clean
+npm error
+npm error Run "npm help ci" for more info
+npm error A complete log of this run can be found in: /home/expo/.npm/_logs/2026-06-04T11_37_46_714Z-debug-0.log
