@@ -1,0 +1,262 @@
+lets give the app an icon and name and splash screen. the name of the app would be Auxilio. This is the primary color of the company : #92288E, pick the appointy logo SVG from the visitor-web repo in parent folder. name of svg : appointy.svg
+
+---
+
+Android Bundling failed 6604ms index.ts (1 module)
+Unable to resolve "react-native-worklets" from "node_modules/react-native-reanimated/src/initializers.ts"
+  1 | 'use strict';
+> 2 | import { executeOnUIRuntimeSync } from 'react-native-worklets';
+    |                                         ^
+  3 |
+  4 | import { IS_WEB, ReanimatedError, SHOULD_BE_USE_WEB } from './common';
+  5 | import { initSvgCssSupport } from './css/svg';
+
+Import stack:
+
+ node_modules/react-native-reanimated/src/initializers.ts
+ | import "react-native-worklets"
+
+ node_modules/react-native-reanimated/src/index.ts
+ | import "./initializers"
+
+ node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts
+ | import "react-native-reanimated"
+
+ node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/useAnimatedGesture.ts
+ | import "../reanimatedWrapper"
+
+ node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx
+ | import "./useAnimatedGesture"
+
+ node_modules/react-native-gesture-handler/src/index.ts
+ | import "./handlers/gestures/GestureDetector"
+
+ App.tsx
+ | import "react-native-gesture-handler"
+
+ index.ts
+ | import "./App"
+
+
+ | import "./index.ts"
+
+---
+
+field-app on  feature/bill-mapping [$!+?] via  v22.22.3 took 37m37s
+❯ npm run start:dev-client
+
+> field-app@0.1.0 start:dev-client
+> expo start --dev-client
+
+Starting project at /Users/appointy/work/OfficeOperationsUmbrella/field-app
+PluginError: Unable to resolve a valid config plugin for react-native-reanimated/plugin.
+• No "app.plugin.js" file found in react-native-reanimated/plugin: config plugins are typically exported from an "app.plugin.js" file in the package root.
+• main export of react-native-reanimated/plugin does not appear to be a config plugin: the following error was thrown when importing /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/react-native-reanimated/plugin/index.js: Cannot find module 'react-native-worklets/plugin'
+Require stack:
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/react-native-reanimated/plugin/index.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/utils/plugin-resolver.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/plugins/withStaticPlugin.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/plugins/withPlugins.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/index.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/prebuild/clearNativeFolder.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/utils/scheme.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/start/resolveOptions.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/start/index.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/bin/cli
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/bin/cli MODULE_NOT_FOUND
+Verify that react-native-reanimated/plugin includes a config plugin. If it does not, then remove the entry from plugins in your app config file. Learn more: https://docs.expo.dev/guides/config-plugins/
+Error: Cannot find module 'react-native-worklets/plugin'
+Require stack:
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/react-native-reanimated/plugin/index.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/utils/plugin-resolver.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/plugins/withStaticPlugin.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/plugins/withPlugins.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/@expo/config-plugins/build/index.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/prebuild/clearNativeFolder.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/utils/scheme.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/start/resolveOptions.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/src/start/index.js
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/node_modules/@expo/cli/build/bin/cli
+- /Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/expo/bin/cli
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+    at Function._load (node:internal/modules/cjs/loader:1216:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16)
+    at Object.<anonymous> (/Users/appointy/work/OfficeOperationsUmbrella/field-app/node_modules/react-native-reanimated/plugin/index.js:2:16)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+
+---
+
+continue
+
+---
+
+do I need to rebuild?
+
+---
+
+how many build profiles we have?
+
+---
+
+field-app on  feature/bill-mapping [$!+?] via  v22.22.3
+❯ ! npx eas build --profile development --platform android
+★ eas-cli@20.0.0 is now available.
+To upgrade, run:
+npm install -g eas-cli
+Proceeding with outdated version.
+
+Found eas-cli in your project dependencies.
+It's recommended to use the "cli.version" field in eas.json to enforce the eas-cli version for your project.
+Learn more: https://github.com/expo/eas-cli#enforcing-eas-cli-version-for-your-project
+
+Project config: Slug for project identified by "extra.eas.projectId" (field-app) does not match the "slug" field (auxilio). Learn more: https://expo.fyi/eas-project-id
+    Error: build command failed.
+
+---
+
+should I Generate a new Android Keystore?
+
+---
+
+In this mode, we won't be able to make sure that your credentials are valid.
+Double check that you're uploading valid files for your app otherwise you may encounter strange errors!
+When building for IOS make sure you've created your App ID on the Apple Developer Portal, that your App ID
+is in app.json as `bundleIdentifier`, and that the provisioning profile you
+upload matches that Team ID and App ID.
+
+? Path to the Keystore file. ›
+
+---
+
+› File does not exist.
+
+---
+
+✔ Select platform › Android
+✔ Which build profile do you want to configure? › development
+✔ Using build profile: development
+Android Credentials
+Project                 field-app
+Application Identifier  com.officeops.auxilio
+No credentials set up yet!
+
+? What do you want to do? › - Use arrow-keys. Return to submit.
+❯   Keystore: Manage everything needed to build your project
+    Google Service Account
+    Push Notifications (Legacy): Manage your FCM (Legacy) API Key
+    credentials.json: Upload/Download credentials between EAS servers and your local json
+    Go back
+    Exit
+
+---
+
+Configuration: Auxilio build credentials (Default)
+Keystore
+Type                JKS
+Key Alias           7e18fcdbba9655c3797de96512777b45
+MD5 Fingerprint     7E:46:D8:A3:33:F3:A5:93:01:21:18:6F:08:5C:F3:EC
+SHA1 Fingerprint    CC:3A:9E:B2:62:1D:BA:E1:50:3C:60:A0:83:DA:33:96:ED:63:B0:50
+SHA256 Fingerprint  1F:C1:71:38:E7:1C:14:04:27:D5:11:DD:80:61:0E:B9:0A:3B:98:D4:70:2B:34:0A:EC:EA:06:4E:41:22:56:49
+Updated             6 seconds ago
+
+? What do you want to do? › - Use arrow-keys. Return to submit.
+    Set up a new keystore
+    Change default keystore
+    Download existing keystore
+    Delete your keystore
+❯   Go back
+
+---
+
+❯ ! npx eas build --profile development --platform android
+★ eas-cli@20.0.0 is now available.
+To upgrade, run:
+npm install -g eas-cli
+Proceeding with outdated version.
+
+Found eas-cli in your project dependencies.
+It's recommended to use the "cli.version" field in eas.json to enforce the eas-cli version for your project.
+Learn more: https://github.com/expo/eas-cli#enforcing-eas-cli-version-for-your-project
+
+Resolved "development" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
+No environment variables with visibility "Plain text" and "Sensitive" found for the "development" environment on EAS.
+
+
+
+✔ Using remote Android credentials (Expo server)
+✔ Using Keystore from configuration: Auxilio build credentials (default)
+
+Compressing project files and uploading to EAS Build. Learn more: https://expo.fyi/eas-build-archive
+✔ Uploaded to EAS 2s
+✔ Computed project fingerprint
+
+See logs: https://expo.dev/accounts/junaid-appointy/projects/field-app/builds/a08099a6-8c12-497e-9ec6-3d468c3c6a97
+
+Waiting for build to complete. You can press Ctrl+C to exit.
+✖ Build failed
+
+🤖 Android build failed:
+Unknown error. See logs of the Install dependencies build phase for more information.
+
+---
+
+Running "npm ci --include=dev" in /home/expo/workingdir/build directory
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: react-native-reanimated@4.1.7
+npm error Found: react-native-worklets@0.9.1
+npm error node_modules/react-native-worklets
+npm error   react-native-worklets@"^0.9.1" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer react-native-worklets@"0.5 - 0.8" from react-native-reanimated@4.1.7
+npm error node_modules/react-native-reanimated
+npm error   react-native-reanimated@"~4.1.1" from the root project
+npm error   peerOptional react-native-reanimated@"*" from react-native-vision-camera@4.7.3
+npm error   node_modules/react-native-vision-camera
+npm error     react-native-vision-camera@"^4.7.3" from the root project
+npm error
+npm error Conflicting peer dependency: react-native-worklets@0.8.3
+npm error node_modules/react-native-worklets
+npm error   peer react-native-worklets@"0.5 - 0.8" from react-native-reanimated@4.1.7
+npm error   node_modules/react-native-reanimated
+npm error     react-native-reanimated@"~4.1.1" from the root project
+npm error     peerOptional react-native-reanimated@"*" from react-native-vision-camera@4.7.3
+npm error     node_modules/react-native-vision-camera
+npm error       react-native-vision-camera@"^4.7.3" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/expo/.npm/_logs/2026-06-04T07_44_44_998Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/expo/.npm/_logs/2026-06-04T07_44_44_998Z-debug-0.log
+npm ci --include=dev exited with non-zero code: 1
+
+---
+
+in the field-app on each tab press, I see a lot of api calls, is it necessary or just a bad flow that we have implemented?
+
+---
+
+yes
+
+---
+
+the input fields still get hidden behind the keyboard when the keyboard opens in field-app
+
+---
+
+no the input fields are still hidden behind the keyboard, what I want is that when a keyboard opens, all the items of the app move above it. should we decreease the height of the viewfield of the app, or make the items scrollable, I do not want the UX to go bad. tell me best solution.
+
+---
+
+the screen content are not scrollable or visible when the keyboard opens, the fix did not work. in the field-app
