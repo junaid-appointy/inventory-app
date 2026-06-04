@@ -1,0 +1,13 @@
+11:24:34.187  [HTTP<-]  [200]  GET     /api/admin/auth/config      6ms  | req=2e5595
+11:30:38.649  [ ERR! ]  batch-processor        | [BatchProcessor] Batch cycle error
+Error: Connection terminated unexpectedly
+at <anonymous> (/Users/[REDACTED]/work/OfficeOperationsUmbrella/office-ops-engine/node_modules/pg-pool/index.js:45:11)
+at processTicksAndRejections (native:7:39)
+
+---
+
+in the field app, when the backend is having some issues, at the place of barcode, it shows sync error. we need to make the app such reliable that even without the backend functioning, it should be able to do its flows, and when the backend is active, or the user presses on the refresh/resync icon, the whole data is reliably sent and ingested and updated by the backend that is our ops engine.
+
+---
+
+All the text in the field app should have proper translation mapped in both languages. also the buttons at the bottom and the space we have added for keyboard, even when the keyboard is not there, the bottom buttons are leaving a lot of space below them. lets not show the descriptive text below what's this after item scan. also the message below the item name when it is selected from catalog, the message needs to be : Barcode will be linked to <product name selected> . Also once an item is selected. lets freeze the category and unit and unit value. as it would have been alrady mapped in the selected product by the admin. only in custom items we will allow it. when the refresh icon is pressed animate it(rotate it) and if sync is successful, remove the red dot.
