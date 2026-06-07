@@ -1,0 +1,13 @@
+in the development build and local server : Android Bundled 1724ms index.ts (3232 modules)
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+
+---
+
+Android Bundled 1724ms index.ts (3232 modules)
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
+Android Bundled 94ms index.ts (1 module)
+Android Bundled 292ms index.ts (1 module)
+ ERROR  [session/invalid-output-configuration: Failed to configure the Camera Session because the output/stream configurations are invalid!]
