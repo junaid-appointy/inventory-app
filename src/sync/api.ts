@@ -97,6 +97,7 @@ export type RemoteStockRow = {
   unit: string | null;
   on_hand: number;
   threshold: number;
+  pack_size: number | null;
 };
 
 export type RemoteProduct = {
@@ -123,6 +124,10 @@ export type RemoteCanonicalProduct = {
   pack_size: number;
   created_at: string;
   updated_at: string;
+  /** True iff at least one barcode is mapped to this product server-side.
+   *  Drives the "hide already-taken products" filter when registering a
+   *  brand-new barcode on the field-app. */
+  has_barcode?: boolean;
 };
 
 export const api = {

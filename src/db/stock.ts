@@ -7,6 +7,7 @@ export type StockRow = {
   name: string;
   category: string | null;
   unit: string | null;
+  pack_size: number | null;
   on_hand: number;
   threshold: number;
   updated_at: number;
@@ -43,20 +44,28 @@ export async function upsertStock(row: {
   name: string;
   category: string | null;
   unit: string | null;
+  pack_size?: number | null;
   on_hand?: number;
   threshold?: number;
 }): Promise<void> {
   const db = await getDb();
+  // COALESCE on pack_size so a later receipt that doesn't know the pack
+  // size doesn't blank out a value learned from the catalog/registration.
   await db.runAsync(
-    `INSERT INTO stock_levels (barcode, name, category, unit, on_hand, threshold, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, on_hand, threshold, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(barcode) DO UPDATE SET
-       name=excluded.name, category=excluded.category, unit=excluded.unit, updated_at=excluded.updated_at`,
+       name=excluded.name,
+       category=excluded.category,
+       unit=excluded.unit,
+       pack_size=COALESCE(excluded.pack_size, stock_levels.pack_size),
+       updated_at=excluded.updated_at`,
     [
       row.barcode,
       row.name,
       row.category,
       row.unit,
+      row.pack_size ?? null,
       row.on_hand ?? 0,
       row.threshold ?? 0,
       now(),
@@ -74,21 +83,23 @@ export async function syncStockFromRemote(row: {
   name: string;
   category: string | null;
   unit: string | null;
+  pack_size: number | null;
   on_hand: number;
   threshold: number;
 }): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO stock_levels (barcode, name, category, unit, on_hand, threshold, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, on_hand, threshold, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(barcode) DO UPDATE SET
        name=excluded.name,
        category=excluded.category,
        unit=excluded.unit,
+       pack_size=excluded.pack_size,
        on_hand=excluded.on_hand,
        threshold=excluded.threshold,
        updated_at=excluded.updated_at`,
-    [row.barcode, row.name, row.category, row.unit, row.on_hand, row.threshold, now()]
+    [row.barcode, row.name, row.category, row.unit, row.pack_size, row.on_hand, row.threshold, now()]
   );
 }
 
@@ -104,6 +115,7 @@ export async function replaceStockFromRemote(
     name: string;
     category: string | null;
     unit: string | null;
+    pack_size: number | null;
     on_hand: number;
     threshold: number;
   }>,

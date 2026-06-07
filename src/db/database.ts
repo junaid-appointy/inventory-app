@@ -6,7 +6,7 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
  * Current schema version. Bump this and add a migration block in
  * `runMigrations()` whenever you need additive schema changes.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 6;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
@@ -71,6 +71,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       name TEXT NOT NULL,
       category TEXT,
       unit TEXT,
+      pack_size REAL,
       on_hand REAL NOT NULL DEFAULT 0,
       threshold REAL NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL
@@ -165,6 +166,7 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
         hsn_code TEXT,
         unit TEXT NOT NULL DEFAULT 'pcs',
         pack_size REAL NOT NULL DEFAULT 1,
+        has_barcode INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
 
@@ -204,6 +206,36 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     }
     await db.execAsync(`PRAGMA user_version = 4;`);
     version = 4;
+  }
+
+  if (version < 5) {
+    // Mirror the canonical product's pack_size onto stock so the Stock
+    // screen can render "{on_hand} × {pack_size} {unit}" without an extra
+    // join at read time.
+    const cols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(stock_levels)',
+    );
+    const hasPackSize = cols.some((c) => c.name === 'pack_size');
+    if (!hasPackSize) {
+      await db.execAsync(`ALTER TABLE stock_levels ADD COLUMN pack_size REAL;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 5;`);
+    version = 5;
+  }
+
+  if (version < 6) {
+    // Track whether each canonical product already has a barcode mapped
+    // server-side. The register-new-barcode suggestion list filters these
+    // out so two barcodes can't map to the same product (current rule).
+    const cols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(canonical_products)',
+    );
+    const hasBarcodeCol = cols.some((c) => c.name === 'has_barcode');
+    if (!hasBarcodeCol) {
+      await db.execAsync(`ALTER TABLE canonical_products ADD COLUMN has_barcode INTEGER NOT NULL DEFAULT 0;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 6;`);
+    version = 6;
   }
 }
 

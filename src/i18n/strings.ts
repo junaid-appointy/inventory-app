@@ -208,6 +208,7 @@ export const STR = {
   add:                ['Add',                                'जोड़ें'],
   edit:               ['Edit',                               'बदलें'],
   noExpiry:           ['No expiry date',                     'कोई एक्सपायरी नहीं'],
+  noBarcodeYet:       ['No barcode yet',                     'अभी बारकोड नहीं'],
   perPackExpiry:      ['Different expiry per pack',          'हर पैक की अलग एक्सपायरी'],
   pack:               ['Pack',                               'पैक'],
   expiryDate:         ['Expiry date',                        'एक्सपायरी की तारीख'],

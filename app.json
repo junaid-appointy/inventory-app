@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "auxilio",
-    "icon": "./assets/icon-192x192.png",
+    "icon": "./assets/icon.png",
     "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"
@@ -35,14 +35,14 @@
       ],
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon-192x192.png",
-        "backgroundColor": "#92288E"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
       }
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.officeops.auxilio",
-      "icon": "./assets/icon-180x180.png",
+      "icon": "./assets/icon.png",
       "infoPlist": {
         "NSCameraUsageDescription": "Auxilio uses the camera to scan barcodes at the gate."
       }

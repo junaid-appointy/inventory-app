@@ -42,6 +42,7 @@ export function AlertsScreen({ navigation }: Props) {
           name: r.name,
           category: r.category,
           unit: r.unit,
+          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
           on_hand: Number(r.on_hand),
           threshold: Number(r.threshold),
         })),
@@ -139,7 +140,9 @@ export function AlertsScreen({ navigation }: Props) {
                     color={palette.onSurfaceVariant}
                     style={{ marginTop: 2 }}
                   >
-                    {item.on_hand} {item.unit ?? ''} {t('onHand')} · threshold {item.threshold}
+                    {item.on_hand}
+                    {item.pack_size != null && item.pack_size !== 1 ? ` × ${item.pack_size}` : ''}
+                    {item.unit ? ` ${item.unit}` : ''} {t('onHand')} · threshold {item.threshold}
                   </Text>
                 </View>
                 <StatusPill label={label} tone={tone} />

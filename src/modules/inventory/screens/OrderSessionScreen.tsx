@@ -92,6 +92,7 @@ export function OrderSessionScreen({ navigation }: Props) {
               style={{ marginTop: 2 }}
             >
               {item.category ?? '—'}
+              {formatPack(item)}
               {formatBatches(item.batches)}
             </Text>
           </View>
@@ -177,6 +178,16 @@ export function OrderSessionScreen({ navigation }: Props) {
       </View>
     </View>
   );
+}
+
+function formatPack(item: OrderSessionItem): string {
+  const hasPack = item.packSize != null && item.packSize !== 1;
+  if (!hasPack && !item.unit) return '';
+  const parts: string[] = [];
+  parts.push(String(item.qty));
+  if (hasPack) parts.push(`× ${item.packSize}`);
+  if (item.unit) parts.push(item.unit);
+  return ` · ${parts.join(' ')}`;
 }
 
 function formatBatches(batches: OrderBatch[]): string {

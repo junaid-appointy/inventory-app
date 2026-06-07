@@ -209,6 +209,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
         name: resolvedName,
         category: product?.category ?? null,
         unit: resolvedUnit,
+        pack_size: resolvedPackSize,
         on_hand: qty,
         threshold: 0,
       });
@@ -245,6 +246,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
       name: resolvedName,
       category: product?.category ?? null,
       unit: resolvedUnit,
+      packSize: resolvedPackSize,
       qty: totalQty,
       batches,
     });
@@ -336,32 +338,55 @@ export function ReceivingScreen({ route, navigation }: Props) {
               </Text>
             ) : null}
           </View>
-          {/* Barcode shown as a chip-style row so guards can confirm
-              the scan was right at a glance. Bigger font + monospace +
-              letter-spacing makes it readable without focusing in. */}
-          <View
-            style={{
-              marginTop: spacing.sm,
-              alignSelf: 'flex-start',
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.xs,
-              borderRadius: radius.sm,
-              borderWidth: 1,
-              borderColor: palette.outlineVariant,
-              backgroundColor: palette.surfaceContainerLowest,
-            }}
-          >
-            <Text
-              variant="titleMedium"
-              color={palette.onSurface}
+          {/* Barcode chip. For real (scanned or already-learned) barcodes
+              we surface the code so guards can confirm at a glance. For
+              an unmapped catalog pick we don't dump the synthetic
+              `catalog_<product_id>` id — it's meaningless to the user.
+              We just label the row "No barcode yet" so it's obvious why
+              there's nothing to read. */}
+          {barcode.startsWith('catalog_') ? (
+            <View
               style={{
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                letterSpacing: 1.5,
+                marginTop: spacing.sm,
+                alignSelf: 'flex-start',
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs,
+                borderRadius: radius.sm,
+                borderWidth: 1,
+                borderStyle: 'dashed',
+                borderColor: palette.outlineVariant,
+                backgroundColor: palette.surfaceContainerLowest,
               }}
             >
-              {barcode}
-            </Text>
-          </View>
+              <Text variant="labelMedium" color={palette.onSurfaceVariant}>
+                {t('noBarcodeYet')}
+              </Text>
+            </View>
+          ) : (
+            <View
+              style={{
+                marginTop: spacing.sm,
+                alignSelf: 'flex-start',
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs,
+                borderRadius: radius.sm,
+                borderWidth: 1,
+                borderColor: palette.outlineVariant,
+                backgroundColor: palette.surfaceContainerLowest,
+              }}
+            >
+              <Text
+                variant="titleMedium"
+                color={palette.onSurface}
+                style={{
+                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                  letterSpacing: 1.5,
+                }}
+              >
+                {barcode}
+              </Text>
+            </View>
+          )}
           {expected !== null ? (
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
               {t('expectedShort')} {expected} · {alreadyIn} {t('alreadyReceived')}

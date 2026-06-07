@@ -40,6 +40,7 @@ export function HomeScreen({ navigation }: Props) {
           name: r.name,
           category: r.category,
           unit: r.unit,
+          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
           on_hand: Number(r.on_hand),
           threshold: Number(r.threshold),
         })),

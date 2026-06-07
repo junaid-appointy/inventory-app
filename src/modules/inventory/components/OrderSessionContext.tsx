@@ -24,6 +24,8 @@ export type OrderSessionItem = {
   name: string;
   category: string | null;
   unit: string | null;
+  /** Pack size (unit value) for display: "qty × packSize unit". */
+  packSize?: number | null;
   /** Total qty across all batches. Kept in sync with sum(batches[].qty). */
   qty: number;
   /** One row per distinct expiry. Single-expiry receipts have one batch;
@@ -176,6 +178,7 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
           name: item.name,
           category: item.category,
           unit: item.unit,
+          pack_size: item.packSize ?? null,
           on_hand: item.qty,
           threshold: 0,
         });

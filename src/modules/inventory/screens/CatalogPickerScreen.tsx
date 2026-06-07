@@ -13,6 +13,7 @@ import {
 import { SyncRefreshButton } from '../components/SyncRefreshButton';
 import {
   CanonicalProduct,
+  findBarcodeForProduct,
   learnBarcode,
   listCanonicalProducts,
 } from '../../../db/catalog';
@@ -174,7 +175,17 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
         // Non-fatal: the receipt flow has its own learning step.
       }
     }
-    const barcode = incomingBarcode ?? `catalog_${product.product_id}`;
+    // No-barcode pick path: if this product already has a real barcode
+    // learned, reuse it so the receipt rolls into the same stock row and
+    // the user sees the actual barcode (not `catalog_…`). Only fall back
+    // to the synthetic id when nothing is mapped yet — the format is
+    // stable per product_id so a later real-barcode learn keeps history
+    // and stock aligned.
+    let barcode = incomingBarcode;
+    if (!barcode) {
+      const existing = await findBarcodeForProduct(product.product_id);
+      barcode = existing ?? `catalog_${product.product_id}`;
+    }
     navigation.push('Receiving', {
       barcode,
       productId: product.product_id,

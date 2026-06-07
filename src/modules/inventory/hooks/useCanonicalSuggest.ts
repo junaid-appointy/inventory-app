@@ -30,8 +30,18 @@ function similarity(a: string, b: string): number {
  *  - `catalog`    — the full local cache, exposed so the caller can show
  *                   "N items in catalog" diagnostics
  *  - `reload()`   — re-reads from SQLite (call after a sync)
+ *
+ * Options:
+ *  - `excludeMapped` — drop products that already have a barcode mapped
+ *    on the server. Used by RegisterProduct + CatalogPicker when a new
+ *    physical barcode is being registered, to enforce the
+ *    one-barcode-per-product rule.
  */
-export function useCanonicalSuggest(query: string) {
+export function useCanonicalSuggest(
+  query: string,
+  opts: { excludeMapped?: boolean } = {},
+) {
+  const { excludeMapped = false } = opts;
   const [catalog, setCatalog] = useState<CanonicalProduct[]>([]);
 
   const reload = useMemo(
@@ -47,16 +57,17 @@ export function useCanonicalSuggest(query: string) {
   }, [reload]);
 
   const { matches, suggestion } = useMemo(() => {
+    const pool = excludeMapped ? catalog.filter((p) => !p.has_barcode) : catalog;
     const q = query.trim().toLowerCase();
     if (!q) {
       return {
-        matches: [...catalog].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)),
+        matches: [...pool].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)),
         suggestion: null as CanonicalProduct | null,
       };
     }
 
     type Scored = { p: CanonicalProduct; score: number };
-    const scored: Scored[] = catalog.map((p) => {
+    const scored: Scored[] = pool.map((p) => {
       const name = p.canonical_name.toLowerCase();
       let score = 0;
       if (name === q) score = 3;
@@ -78,7 +89,7 @@ export function useCanonicalSuggest(query: string) {
     if (hits.length === 0) {
       let best: CanonicalProduct | null = null;
       let bestScore = 0;
-      for (const p of catalog) {
+      for (const p of pool) {
         const s = similarity(query, p.canonical_name);
         if (s > bestScore) { bestScore = s; best = p; }
       }
@@ -86,7 +97,7 @@ export function useCanonicalSuggest(query: string) {
     }
 
     return { matches: hits, suggestion: bestSuggestion };
-  }, [catalog, query]);
+  }, [catalog, query, excludeMapped]);
 
   return { matches, suggestion, catalog, reload };
 }

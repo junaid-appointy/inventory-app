@@ -38,6 +38,16 @@ function countColor(row: StockRow): string {
   return '#66BB6A';
 }
 
+/** Format the pack-size hint that sits under the on-hand count.
+ *  pack_size null/1 → just the unit ("g"); otherwise "× 100 g". */
+function packSizeLabel(row: StockRow): string {
+  const unit = row.unit ?? '';
+  if (row.pack_size == null || row.pack_size === 1) return unit;
+  // Trim trailing zero on whole numbers (100 not 100.0) but keep "1.5".
+  const ps = Number.isInteger(row.pack_size) ? String(row.pack_size) : String(row.pack_size);
+  return unit ? `× ${ps} ${unit}` : `× ${ps}`;
+}
+
 const STATUS_OPTIONS: FilterOption[] = [
   { key: 'All', label: 'All Status' },
   { key: 'In Stock', label: 'In Stock' },
@@ -70,6 +80,7 @@ export function StockScreen({ navigation }: Props) {
           name: r.name,
           category: r.category,
           unit: r.unit,
+          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
           on_hand: Number(r.on_hand),
           threshold: Number(r.threshold),
         })),
@@ -204,9 +215,9 @@ export function StockScreen({ navigation }: Props) {
                 <Text variant="titleLarge" color={countColor(item)} style={{ fontWeight: '700' }}>
                   {item.on_hand}
                 </Text>
-                {item.unit ? (
+                {packSizeLabel(item) ? (
                   <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'right' }}>
-                    {item.unit}
+                    {packSizeLabel(item)}
                   </Text>
                 ) : null}
               </View>
@@ -252,7 +263,7 @@ const styles = StyleSheet.create({
   },
   list: { padding: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xxxl },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  countCol: { minWidth: 44, alignItems: 'flex-end' },
+  countCol: { minWidth: 64, alignItems: 'flex-end' },
   empty: { padding: spacing.xxl },
 });
 

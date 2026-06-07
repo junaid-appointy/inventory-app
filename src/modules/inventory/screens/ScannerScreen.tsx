@@ -1,4 +1,4 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Keyboard, List, X, Zap, ZapOff } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -63,6 +63,12 @@ export function ScannerScreen({ navigation }: Props) {
   const t = useT();
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
+  // Only keep the camera session alive while this screen has focus.
+  // Native-stack keeps prior screens mounted on push, so without this
+  // gate the camera stays active behind Receiving / RegisterProduct
+  // and re-entering Scanner throws session/invalid-output-configuration
+  // because the session is already running.
+  const isFocused = useIsFocused();
   const [torch, setTorch] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState('');
@@ -130,6 +136,7 @@ export function ScannerScreen({ navigation }: Props) {
           productId: canonical.product_id,
           productName: canonical.canonical_name,
           unit: canonical.unit,
+          packSize: canonical.pack_size,
         });
         return;
       }
@@ -137,7 +144,10 @@ export function ScannerScreen({ navigation }: Props) {
       // Second check: legacy local products table
       const local = await findProduct(raw).catch(() => null);
       if (local) {
-        navigation.push('Receiving', { barcode: raw });
+        navigation.push('Receiving', {
+          barcode: raw,
+          packSize: local.pack_size ?? undefined,
+        });
         return;
       }
 
@@ -289,7 +299,7 @@ export function ScannerScreen({ navigation }: Props) {
       <Camera
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive
+        isActive={isFocused}
         torch={torch ? 'on' : 'off'}
         codeScanner={codeScanner}
         resizeMode="cover"

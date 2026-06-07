@@ -57,7 +57,12 @@ export function RegisterProductScreen({ route, navigation }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const { matches, suggestion, catalog, reload } = useCanonicalSuggest(name);
+  // Reached only when the scanned barcode is unmapped. Hide canonical
+  // products that already have a barcode so the guard can't accidentally
+  // map a second barcode to the same product (one-barcode-per-product).
+  const { matches, suggestion, catalog, reload } = useCanonicalSuggest(name, {
+    excludeMapped: true,
+  });
 
   // Force-refresh the catalog every time this screen is shown — otherwise
   // products created in the dashboard after the last periodic sync won't

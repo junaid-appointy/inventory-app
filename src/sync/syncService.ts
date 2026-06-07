@@ -129,6 +129,7 @@ export async function syncCanonicalProducts(): Promise<{ remote: number; written
       hsn_code: r.hsn_code,
       unit: r.unit,
       pack_size: r.pack_size,
+      has_barcode: r.has_barcode ? 1 : 0,
       updated_at: Date.now(),
     }));
     const result = await replaceCanonicalProducts(local);

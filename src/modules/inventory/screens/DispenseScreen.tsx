@@ -249,7 +249,9 @@ export function DispenseScreen({ route, navigation }: Props) {
               {selected.name}
             </Text>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
-              {selected.on_hand} {selected.unit ?? ''} {t('onHand')}
+              {selected.on_hand}
+              {selected.pack_size != null && selected.pack_size !== 1 ? ` × ${selected.pack_size}` : ''}
+              {selected.unit ? ` ${selected.unit}` : ''} {t('onHand')}
             </Text>
           </Card>
 
