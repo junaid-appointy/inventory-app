@@ -1,0 +1,1 @@
+can I set up build process in this device, Eas cloud build takes so much time, my plan is to build here and share the file or enable debugging mode on my phone and transfer updates to my mobile via this device, tell me the benefits, issues and possibilities
