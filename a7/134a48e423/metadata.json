@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "a7134a48e423",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app.json",
+    "assets/adaptive-icon.png",
+    "assets/icon-120x120.png",
+    "assets/icon-144x144.png",
+    "assets/icon-152x152.png",
+    "assets/icon-167x167.png",
+    "assets/icon-180x180.png",
+    "assets/icon-192x192.png",
+    "assets/icon-72x72.png",
+    "assets/icon-96x96.png",
+    "assets/icon.png",
+    "assets/splash.png",
+    "generate-assets.js",
+    "src/db/catalog.ts",
+    "src/db/database.ts",
+    "src/db/stock.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/OrderSessionContext.tsx",
+    "src/modules/inventory/hooks/useCanonicalSuggest.ts",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/CatalogPickerScreen.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/OrderSessionScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/ScannerScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/syncService.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a7/134a48e423/0/metadata.json",
+      "transcript": "/a7/134a48e423/0/full.jsonl",
+      "content_hash": "/a7/134a48e423/0/content_hash.txt",
+      "prompt": "/a7/134a48e423/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 436,
+    "cache_creation_tokens": 1584345,
+    "cache_read_tokens": 82280093,
+    "output_tokens": 230907,
+    "api_call_count": 309
+  }
+}
