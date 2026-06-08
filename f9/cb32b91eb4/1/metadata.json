@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "f9cb32b91eb4",
+  "session_id": "cf33a9e4-321d-4d8d-944d-ed9a10516566",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-08T07:57:21.457226Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/db/database.ts",
+    "src/db/lots.ts",
+    "src/design/CompactStepper.tsx",
+    "src/design/index.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/BatchEditor.tsx",
+    "src/modules/inventory/components/LotPicker.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/EditStockScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/syncService.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "e942adb4f1ce",
+  "token_usage": {
+    "input_tokens": 218,
+    "cache_creation_tokens": 700334,
+    "cache_read_tokens": 31043938,
+    "output_tokens": 128451,
+    "api_call_count": 178
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-08T07:57:21.428418Z",
+    "agent_lines": 805,
+    "agent_removed": 555,
+    "human_added": 0,
+    "human_modified": 214,
+    "human_removed": 389,
+    "total_committed": 1019,
+    "total_lines_changed": 1963,
+    "agent_percentage": 69.28171166581762,
+    "metric_version": 2
+  }
+}

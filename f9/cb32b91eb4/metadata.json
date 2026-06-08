@@ -3,7 +3,7 @@
   "checkpoint_id": "f9cb32b91eb4",
   "strategy": "manual-commit",
   "branch": "feature/bill-mapping",
-  "checkpoints_count": 9,
+  "checkpoints_count": 10,
   "files_touched": [
     "src/db/database.ts",
     "src/db/lots.ts",
@@ -26,13 +26,19 @@
       "transcript": "/f9/cb32b91eb4/0/full.jsonl",
       "content_hash": "/f9/cb32b91eb4/0/content_hash.txt",
       "prompt": "/f9/cb32b91eb4/0/prompt.txt"
+    },
+    {
+      "metadata": "/f9/cb32b91eb4/1/metadata.json",
+      "transcript": "/f9/cb32b91eb4/1/full.jsonl",
+      "content_hash": "/f9/cb32b91eb4/1/content_hash.txt",
+      "prompt": "/f9/cb32b91eb4/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 412,
-    "cache_creation_tokens": 586248,
-    "cache_read_tokens": 59976483,
-    "output_tokens": 160954,
-    "api_call_count": 301
+    "input_tokens": 630,
+    "cache_creation_tokens": 1286582,
+    "cache_read_tokens": 91020421,
+    "output_tokens": 289405,
+    "api_call_count": 479
   }
 }
