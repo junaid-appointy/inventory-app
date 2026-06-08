@@ -15,6 +15,7 @@
 import { config } from '../config';
 import { clearSession, getSession } from '../auth/session';
 import { getDeviceId } from '../utils/device';
+import { markApiNetworkError, markApiSuccess } from './networkState';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body?: string) {
@@ -55,7 +56,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const sentToken = session?.token ?? null;
   if (sentToken) headers['X-Guard-Token'] = sentToken;
 
-  const res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+  } catch (err) {
+    // Network-layer failure (DNS, socket, no route). The radio is likely
+    // down — let the network monitor know so the banner flips quickly.
+    markApiNetworkError();
+    throw err;
+  }
+  // Got a response, even an error one — the server was reachable, so we
+  // are definitively online. Anything 401/404/500 is unrelated to net.
+  markApiSuccess();
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const body = text.slice(0, 500);
@@ -170,16 +182,23 @@ export const api = {
     language: 'hindi' | 'english';
   }> {
     const deviceId = await getDeviceId();
-    const res = await fetch(`${config.apiBaseUrl}/api/guard/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        guardName: input.guardName,
-        pin: input.pin,
-        deviceId,
-        deviceName: 'field-app',
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${config.apiBaseUrl}/api/guard/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guardName: input.guardName,
+          pin: input.pin,
+          deviceId,
+          deviceName: 'field-app',
+        }),
+      });
+    } catch (err) {
+      markApiNetworkError();
+      throw err;
+    }
+    markApiSuccess();
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       // Pull the server's reason out of `{ "error": "..." }` if present so

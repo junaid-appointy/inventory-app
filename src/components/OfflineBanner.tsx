@@ -1,69 +1,101 @@
 /**
- * Global "Offline — showing saved data" banner.
+ * Top connectivity banner.
  *
- * Mounted once above the navigator in `RootNavigator`. Shows whenever
- * `Network.getNetworkStateAsync().isConnected === false`, hides as soon
- * as connectivity returns. Stays out of the way otherwise (zero height
- * when online — no layout shift).
+ * Two visual states:
+ *   • Offline  → red bar, "Offline — showing saved data". Stays until
+ *                connectivity returns.
+ *   • Back online (transient) → green bar, "Back online". Auto-hides
+ *                after a few seconds. Only appears as the transition
+ *                from offline → online, not on steady-state online.
  *
- * We listen via `addNetworkStateListener` rather than polling so the
- * banner appears within ~1 s of the radio losing signal. As a safety
- * net we also poll once on mount because the OS event isn't guaranteed
- * to fire on cold start.
+ * The signal comes from `sync/networkState`, which combines:
+ *   1. Recent successful API calls (strongest signal — beats the radio).
+ *   2. `expo-network`'s probe + listener as a fallback.
+ *
+ * That fixes the previous bug where mid-range Android devices returned
+ * `isConnected === undefined` and got stuck on the red banner forever.
  */
 
-import { WifiOff } from 'lucide-react-native';
-import * as Network from 'expo-network';
-import React, { useEffect, useState } from 'react';
+import { WifiOff, Wifi } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '../design';
 import { useT } from '../i18n';
 import { useTheme } from '../theme';
+import {
+  isOnline as readIsOnline,
+  startNetworkProbe,
+  subscribeNetworkState,
+} from '../sync/networkState';
+
+const BACK_ONLINE_VISIBLE_MS = 2500;
 
 export function OfflineBanner() {
   const t = useT();
   const { palette } = useTheme();
-  const [offline, setOffline] = useState<boolean>(false);
+  const [online, setOnline] = useState<boolean>(readIsOnline());
+  const [showBackOnline, setShowBackOnline] = useState(false);
+  const prevOnline = useRef<boolean>(online);
+  const backOnlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let unsubscribe: { remove: () => void } | null = null;
-
-    // One initial probe so we don't miss the "boot offline" case (the
-    // event listener only fires on transitions).
-    Network.getNetworkStateAsync()
-      .then((s) => setOffline(!s.isConnected))
-      .catch(() => {});
-
-    try {
-      unsubscribe = Network.addNetworkStateListener((state) => {
-        setOffline(!state.isConnected);
-      });
-    } catch {
-      // Older expo-network builds may not have the listener API; the
-      // initial probe + the per-request 401 path are good enough.
-    }
-
+    startNetworkProbe();
+    const unsub = subscribeNetworkState(setOnline);
     return () => {
-      if (unsubscribe) {
-        try { unsubscribe.remove(); } catch { /* swallow */ }
-      }
+      unsub();
+      if (backOnlineTimer.current) clearTimeout(backOnlineTimer.current);
     };
   }, []);
 
-  if (!offline) return null;
+  // Detect the offline → online transition and flash the green banner.
+  useEffect(() => {
+    const wasOffline = prevOnline.current === false;
+    if (wasOffline && online) {
+      setShowBackOnline(true);
+      if (backOnlineTimer.current) clearTimeout(backOnlineTimer.current);
+      backOnlineTimer.current = setTimeout(
+        () => setShowBackOnline(false),
+        BACK_ONLINE_VISIBLE_MS,
+      );
+    }
+    prevOnline.current = online;
+  }, [online]);
 
-  return (
-    <SafeAreaView edges={['top']} style={{ backgroundColor: palette.error }}>
-      <View style={styles.bar}>
-        <WifiOff size={16} color={palette.onError} strokeWidth={2.4} />
-        <Text variant="labelLarge" color={palette.onError} style={{ marginLeft: 8 }}>
-          {t('offlineBanner')}
-        </Text>
-      </View>
-    </SafeAreaView>
-  );
+  if (!online) {
+    return (
+      <SafeAreaView edges={['top']} style={{ backgroundColor: palette.error }}>
+        <View style={styles.bar}>
+          <WifiOff size={16} color={palette.onError} strokeWidth={2.4} />
+          <Text variant="labelLarge" color={palette.onError} style={{ marginLeft: 8 }}>
+            {t('offlineBanner')}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (showBackOnline) {
+    // Reuse the warn palette as a soft "good" fallback if the theme
+    // doesn't define an explicit success color. Looks distinct from the
+    // red offline state without needing a new token. (Most themes here
+    // use warm yellows; if you later add a `success` token, swap this in.)
+    const successBg = (palette as { success?: string }).success ?? '#16A34A';
+    const successFg = '#FFFFFF';
+    return (
+      <SafeAreaView edges={['top']} style={{ backgroundColor: successBg }}>
+        <View style={styles.bar}>
+          <Wifi size={16} color={successFg} strokeWidth={2.4} />
+          <Text variant="labelLarge" color={successFg} style={{ marginLeft: 8 }}>
+            Back online
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({

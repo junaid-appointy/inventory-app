@@ -1,7 +1,7 @@
-import { CalendarDays, CalendarOff, X } from 'lucide-react-native';
+import { CalendarDays, CalendarOff, Trash2, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { CompactStepper, IconButton, radius, spacing, Text } from '../../../design';
+import { CompactStepper, radius, spacing, Text } from '../../../design';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
@@ -121,22 +121,44 @@ export function BatchEditor({
       {sortedBatches.map(({ b, originalIdx }, visualIdx) => {
         const urgency = expiryUrgency(b.expiry);
         const colors = urgencyColors(urgency, palette);
+        const canRemove = batches.length > 1;
         return (
           <View
             key={originalIdx}
             style={[
-              styles.row,
+              styles.card,
               {
                 backgroundColor: palette.surfaceContainerLowest,
                 borderColor: palette.outlineVariant,
               },
             ]}
           >
-            <View style={{ flex: 1, gap: spacing.md }}>
-              {/* Qty row */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ minWidth: 32 }}>
-                  {labelForRowNumber(visualIdx)}
+            {/* ─── Left rail: batch number, centered ─── */}
+            <View
+              style={[
+                styles.rail,
+                styles.leftRail,
+                {
+                  backgroundColor: palette.surfaceContainerLow,
+                  borderRightColor: palette.outlineVariant,
+                },
+              ]}
+            >
+              <Text
+                variant="titleMedium"
+                color={palette.onSurfaceVariant}
+                style={{ fontWeight: '700' }}
+              >
+                {visualIdx + 1}
+              </Text>
+            </View>
+
+            {/* ─── Middle: the actual fields ─── */}
+            <View style={styles.middle}>
+              {/* Qty section */}
+              <View style={{ gap: spacing.xs }}>
+                <Text variant="labelMedium" color={palette.onSurfaceVariant} style={styles.sectionLabel}>
+                  HOW MANY?
                 </Text>
                 {divisible ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
@@ -174,6 +196,11 @@ export function BatchEditor({
                 )}
               </View>
 
+              {/* Expiry section */}
+              <View style={{ gap: spacing.xs }}>
+                <Text variant="labelMedium" color={palette.onSurfaceVariant} style={styles.sectionLabel}>
+                  EXPIRES
+                </Text>
               {/* Expiry row — three visual states:
                   • undefined → two chips, user must pick
                   • null      → "No expiry" confirmed chip with ×
@@ -298,10 +325,42 @@ export function BatchEditor({
                   </Pressable>
                 </Pressable>
               )}
+              </View>
             </View>
 
-            {batches.length > 1 && (
-              <IconButton Icon={X} onPress={() => removeByOriginal(originalIdx)} />
+            {/* ─── Right rail: delete button, centered. Only when more
+                 than one batch exists (can't delete the last one). ─── */}
+            {canRemove ? (
+              <Pressable
+                onPress={() => removeByOriginal(originalIdx)}
+                android_ripple={{ color: palette.outlineVariant, borderless: false }}
+                style={[
+                  styles.rail,
+                  styles.rightRail,
+                  {
+                    backgroundColor: palette.surfaceContainerLow,
+                    borderLeftColor: palette.outlineVariant,
+                  },
+                ]}
+                hitSlop={6}
+              >
+                <Trash2 size={20} color={palette.error} strokeWidth={2.2} />
+              </Pressable>
+            ) : (
+              // Keep the layout symmetrical even when the trash isn't shown,
+              // so a single batch doesn't look unbalanced — render a muted
+              // rail with no glyph.
+              <View
+                style={[
+                  styles.rail,
+                  styles.rightRail,
+                  {
+                    backgroundColor: palette.surfaceContainerLow,
+                    borderLeftColor: palette.outlineVariant,
+                    opacity: 0.5,
+                  },
+                ]}
+              />
             )}
           </View>
         );
@@ -334,14 +393,41 @@ export function BatchEditor({
   );
 }
 
+const RAIL_WIDTH = 44;
+
 const styles = StyleSheet.create({
-  row: {
+  /** Outer card — wraps the three lanes (left rail, middle content, right rail).
+   *  Border + clip so the rails sit flush with the card edges. */
+  card: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: spacing.md,
+    alignItems: 'stretch',
     borderRadius: radius.md,
     borderWidth: 1,
-    gap: spacing.sm,
+    overflow: 'hidden',
+  },
+  /** Slim vertical lane. Used for both the batch number (left) and the
+   *  trash button (right) — same dimensions so the card looks symmetrical. */
+  rail: {
+    width: RAIL_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leftRail: {
+    borderRightWidth: 1,
+  },
+  rightRail: {
+    borderLeftWidth: 1,
+  },
+  /** The main fields lane. Padding lives here instead of on the card so
+   *  the rails can paint edge-to-edge. */
+  middle: {
+    flex: 1,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  /** Small uppercase labels above each control. Cheap visual hierarchy. */
+  sectionLabel: {
+    letterSpacing: 0.6,
   },
   chipRow: {
     flexDirection: 'row',

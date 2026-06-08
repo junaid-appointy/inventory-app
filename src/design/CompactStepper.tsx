@@ -24,6 +24,10 @@ export function CompactStepper({ value, onChange, min = 0, max }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef<TextInput>(null);
+  // See QtyStepper for the rationale — onBlur commit racing onPress bump
+  // makes the stepper appear frozen after an inline edit.
+  const liveValue = useRef(value);
+  useEffect(() => { liveValue.current = value; });
 
   useEffect(() => {
     if (!editing) setDraft(String(value));
@@ -39,7 +43,15 @@ export function CompactStepper({ value, onChange, min = 0, max }: Props) {
 
   const bump = (delta: number) => {
     haptic.tap();
-    onChange(clamp(value + delta));
+    if (editing) {
+      const parsed = clamp(parseInt(draft, 10));
+      if (!Number.isNaN(parsed)) liveValue.current = parsed;
+      setDraft(String(liveValue.current));
+      setEditing(false);
+    }
+    const next = clamp(liveValue.current + delta);
+    liveValue.current = next;
+    onChange(next);
   };
 
   const startEdit = () => {
@@ -50,7 +62,9 @@ export function CompactStepper({ value, onChange, min = 0, max }: Props) {
   };
 
   const commit = () => {
+    if (!editing) return;
     const next = clamp(parseInt(draft, 10));
+    liveValue.current = next;
     onChange(next);
     setDraft(String(next));
     setEditing(false);
@@ -84,7 +98,11 @@ export function CompactStepper({ value, onChange, min = 0, max }: Props) {
             setDraft(t);
             if (t.trim() === '' || t === '-') return;
             const parsed = parseInt(t, 10);
-            if (!Number.isNaN(parsed)) onChange(clamp(parsed));
+            if (!Number.isNaN(parsed)) {
+              const clamped = clamp(parsed);
+              liveValue.current = clamped;
+              onChange(clamped);
+            }
           }}
           onBlur={commit}
           onSubmitEditing={commit}

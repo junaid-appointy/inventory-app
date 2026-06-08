@@ -25,6 +25,12 @@ export function QtyStepper({ value, onChange, min = 1, max, decimal = true }: Pr
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef<TextInput>(null);
+  // Tracks the freshest value across closures. Without this, +/- tapped
+  // right after an inline edit reads a stale `value` prop and the parent
+  // sees its onChange clobbered by the trailing onBlur commit, which
+  // looks to the user like the stepper has frozen.
+  const liveValue = useRef(value);
+  useEffect(() => { liveValue.current = value; });
 
   useEffect(() => {
     if (!editing) setDraft(String(value));
@@ -40,7 +46,15 @@ export function QtyStepper({ value, onChange, min = 1, max, decimal = true }: Pr
 
   const bump = (delta: number) => {
     haptic.tap();
-    onChange(clamp(value + delta));
+    if (editing) {
+      const parsed = clamp(parseValue(draft));
+      if (!Number.isNaN(parsed)) liveValue.current = parsed;
+      setDraft(String(liveValue.current));
+      setEditing(false);
+    }
+    const next = clamp(liveValue.current + delta);
+    liveValue.current = next;
+    onChange(next);
   };
 
   const startEdit = () => {
@@ -68,11 +82,19 @@ export function QtyStepper({ value, onChange, min = 1, max, decimal = true }: Pr
       return;
     }
     const parsed = parseValue(text);
-    if (!Number.isNaN(parsed)) onChange(clamp(parsed));
+    if (!Number.isNaN(parsed)) {
+      const clamped = clamp(parsed);
+      liveValue.current = clamped;
+      onChange(clamped);
+    }
   };
 
   const commit = () => {
+    // Guard: if bump() already exited edit mode, don't re-dispatch the
+    // pre-bump draft over the bumped value.
+    if (!editing) return;
     const next = clamp(parseValue(draft));
+    liveValue.current = next;
     onChange(next);
     setDraft(String(next));
     setEditing(false);
