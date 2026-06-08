@@ -1,0 +1,34 @@
+the dispense screen still shows wrong info, like item quantity is 4, and item is g, and 500 unit size of each, but still shows taken 2 of 2g or 3 of 4g.
+
+---
+
+the count is still wrong, I have an item with different expiry dates, 4 items, each in gram unit, each unit value is 500, the screen shows, how many, and below it is a pick from batch, the numbers and the info shown is out of sync, in the normal counter, if I increase it, it shows, taken 1 of 1 x 500g, but actually there is 4. and if I keep on increasing it says taken 3 of 3 or 4 of 4x500 g. now the bug in pick from batch option, when I increase the counter from buttons in pick from batch, it shows, taken 2 of 1x500 g or 4 of 500 g and the upper counter which says how many stays at 1. all of the information should be correct and in sync, not like a confusing seperate values. in field-app
+
+---
+
+I think it is becoming congested, let just show the data differently? what do you suggest?
+
+---
+
+okay option A, but make the info more noticeable and good to look at.
+
+---
+
+can we improve the UI and UX of expiry flow, like batch expiry and single expiry and no expiry, everywhere, like in all screen where we are putting or changing expiry. what do you suggest?
+
+---
+
+okayw we will keep the display format like this as standard : 15 Aug 2026
+no we would not give preset of 3 month and others, let users pick exact date. 
+yes , we will have the urgency colors. 
+also we will have relative time hint also. 
+Yes, sort batches by date automatically.
+rest we do like option A.
+
+---
+
+the no expiry buttons does nothing, it is not working.
+
+---
+
+why is the expiry date written like this in the admin dashboard and excel sheet: 2@2026-08-29, 2@2026-11-29
