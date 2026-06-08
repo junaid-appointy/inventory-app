@@ -3,9 +3,11 @@
   "checkpoint_id": "4e680cf3877b",
   "strategy": "manual-commit",
   "branch": "feature/bill-mapping",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
     "src/components/OfflineBanner.tsx",
+    "src/design/CompactStepper.tsx",
+    "src/design/QtyStepper.tsx",
     "src/modules/inventory/components/BatchEditor.tsx",
     "src/sync/api.ts",
     "src/sync/networkState.ts"
@@ -16,13 +18,19 @@
       "transcript": "/4e/680cf3877b/0/full.jsonl",
       "content_hash": "/4e/680cf3877b/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/4e/680cf3877b/1/metadata.json",
+      "transcript": "/4e/680cf3877b/1/full.jsonl",
+      "content_hash": "/4e/680cf3877b/1/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
-    "input_tokens": 53,
-    "cache_creation_tokens": 373828,
-    "cache_read_tokens": 13532261,
-    "output_tokens": 22341,
-    "api_call_count": 38
+    "input_tokens": 83,
+    "cache_creation_tokens": 439446,
+    "cache_read_tokens": 14465058,
+    "output_tokens": 35422,
+    "api_call_count": 58
   }
 }
