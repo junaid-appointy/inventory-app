@@ -10,6 +10,7 @@ export { Chip } from './Chip';
 export { ListItem } from './ListItem';
 export { StatusPill } from './StatusPill';
 export { QtyStepper } from './QtyStepper';
+export { CompactStepper } from './CompactStepper';
 export { Skeleton } from './Skeleton';
 
 // Reactive palette hook — use this in screens instead of the static `palette`

@@ -5,6 +5,7 @@ import { markFailed, markSending, markSent, nextBatch, pendingCount, recoverOrph
 import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
 import { upsertOrdersFromRemote } from '../db/orders';
 import { replaceStockFromRemote } from '../db/stock';
+import { pruneLotsToBarcodes, replaceLotsLocal } from '../db/lots';
 import { api } from './api';
 import { getSession } from '../auth/session';
 import { cache, type CacheKey } from './cacheStatus';
@@ -94,6 +95,18 @@ async function refreshOne(key: CacheKey): Promise<void> {
           threshold: Number(r.threshold),
         })),
       );
+      // Mirror per-barcode lots locally too. Empty array clears the
+      // local lots for that barcode (matches server having no batches).
+      for (const r of remote) {
+        await replaceLotsLocal(
+          r.barcode,
+          (r.lots ?? []).map((l) => ({
+            expiry_date: l.expiry_date,
+            qty: Number(l.qty),
+          })),
+        );
+      }
+      await pruneLotsToBarcodes(remote.map((r) => r.barcode));
     } else if (key === 'orders') {
       await syncOrders();
     } else if (key === 'catalog') {

@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { enqueue } from '../../../db/outbox';
 import { trackExpiry } from '../../../db/expiry';
 import { adjustOnHand, findStock, upsertStock } from '../../../db/stock';
+import { addLotLocal } from '../../../db/lots';
 import { findProduct } from '../../../db/products';
 import { addReceivedQty, findOpenItemByBarcode } from '../../../db/orders';
 import { findOpenItemByProductId, learnBarcode } from '../../../db/catalog';
@@ -137,6 +138,10 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
           performed_by: performedBy,
           performed_by_name: performedByName,
         });
+
+        // Mirror the lot locally so EditStock / Dispense see the new
+        // batch immediately, without waiting for the next sync round-trip.
+        await addLotLocal(item.barcode, batch.expiry, batch.qty);
 
         if (batch.expiry) {
           await trackExpiry({

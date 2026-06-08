@@ -245,6 +245,18 @@ export const STR = {
   // Dispense
   quantityToTake:     ['How many to take?',                  'कितने लेने हैं?'],
 
+  // Batches (per-expiry lots)
+  batches:            ['Batches',                            'बैच'],
+  batchesSub:         ['One row per expiry',                 'हर एक्सपायरी की एक पंक्ति'],
+  addBatch:           ['+ Add another expiry batch',         '+ और एक्सपायरी जोड़ें'],
+  removeBatch:        ['Remove batch',                       'बैच हटाएँ'],
+  totalLabel:         ['Total',                              'कुल'],
+  pickFromBatch:      ['Pick from batch',                    'इस बैच से लें'],
+  suggested:          ['suggested',                          'सुझाया'],
+  inStock:            ['in stock',                           'स्टॉक में'],
+  takenTotal:         ['Taken',                              'लिया'],
+  ofTotal:            ['of',                                 'का'],
+
   // Errors
   errorOccurred:      ['Something went wrong',               'कुछ गड़बड़ हुई'],
   tryAgain:           ['Try again',                          'फिर कोशिश करें'],

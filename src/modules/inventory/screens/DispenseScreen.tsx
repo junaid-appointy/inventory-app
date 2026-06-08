@@ -25,6 +25,8 @@ import {
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
 import { adjustOnHand, findStock, listStock, StockRow, statusFor } from '../../../db/stock';
+import { decrementLotsLocal, listLots } from '../../../db/lots';
+import { LotAllocation, LotPicker, suggestFEFO } from '../components/LotPicker';
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
@@ -98,6 +100,13 @@ export function DispenseScreen({ route, navigation }: Props) {
   // again with network.
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('verifying');
   const [verifiedOnHand, setVerifiedOnHand] = useState<number | null>(null);
+  /** Per-lot availability + current allocation. FEFO-ordered (earliest
+   *  first). The big QtyStepper drives `qty` which re-suggests FEFO
+   *  across these rows; users can override per-lot via the LotPicker
+   *  (shown only when there are 2+ lots — single-lot products skip the
+   *  picker). Total taken = sum(allocation.take). */
+  const [allocation, setAllocation] = useState<LotAllocation[]>([]);
+  const [availability, setAvailability] = useState<{ expiry: string | null; available: number }[]>([]);
 
   const categoryOptions = useMemo<FilterOption[]>(() => {
     const cats = new Set(all.map((r) => r.category).filter(Boolean) as string[]);
@@ -142,7 +151,34 @@ export function DispenseScreen({ route, navigation }: Props) {
         // Clamp qty to the verified ceiling. If the user had a stale
         // higher qty in mind (e.g. local cache said 10, server says 7),
         // drop to the new max so they can't accidentally submit over.
-        if (qty > remoteQty) setQty(Math.max(1, remoteQty));
+        const clampedQty = qty > remoteQty ? Math.max(1, remoteQty) : qty;
+        if (clampedQty !== qty) setQty(clampedQty);
+
+        // Build the lot picker state. Prefer the remote lots (verified
+        // truth); fall back to the local lots cache when the server
+        // returned no breakdown. Final fallback for legacy rows that
+        // never received a lot write (existed before the lots
+        // migration): synthesise a single lot from on_hand +
+        // nearest_expiry so dispense still works on existing inventory.
+        const remoteLots = remote.lots ?? [];
+        let lots = remoteLots.length > 0
+          ? remoteLots
+          : (await listLots(selected.barcode)).map((l) => ({
+              expiry_date: l.expiry_date,
+              qty: Number(l.qty),
+            }));
+        if (lots.length === 0 && remoteQty > 0) {
+          lots = [{
+            expiry_date: remote.nearest_expiry ?? null,
+            qty: remoteQty,
+          }];
+        }
+        const nextAvailability = lots.map((l) => ({
+          expiry: l.expiry_date,
+          available: Number(l.qty),
+        }));
+        setAvailability(nextAvailability);
+        setAllocation(suggestFEFO(nextAvailability, clampedQty));
       } catch (err) {
         if (cancelled) return;
         // 404: the server has no record of this barcode (might be a
@@ -183,16 +219,42 @@ export function DispenseScreen({ route, navigation }: Props) {
       .slice(0, 30);
   }, [all, query, selected, category, statusFilter]);
 
+  const totalTaken = useMemo(
+    () => allocation.reduce((s, l) => s + (l.take || 0), 0),
+    [allocation],
+  );
+
+  const totalAvailable = useMemo(
+    () => availability.reduce((s, l) => s + l.available, 0),
+    [availability],
+  );
+
+  /** Re-suggest FEFO whenever the user bumps the big "How many?" stepper.
+   *  This intentionally overwrites manual per-lot edits — the per-lot
+   *  picker is for fine-tuning AFTER the total is set. */
+  useEffect(() => {
+    if (availability.length === 0) return;
+    setAllocation(suggestFEFO(availability, qty));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qty]);
+
   const submit = async () => {
-    if (!selected) return;
+    if (!selected || totalTaken <= 0) return;
     const session = getSession();
     setSaving(true);
     try {
+      const picks = allocation
+        .filter((l) => l.take > 0)
+        .map((l) => ({ expiry_date: l.expiry, qty: l.take }));
       await enqueue('dispense', {
         id: `dsp_${nanoid(12)}`,
         barcode: selected.barcode,
         product_name: selected.name,
-        qty,
+        qty: totalTaken,
+        // Soft-nudge model: server records what the guard actually
+        // picked rather than enforcing FEFO. Empty picks → server
+        // falls back to FEFO (the suggestion the user accepted).
+        lot_picks: picks,
         reason,
         // taken_by is now always the logged-in guard — no separate
         // free-text "who" field. Removes one mandatory input from the
@@ -202,7 +264,12 @@ export function DispenseScreen({ route, navigation }: Props) {
         performed_by: session?.guardId ?? null,
         performed_by_name: session?.guardName ?? null,
       });
-      await adjustOnHand(selected.barcode, -qty);
+      await decrementLotsLocal(
+        selected.barcode,
+        totalTaken,
+        picks.map((p) => ({ expiry_date: p.expiry_date, qty: p.qty })),
+      );
+      await adjustOnHand(selected.barcode, -totalTaken);
       await flushOnce().catch(() => {});
       haptic.success();
       navigation.goBack();
@@ -352,19 +419,33 @@ export function DispenseScreen({ route, navigation }: Props) {
             </Text>
           </Card>
 
+          {/* Primary "How many?" stepper — the familiar input. Max is
+              the verified total available across all lots so the user
+              can't ask for more than exists. */}
           <View style={styles.qtySection}>
             <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
               {t('howMany').toUpperCase()}
             </Text>
-            {/* Max is the JIT-verified count when we have it; otherwise
-                the cached value. Stepper itself enforces the ceiling. */}
             <QtyStepper
               value={qty}
               onChange={setQty}
               min={1}
-              max={(verifiedOnHand ?? selected.on_hand) || undefined}
+              max={(totalAvailable || verifiedOnHand || selected.on_hand) || undefined}
             />
           </View>
+
+          {/* Per-lot picker. Only worth showing when there are 2+ lots —
+              for the common single-lot case the big stepper above is the
+              whole story. FEFO is highlighted as "← suggested"; guard
+              can override per-row. */}
+          {availability.length > 1 && (
+            <LotPicker
+              lots={allocation}
+              onChange={setAllocation}
+              desiredQty={qty}
+              unit={selected.unit ?? null}
+            />
+          )}
 
           <View>
             <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ marginBottom: spacing.sm }}>
@@ -399,7 +480,7 @@ export function DispenseScreen({ route, navigation }: Props) {
             label={t('confirm')}
             onPress={submit}
             loading={saving}
-            disabled={verifyStatus !== 'ok'}
+            disabled={verifyStatus !== 'ok' || totalTaken <= 0}
             size="lg"
             fullWidth
             leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}

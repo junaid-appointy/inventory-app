@@ -10,6 +10,7 @@ import {
   Text,
 } from '../../../design';
 import { listStock, statusFor, StockRow, replaceStockFromRemote } from '../../../db/stock';
+import { pruneLotsToBarcodes, replaceLotsLocal } from '../../../db/lots';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -97,6 +98,16 @@ export function StockScreen({ navigation }: Props) {
         threshold: Number(r.threshold),
       })),
     );
+    for (const r of remote) {
+      await replaceLotsLocal(
+        r.barcode,
+        (r.lots ?? []).map((l) => ({
+          expiry_date: l.expiry_date,
+          qty: Number(l.qty),
+        })),
+      );
+    }
+    await pruneLotsToBarcodes(remote.map((r) => r.barcode));
   }, []);
 
   const readLocal = useCallback(async () => {

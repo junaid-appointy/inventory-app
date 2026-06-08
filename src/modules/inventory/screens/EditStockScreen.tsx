@@ -1,12 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Calendar, Check } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -15,13 +14,12 @@ import {
   AppBar,
   Button,
   Card,
-  QtyStepper,
-  radius,
   spacing,
   Text,
 } from '../../../design';
 import { getSession } from '../../../auth/session';
 import { correctStockLocal, findStock, getNearestExpiry, StockRow } from '../../../db/stock';
+import { listLots, replaceLotsLocal } from '../../../db/lots';
 import { enqueue } from '../../../db/outbox';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme';
@@ -29,8 +27,8 @@ import { RootStackParamList } from '../../../navigation/types';
 import { api, ApiError } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
-import { DatePickerModal } from '../components/DatePickerModal';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
+import { BatchEditor, Batch } from '../components/BatchEditor';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditStock'>;
 
@@ -43,14 +41,13 @@ function formatForDisplay(iso: string): string {
   }
 }
 
-function toISO(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
-/** Earliest date out of a list; nulls ignored. Returns null if all null. */
-function earliestISO(dates: (Date | null)[]): string | null {
-  const isos = dates.filter((d): d is Date => !!d).map(toISO).sort();
-  return isos[0] ?? null;
+/** Earliest non-null ISO date out of a list of batches. */
+function earliestExpiry(batches: Batch[]): string | null {
+  const sorted = batches
+    .map((b) => b.expiry)
+    .filter((e): e is string => !!e)
+    .sort();
+  return sorted[0] ?? null;
 }
 
 /**
@@ -84,18 +81,9 @@ export function EditStockScreen({ route, navigation }: Props) {
   const [row, setRow] = useState<StockRow | null>(null);
   const [originalQty, setOriginalQty] = useState<number>(0);
   const [originalExpiry, setOriginalExpiry] = useState<string | null>(null);
-  const [qty, setQty] = useState<number>(0);
-  const [expiryDateObj, setExpiryDateObj] = useState<Date | null>(null);
-  const [noExpiry, setNoExpiry] = useState<boolean>(false);
+  const [originalBatches, setOriginalBatches] = useState<Batch[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
 
-  // Per-pack expiry. Mirrors ReceivingScreen: off by default; appears only
-  // when qty > 1 and not noExpiry. When on, expand into N rows so the
-  // guard can set a different expiry on each pack.
-  const [perPackExpiry, setPerPackExpiry] = useState(false);
-  const [perPackExpiries, setPerPackExpiries] = useState<(Date | null)[]>([]);
-  const [editingPackIdx, setEditingPackIdx] = useState<number | null>(null);
-
-  const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // JIT verification — fetch the server's authoritative on_hand +
@@ -113,18 +101,20 @@ export function EditStockScreen({ route, navigation }: Props) {
     (async () => {
       const r = await findStock(barcode);
       const exp = await getNearestExpiry(barcode);
+      const lots = await listLots(barcode);
       if (cancelled) return;
       if (!r) return;
       setRow(r);
       setOriginalQty(r.on_hand);
       setOriginalExpiry(exp);
-      setQty(r.on_hand);
-      if (exp) {
-        setExpiryDateObj(new Date(exp));
-        setNoExpiry(false);
-      } else {
-        setNoExpiry(true);
-      }
+      // Seed batches from local lots. If lots are empty (legacy row from
+      // before the lots migration, or fresh barcode), synthesise one
+      // batch carrying the entire on_hand at the cached nearest_expiry.
+      const seed: Batch[] = lots.length > 0
+        ? lots.map((l) => ({ expiry: l.expiry_date, qty: Number(l.qty) }))
+        : [{ expiry: exp, qty: r.on_hand || 1 }];
+      setOriginalBatches(seed);
+      setBatches(seed);
     })();
     return () => { cancelled = true; };
   }, [barcode]);
@@ -174,56 +164,26 @@ export function EditStockScreen({ route, navigation }: Props) {
     if (qtyDiffers || expiryDiffers) setVerifyStatus('conflict');
   }, [verifyStatus, row, serverQty, serverExpiry, originalQty, originalExpiry]);
 
-  // Keep the per-pack list in sync with qty when toggle is on. Seed new
-  // rows with the bulk expiry so the guard only edits the differing ones.
-  useEffect(() => {
-    if (!perPackExpiry) return;
-    setPerPackExpiries((prev) => {
-      const n = Math.max(1, Math.floor(qty));
-      if (prev.length === n) return prev;
-      const next = [...prev];
-      while (next.length < n) next.push(expiryDateObj);
-      while (next.length > n) next.pop();
-      return next;
-    });
-  }, [perPackExpiry, qty, expiryDateObj]);
-
-  // Auto-disable per-pack when the toggle's preconditions go away
-  // (qty drops to 1, or guard checks "no expiry").
-  useEffect(() => {
-    if (perPackExpiry && (qty <= 1 || noExpiry)) {
-      setPerPackExpiry(false);
-    }
-  }, [perPackExpiry, qty, noExpiry]);
-
-  /** Single new_expiry sent to server when per-pack is off. */
-  const newSingleExpiry = useMemo(() => {
-    if (noExpiry || perPackExpiry || !expiryDateObj) return null;
-    return toISO(expiryDateObj);
-  }, [expiryDateObj, noExpiry, perPackExpiry]);
-
-  /** Array of expiries sent when per-pack is on. */
-  const newExpiriesArray = useMemo<string[] | null>(() => {
-    if (noExpiry || !perPackExpiry) return null;
-    return perPackExpiries.map((d) => (d ? toISO(d) : '')).filter((s) => s.length > 0);
-  }, [noExpiry, perPackExpiry, perPackExpiries]);
+  /** Total qty across all batches — replaces the old single qty stepper. */
+  const qty = useMemo(() => batches.reduce((s, b) => s + (b.qty || 0), 0), [batches]);
 
   /** Whatever ends up as the locally-tracked "nearest" expiry. */
-  const localNearestExpiry = useMemo(() => {
-    if (noExpiry) return null;
-    if (perPackExpiry) return earliestISO(perPackExpiries);
-    return expiryDateObj ? toISO(expiryDateObj) : null;
-  }, [noExpiry, perPackExpiry, perPackExpiries, expiryDateObj]);
+  const localNearestExpiry = useMemo(() => earliestExpiry(batches), [batches]);
 
+  /** True iff batches differ from what was loaded — qty or per-batch
+   *  expiry. Counts re-orderings as no change. */
   const changed = useMemo(() => {
     if (!row) return false;
-    if (qty !== originalQty) return true;
-    if (localNearestExpiry !== originalExpiry) return true;
-    // Per-pack with same nearest as original still counts as a change if
-    // any pack carries a date different from the bulk default.
-    if (perPackExpiry) return true;
-    return false;
-  }, [row, qty, originalQty, localNearestExpiry, originalExpiry, perPackExpiry]);
+    const a = [...batches]
+      .map((b) => `${b.expiry ?? ''}@${b.qty}`)
+      .sort()
+      .join('|');
+    const b = [...originalBatches]
+      .map((b) => `${b.expiry ?? ''}@${b.qty}`)
+      .sort()
+      .join('|');
+    return a !== b;
+  }, [row, batches, originalBatches]);
 
   const packDisplay = row && row.pack_size != null && row.pack_size !== 1 && row.unit
     ? `${row.pack_size} ${row.unit}`
@@ -248,17 +208,13 @@ export function EditStockScreen({ route, navigation }: Props) {
     if (serverQty === null) return;
     haptic.tap();
     setOriginalQty(serverQty);
-    setQty(serverQty);
     setOriginalExpiry(serverExpiry ?? null);
-    if (serverExpiry) {
-      setExpiryDateObj(new Date(serverExpiry));
-      setNoExpiry(false);
-    } else {
-      setExpiryDateObj(null);
-      setNoExpiry(true);
-    }
-    setPerPackExpiry(false);
-    setPerPackExpiries([]);
+    // We don't have the server's per-batch breakdown in the conflict
+    // banner state — collapse into a single batch carrying the
+    // server's nearest expiry. The guard can split it again after.
+    const seed: Batch[] = [{ expiry: serverExpiry ?? null, qty: serverQty }];
+    setOriginalBatches(seed);
+    setBatches(seed);
     setVerifyStatus('ok');
   };
 
@@ -281,7 +237,13 @@ export function EditStockScreen({ route, navigation }: Props) {
     const session = getSession();
     setSaving(true);
     try {
+      const cleanBatches = batches.filter((b) => b.qty > 0);
+      // Optimistic local writes: stock cache + lots mirror.
       await correctStockLocal(barcode, qty, localNearestExpiry);
+      await replaceLotsLocal(
+        barcode,
+        cleanBatches.map((b) => ({ expiry_date: b.expiry, qty: b.qty })),
+      );
       await enqueue('stock_correction', {
         id: `crn_${nanoid(12)}`,
         barcode,
@@ -289,8 +251,14 @@ export function EditStockScreen({ route, navigation }: Props) {
         old_qty: originalQty,
         new_qty: qty,
         old_expiry: originalExpiry,
-        new_expiry: newSingleExpiry,
-        new_expiries: newExpiriesArray,
+        // New canonical shape: per-batch breakdown. Server's correction
+        // route prefers `lots` over the legacy `new_expiry` /
+        // `new_expiries` fields.
+        lots: cleanBatches.map((b) => ({ expiry_date: b.expiry, qty: b.qty })),
+        // Legacy fields kept for backward compatibility with older
+        // server builds and dashboard audit views.
+        new_expiry: cleanBatches.length === 1 ? cleanBatches[0].expiry : localNearestExpiry,
+        new_expiries: null,
         performed_by: session?.guardId ?? null,
         performed_by_name: session?.guardName ?? null,
         corrected_at: Date.now(),
@@ -398,138 +366,11 @@ export function EditStockScreen({ route, navigation }: Props) {
             </Text>
           </Card>
 
-          <View style={styles.qtySection}>
-            <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
-              {t('newCount').toUpperCase()}
-            </Text>
-            <QtyStepper value={qty} onChange={setQty} min={0} />
-          </View>
-
-          <View style={styles.expirySection}>
-            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-              {t('expiryDate').toUpperCase()}
-            </Text>
-
-            {/* Per-pack toggle. Mirrors ReceivingScreen: only useful for
-                multi-qty edits. */}
-            {qty > 1 && !noExpiry && (
-              <Pressable
-                onPress={() => { setPerPackExpiry((v) => !v); haptic.tap(); }}
-                style={[styles.noExpiryRow, { marginTop: spacing.sm }]}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      backgroundColor: perPackExpiry ? palette.primary : 'transparent',
-                      borderColor: perPackExpiry ? palette.primary : palette.outline,
-                    },
-                  ]}
-                >
-                  {perPackExpiry && <Check size={14} color={palette.onPrimary} strokeWidth={3} />}
-                </View>
-                <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-                  {t('perPackExpiry')} ({Math.floor(qty)} {t('packsLabel')})
-                </Text>
-              </Pressable>
-            )}
-
-            {!noExpiry && !perPackExpiry && (
-              <>
-                <Pressable
-                  onPress={() => setShowPicker(true)}
-                  style={[
-                    styles.expiryInput,
-                    {
-                      backgroundColor: palette.surfaceContainerLowest,
-                      borderColor: palette.outlineVariant,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    },
-                  ]}
-                >
-                  <Calendar size={20} color={palette.onSurfaceVariant} strokeWidth={2} />
-                  <Text
-                    variant="bodyLarge"
-                    color={expiryDateObj ? palette.onSurface : palette.onSurfaceVariant}
-                    style={{ marginLeft: spacing.sm, flex: 1, letterSpacing: 1 }}
-                  >
-                    {expiryDateObj ? formatForDisplay(toISO(expiryDateObj)) : t('tapToSelectDate')}
-                  </Text>
-                </Pressable>
-                {showPicker && editingPackIdx == null && (
-                  <DatePickerModal
-                    visible={showPicker}
-                    value={expiryDateObj}
-                    onSelect={(d) => { setExpiryDateObj(d); setNoExpiry(false); }}
-                    onDismiss={() => setShowPicker(false)}
-                  />
-                )}
-              </>
-            )}
-
-            {!noExpiry && perPackExpiry && (
-              <View style={{ marginTop: spacing.sm, gap: spacing.xs }}>
-                {perPackExpiries.map((d, i) => (
-                  <Pressable
-                    key={i}
-                    onPress={() => { setEditingPackIdx(i); setShowPicker(true); }}
-                    style={[
-                      styles.expiryInput,
-                      {
-                        backgroundColor: palette.surfaceContainerLowest,
-                        borderColor: palette.outlineVariant,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                      },
-                    ]}
-                  >
-                    <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ marginRight: spacing.sm, minWidth: 56 }}>
-                      {t('pack')} {i + 1}
-                    </Text>
-                    <Calendar size={18} color={palette.onSurfaceVariant} strokeWidth={2} />
-                    <Text
-                      variant="bodyLarge"
-                      color={d ? palette.onSurface : palette.onSurfaceVariant}
-                      style={{ marginLeft: spacing.sm, flex: 1, letterSpacing: 1 }}
-                    >
-                      {d ? formatForDisplay(toISO(d)) : t('tapToSelectDate')}
-                    </Text>
-                  </Pressable>
-                ))}
-                {showPicker && editingPackIdx != null && (
-                  <DatePickerModal
-                    visible={showPicker}
-                    value={perPackExpiries[editingPackIdx]}
-                    onSelect={(date) => {
-                      setPerPackExpiries((prev) => prev.map((p, i) => (i === editingPackIdx ? date : p)));
-                    }}
-                    onDismiss={() => { setShowPicker(false); setEditingPackIdx(null); }}
-                  />
-                )}
-              </View>
-            )}
-
-            <Pressable
-              onPress={() => { setNoExpiry(!noExpiry); haptic.tap(); }}
-              style={styles.noExpiryRow}
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  {
-                    backgroundColor: noExpiry ? palette.primary : 'transparent',
-                    borderColor: noExpiry ? palette.primary : palette.outline,
-                  },
-                ]}
-              >
-                {noExpiry && <Check size={14} color={palette.onPrimary} strokeWidth={3} />}
-              </View>
-              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-                {t('noExpiry')}
-              </Text>
-            </Pressable>
-          </View>
+          <BatchEditor
+            batches={batches}
+            onChange={setBatches}
+            unit={row.unit ?? null}
+          />
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
@@ -568,30 +409,6 @@ export function EditStockScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { padding: spacing.xl, gap: spacing.xl },
-  qtySection: { gap: spacing.lg, alignItems: 'stretch' },
-  expirySection: { gap: spacing.sm },
-  expiryInput: {
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    paddingHorizontal: spacing.lg,
-    minHeight: 52,
-    fontSize: 18,
-    letterSpacing: 2,
-  },
-  noExpiryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   footer: {
     padding: spacing.xl,
     borderTopWidth: 1,

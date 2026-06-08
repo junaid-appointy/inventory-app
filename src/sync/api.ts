@@ -103,6 +103,11 @@ export type RemoteOrder = {
   items: RemoteOrderItem[];
 };
 
+export type RemoteLot = {
+  expiry_date: string | null;
+  qty: number;
+};
+
 export type RemoteStockRow = {
   barcode: string;
   site_id: string;
@@ -112,6 +117,11 @@ export type RemoteStockRow = {
   on_hand: number;
   threshold: number;
   pack_size: number | null;
+  /** Per-batch breakdown, FEFO-ordered. Present on list and JIT
+   *  endpoints. Older rows that never received a lot write have an
+   *  empty array — caller falls back to nearest_expiry only. */
+  lots?: RemoteLot[];
+  nearest_expiry?: string | null;
 };
 
 export type RemoteProduct = {

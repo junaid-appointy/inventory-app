@@ -6,7 +6,7 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
  * Current schema version. Bump this and add a migration block in
  * `runMigrations()` whenever you need additive schema changes.
  */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
@@ -254,6 +254,30 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     }
     await db.execAsync(`PRAGMA user_version = 7;`);
     version = 7;
+  }
+
+  if (version < 8) {
+    // Per-expiry batches ("lots"), mirroring the server's
+    // inventory_stock_lots. Each row is "qty of this barcode that share
+    // this expiry". Receipts insert/merge by (barcode, expiry); dispenses
+    // decrement FEFO or by explicit picks; corrections replace the set
+    // for a barcode wholesale. NULL expiry = "no expiry" — collapses
+    // into a single lot keyed by the sentinel below for uniqueness.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS stock_lots (
+        id TEXT PRIMARY KEY,
+        barcode TEXT NOT NULL,
+        expiry_date TEXT,
+        qty REAL NOT NULL DEFAULT 0,
+        source TEXT,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_stock_lots_barcode ON stock_lots(barcode);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_lots_barcode_expiry
+        ON stock_lots(barcode, COALESCE(expiry_date, '__no_expiry__'));
+      PRAGMA user_version = 8;
+    `);
+    version = 8;
   }
 }
 
