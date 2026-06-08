@@ -229,6 +229,15 @@ export function EditStockScreen({ route, navigation }: Props) {
     ? `${row.pack_size} ${row.unit}`
     : row?.unit ?? null;
 
+  // When pack_size > 1 the count is in packs, not in the base unit —
+  // " 1 g" is wrong for a 200 g pack. Drop the unit suffix in that case
+  // (the pack hint at the top already shows "200 g").
+  const countSuffix = row && row.pack_size != null && row.pack_size !== 1
+    ? ''
+    : row?.unit
+      ? ` ${row.unit}`
+      : '';
+
   /**
    * User accepted the server's view. Rebase originalQty / originalExpiry
    * and also replace what's in the steppers / date picker so the
@@ -286,7 +295,11 @@ export function EditStockScreen({ route, navigation }: Props) {
         performed_by_name: session?.guardName ?? null,
         corrected_at: Date.now(),
       });
-      flushOnce().catch(() => {});
+      // Await the flush so the StockScreen's focus refresh sees the
+      // server-acknowledged value, not stale read-back data. Without
+      // this, the GET races the POST and replaceStockFromRemote
+      // overwrites the local optimistic write.
+      await flushOnce().catch(() => {});
       haptic.success();
       navigation.goBack();
     } finally {
@@ -346,8 +359,7 @@ export function EditStockScreen({ route, navigation }: Props) {
                 {t('stockUpdatedBody')}
               </Text>
               <Text variant="bodyMedium" color={palette.onSurface}>
-                {originalQty} → {serverQty}
-                {row.unit ? ` ${row.unit}` : ''}
+                {originalQty} → {serverQty}{countSuffix}
                 {serverExpiry && serverExpiry !== originalExpiry
                   ? ` · ${formatForDisplay(serverExpiry)}`
                   : ''}
@@ -382,7 +394,7 @@ export function EditStockScreen({ route, navigation }: Props) {
               ) : null}
             </View>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              {t('currentCount')}: {originalQty}{row.unit ? ` ${row.unit}` : ''}
+              {t('currentCount')}: {originalQty}{countSuffix}
             </Text>
           </Card>
 
