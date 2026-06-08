@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "239c34c545d1",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/modules/inventory/screens/EditStockScreen.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/23/9c34c545d1/0/metadata.json",
+      "transcript": "/23/9c34c545d1/0/full.jsonl",
+      "content_hash": "/23/9c34c545d1/0/content_hash.txt",
+      "prompt": "/23/9c34c545d1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 218,
+    "cache_creation_tokens": 700334,
+    "cache_read_tokens": 31043938,
+    "output_tokens": 128451,
+    "api_call_count": 178
+  }
+}
