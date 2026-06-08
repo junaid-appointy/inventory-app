@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -151,7 +151,8 @@ export function DispenseScreen({ route, navigation }: Props) {
         // Clamp qty to the verified ceiling. If the user had a stale
         // higher qty in mind (e.g. local cache said 10, server says 7),
         // drop to the new max so they can't accidentally submit over.
-        const clampedQty = qty > remoteQty ? Math.max(1, remoteQty) : qty;
+        const minStep = selected.dispense_mode === 'divisible' ? 0.001 : 1;
+        const clampedQty = qty > remoteQty ? Math.max(minStep, remoteQty) : qty;
         if (clampedQty !== qty) setQty(clampedQty);
 
         // Build the lot picker state. Prefer the remote lots (verified
@@ -231,12 +232,37 @@ export function DispenseScreen({ route, navigation }: Props) {
 
   /** Re-suggest FEFO whenever the user bumps the big "How many?" stepper.
    *  This intentionally overwrites manual per-lot edits — the per-lot
-   *  picker is for fine-tuning AFTER the total is set. */
+   *  picker is for fine-tuning AFTER the total is set.
+   *
+   *  When the user instead drives the per-lot picker, we sync `qty` to
+   *  the new sum (see syncQtyFromAllocation). That sync would otherwise
+   *  trigger this effect and overwrite their lot edit; the ref below
+   *  swallows exactly one re-suggest pass to break the loop. */
+  const skipNextFefoRecalc = useRef(false);
   useEffect(() => {
     if (availability.length === 0) return;
+    if (skipNextFefoRecalc.current) {
+      skipNextFefoRecalc.current = false;
+      return;
+    }
     setAllocation(suggestFEFO(availability, qty));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qty]);
+
+  /** Per-lot edit handler — keeps the "How many?" stepper in lockstep
+   *  with the sum of per-lot takes. Without this, the two surfaces drift:
+   *  the upper stepper says "1" while the picker says "Taken 4 of 1". */
+  const onAllocationChange = useCallback(
+    (next: typeof allocation) => {
+      const sum = next.reduce((s, l) => s + (l.take || 0), 0);
+      if (sum !== qty) {
+        skipNextFefoRecalc.current = true;
+        setQty(sum);
+      }
+      setAllocation(next);
+    },
+    [qty, allocation],
+  );
 
   const submit = async () => {
     if (!selected || totalTaken <= 0) return;
@@ -411,11 +437,15 @@ export function DispenseScreen({ route, navigation }: Props) {
             </Text>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
               {/* Show the verified on_hand once JIT resolves; fall back
-                  to the local cache value until then. Per pack/unit
-                  formatting unchanged. */}
+                  to the local cache value until then. For divisible
+                  products the on_hand IS the base unit — just append
+                  unit. For pack-mode products keep the "N × packSize"
+                  form. */}
               {verifiedOnHand ?? selected.on_hand}
-              {selected.pack_size != null && selected.pack_size !== 1 ? ` × ${selected.pack_size}` : ''}
-              {selected.unit ? ` ${selected.unit}` : ''} {t('onHand')}
+              {selected.dispense_mode === 'divisible'
+                ? selected.unit ? ` ${selected.unit}` : ''
+                : `${selected.pack_size != null && selected.pack_size !== 1 ? ` × ${selected.pack_size}` : ''}${selected.unit ? ` ${selected.unit}` : ''}`}
+              {' '}{t('onHand')}
             </Text>
           </Card>
 
@@ -429,8 +459,9 @@ export function DispenseScreen({ route, navigation }: Props) {
             <QtyStepper
               value={qty}
               onChange={setQty}
-              min={1}
+              min={selected.dispense_mode === 'divisible' ? 0.001 : 1}
               max={(totalAvailable || verifiedOnHand || selected.on_hand) || undefined}
+              decimal={selected.dispense_mode === 'divisible'}
             />
           </View>
 
@@ -441,9 +472,11 @@ export function DispenseScreen({ route, navigation }: Props) {
           {availability.length > 1 && (
             <LotPicker
               lots={allocation}
-              onChange={setAllocation}
+              onChange={onAllocationChange}
               desiredQty={qty}
               unit={selected.unit ?? null}
+              packSize={selected.pack_size ?? null}
+              decimal={selected.dispense_mode === 'divisible'}
             />
           )}
 

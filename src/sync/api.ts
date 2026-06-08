@@ -117,6 +117,7 @@ export type RemoteStockRow = {
   on_hand: number;
   threshold: number;
   pack_size: number | null;
+  dispense_mode?: 'pack' | 'divisible';
   /** Per-batch breakdown, FEFO-ordered. Present on list and JIT
    *  endpoints. Older rows that never received a lot write have an
    *  empty array — caller falls back to nearest_expiry only. */
@@ -146,6 +147,7 @@ export type RemoteCanonicalProduct = {
   hsn_code: string | null;
   unit: string;
   pack_size: number;
+  dispense_mode?: 'pack' | 'divisible';
   created_at: string;
   updated_at: string;
   /** True iff at least one barcode is mapped to this product server-side.

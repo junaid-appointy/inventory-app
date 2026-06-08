@@ -119,11 +119,24 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
         ? await findOpenItemByProductId(item.productId).catch(() => null)
         : await findOpenItemByBarcode(item.barcode).catch(() => null);
 
+      // For divisible products the lot/stock units are base units (e.g. kg),
+      // not packs. The session UI captures packs; translate at the
+      // persistence boundary so callers stay simple.
+      const existingStock = await findStock(item.barcode);
+      const dispenseMode: 'pack' | 'divisible' =
+        existingStock?.dispense_mode === 'divisible' ? 'divisible' : 'pack';
+      const ps = item.packSize && item.packSize > 0 ? item.packSize : 1;
+      const toLot = (n: number) => (dispenseMode === 'divisible' ? n * ps : n);
+
       // One receipt per batch so each distinct expiry survives end-to-end
-      // (outbox → backend → dashboard → Excel).
-      const batches = item.batches.length > 0 ? item.batches : [{ qty: item.qty, expiry: null }];
+      // (outbox → backend → dashboard → Excel). Coerce tri-state expiry
+      // (undefined = unset in the editor) into the binary string|null
+      // the persistence layer expects.
+      const rawBatches = item.batches.length > 0 ? item.batches : [{ qty: item.qty, expiry: null }];
+      const batches = rawBatches.map((b) => ({ qty: b.qty, expiry: b.expiry ?? null }));
       for (const batch of batches) {
         const receiptId = `rcp_${nanoid(12)}`;
+        const lotQty = toLot(batch.qty);
         await enqueue('receipt', {
           id: receiptId,
           order_id: orderItem?.order_id ?? null,
@@ -131,7 +144,7 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
           product_id: item.productId ?? null,
           barcode: item.barcode,
           product_name: item.name,
-          qty: batch.qty,
+          qty: lotQty,
           expiry_date: batch.expiry,
           flagged: false,
           scanned_at: now(),
@@ -141,14 +154,14 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
 
         // Mirror the lot locally so EditStock / Dispense see the new
         // batch immediately, without waiting for the next sync round-trip.
-        await addLotLocal(item.barcode, batch.expiry, batch.qty);
+        await addLotLocal(item.barcode, batch.expiry, lotQty);
 
         if (batch.expiry) {
           await trackExpiry({
             barcode: item.barcode,
             productName: item.name,
             expiryDate: batch.expiry,
-            qty: batch.qty,
+            qty: lotQty,
             receiptId,
             performedBy,
             performedByName,
@@ -156,9 +169,11 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
         }
       }
 
+      const itemLotTotal = toLot(item.qty);
+
       // Update local order tracking if applicable (once per item — uses summed qty)
       if (orderItem) {
-        await addReceivedQty(orderItem.id, item.qty);
+        await addReceivedQty(orderItem.id, itemLotTotal);
       }
 
       // Barcode learning — remember this real barcode → canonical product
@@ -174,9 +189,8 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
       }
 
       // Roll qty into on-hand stock (once per item — total qty across batches)
-      const existing = await findStock(item.barcode);
-      if (existing) {
-        await adjustOnHand(item.barcode, item.qty);
+      if (existingStock) {
+        await adjustOnHand(item.barcode, itemLotTotal);
       } else {
         await upsertStock({
           barcode: item.barcode,
@@ -184,7 +198,8 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
           category: item.category,
           unit: item.unit,
           pack_size: item.packSize ?? null,
-          on_hand: item.qty,
+          dispense_mode: dispenseMode,
+          on_hand: itemLotTotal,
           threshold: 0,
         });
       }

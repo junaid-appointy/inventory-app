@@ -51,6 +51,10 @@ export function RegisterProductScreen({ route, navigation }: Props) {
   const [category, setCategory] = useState('Grocery');
   const [unit, setUnit] = useState('pcs');
   const [packSize, setPackSize] = useState('');
+  // dispense_mode is a per-SKU setting that decides whether qty is whole
+  // packs (integer) or base units (decimal). Only offered when pack_size > 1
+  // and the SKU is brand-new (catalog picks inherit the catalog's mode).
+  const [divisible, setDivisible] = useState(false);
   // Track which canonical product was picked from the dropdown so save can
   // map the scanned barcode → existing product instead of creating a duplicate.
   const [pickedProductId, setPickedProductId] = useState<string | null>(null);
@@ -141,13 +145,23 @@ export function RegisterProductScreen({ route, navigation }: Props) {
       } else {
         // No catalog match — record a new local product. (Admin can
         // promote it to a canonical product later from the dashboard.)
-        await upsertProduct({ barcode, name: trimmedName, category, unit, pack_size: parsedPackSize });
+        const dispenseMode: 'pack' | 'divisible' =
+          divisible && parsedPackSize != null && parsedPackSize > 1 ? 'divisible' : 'pack';
+        await upsertProduct({
+          barcode,
+          name: trimmedName,
+          category,
+          unit,
+          pack_size: parsedPackSize,
+          dispense_mode: dispenseMode,
+        });
         await enqueue('product_registration', {
           barcode,
           name: trimmedName,
           category,
           unit,
           packSize: parsedPackSize,
+          dispenseMode,
         });
         flushOnce().catch(() => {});
         haptic.success();
@@ -344,6 +358,39 @@ export function RegisterProductScreen({ route, navigation }: Props) {
               style={pickedProductId ? { opacity: 0.6 } : undefined}
             />
           </View>
+
+          {/* Divisible toggle — only when registering a new product (not a
+              catalog mapping, which inherits its mode) AND pack_size > 1.
+              Below pack_size=1 there's no meaningful "subdivide one pack"
+              to do, so we keep the UI clean. */}
+          {!pickedProductId && parsedPackSize != null && parsedPackSize > 1 ? (
+            <View style={{ marginTop: spacing.xl }}>
+              <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ marginBottom: spacing.sm }}>
+                TRACKING MODE
+              </Text>
+              <View style={styles.chipRow}>
+                <Chip
+                  label={`Whole packs (${parsedPackSize} ${unit}/pack)`}
+                  selected={!divisible}
+                  onPress={() => setDivisible(false)}
+                />
+                <Chip
+                  label={`Divisible (decimal ${unit})`}
+                  selected={divisible}
+                  onPress={() => setDivisible(true)}
+                />
+              </View>
+              <Text
+                variant="bodyMedium"
+                color={palette.onSurfaceVariant}
+                style={{ marginTop: spacing.sm }}
+              >
+                {divisible
+                  ? `Dispense will accept fractional ${unit} (e.g. 1.5 ${unit}).`
+                  : `Dispense will be whole packs only (1, 2, 3…).`}
+              </Text>
+            </View>
+          ) : null}
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>

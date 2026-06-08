@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Check, ScanLine, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { formatExpiry } from '../../../utils/expiry';
 import {
   AppBar,
   Button,
@@ -194,19 +195,8 @@ function formatBatches(batches: OrderBatch[]): string {
   const dated = batches.filter((b) => b.expiry);
   if (dated.length === 0) return '';
   const unique = Array.from(new Set(dated.map((b) => b.expiry as string))).sort();
-  if (unique.length === 1) return ` · Exp: ${formatDate(unique[0])}`;
-  return ` · ${unique.length} expiries (earliest ${formatDate(unique[0])})`;
-}
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1)
-      .toString()
-      .padStart(2, '0')}/${d.getFullYear()}`;
-  } catch {
-    return iso;
-  }
+  if (unique.length === 1) return ` · Exp: ${formatExpiry(unique[0])}`;
+  return ` · ${unique.length} expiries (earliest ${formatExpiry(unique[0])})`;
 }
 
 const styles = StyleSheet.create({

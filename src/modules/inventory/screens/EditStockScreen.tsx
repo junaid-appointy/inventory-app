@@ -29,17 +29,9 @@ import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 import { BatchEditor, Batch } from '../components/BatchEditor';
+import { formatExpiry } from '../../../utils/expiry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditStock'>;
-
-function formatForDisplay(iso: string): string {
-  try {
-    const [y, m, d] = iso.split('-');
-    return `${d}/${m}/${y}`;
-  } catch {
-    return iso;
-  }
-}
 
 /** Earliest non-null ISO date out of a list of batches. */
 function earliestExpiry(batches: Batch[]): string | null {
@@ -192,11 +184,16 @@ export function EditStockScreen({ route, navigation }: Props) {
   // When pack_size > 1 the count is in packs, not in the base unit —
   // " 1 g" is wrong for a 200 g pack. Drop the unit suffix in that case
   // (the pack hint at the top already shows "200 g").
-  const countSuffix = row && row.pack_size != null && row.pack_size !== 1
-    ? ''
-    : row?.unit
-      ? ` ${row.unit}`
-      : '';
+  // Divisible products are the inverse: count IS in the base unit so the
+  // unit suffix is exactly what we want.
+  const countSuffix =
+    row?.dispense_mode === 'divisible'
+      ? row?.unit ? ` ${row.unit}` : ''
+      : row && row.pack_size != null && row.pack_size !== 1
+        ? ''
+        : row?.unit
+          ? ` ${row.unit}`
+          : '';
 
   /**
    * User accepted the server's view. Rebase originalQty / originalExpiry
@@ -237,7 +234,10 @@ export function EditStockScreen({ route, navigation }: Props) {
     const session = getSession();
     setSaving(true);
     try {
-      const cleanBatches = batches.filter((b) => b.qty > 0);
+      // Coerce tri-state expiry (undefined = unset) → null for persistence.
+      const cleanBatches = batches
+        .filter((b) => b.qty > 0)
+        .map((b) => ({ ...b, expiry: b.expiry ?? null }));
       // Optimistic local writes: stock cache + lots mirror.
       await correctStockLocal(barcode, qty, localNearestExpiry);
       await replaceLotsLocal(
@@ -329,7 +329,7 @@ export function EditStockScreen({ route, navigation }: Props) {
               <Text variant="bodyMedium" color={palette.onSurface}>
                 {originalQty} → {serverQty}{countSuffix}
                 {serverExpiry && serverExpiry !== originalExpiry
-                  ? ` · ${formatForDisplay(serverExpiry)}`
+                  ? ` · ${formatExpiry(serverExpiry)}`
                   : ''}
               </Text>
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -370,6 +370,8 @@ export function EditStockScreen({ route, navigation }: Props) {
             batches={batches}
             onChange={setBatches}
             unit={row.unit ?? null}
+            packSize={row.pack_size ?? null}
+            dispenseMode={row.dispense_mode ?? 'pack'}
           />
         </ScrollView>
 

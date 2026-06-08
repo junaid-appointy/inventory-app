@@ -6,6 +6,8 @@ export type Product = {
   category: string | null;
   unit: string | null;
   pack_size: number | null;
+  /** Defaulted to 'pack' at the DB layer when omitted by writers. */
+  dispense_mode?: 'pack' | 'divisible';
   updated_at: number;
 };
 
@@ -22,15 +24,16 @@ export async function upsertProduct(p: Omit<Product, 'updated_at'>): Promise<Pro
   const db = await getDb();
   const ts = now();
   await db.runAsync(
-    `INSERT INTO products (barcode, name, category, unit, pack_size, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO products (barcode, name, category, unit, pack_size, dispense_mode, updated_at)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, 'pack'), ?)
      ON CONFLICT(barcode) DO UPDATE SET
        name=excluded.name,
        category=excluded.category,
        unit=excluded.unit,
        pack_size=excluded.pack_size,
+       dispense_mode=excluded.dispense_mode,
        updated_at=excluded.updated_at`,
-    [p.barcode, p.name, p.category, p.unit, p.pack_size, ts]
+    [p.barcode, p.name, p.category, p.unit, p.pack_size, p.dispense_mode ?? null, ts]
   );
   return { ...p, updated_at: ts };
 }

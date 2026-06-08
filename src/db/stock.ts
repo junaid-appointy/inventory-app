@@ -8,6 +8,8 @@ export type StockRow = {
   category: string | null;
   unit: string | null;
   pack_size: number | null;
+  /** Defaulted to 'pack' at the DB layer when omitted by writers. */
+  dispense_mode?: 'pack' | 'divisible';
   on_hand: number;
   threshold: number;
   updated_at: number;
@@ -45,20 +47,22 @@ export async function upsertStock(row: {
   category: string | null;
   unit: string | null;
   pack_size?: number | null;
+  dispense_mode?: 'pack' | 'divisible';
   on_hand?: number;
   threshold?: number;
 }): Promise<void> {
   const db = await getDb();
-  // COALESCE on pack_size so a later receipt that doesn't know the pack
-  // size doesn't blank out a value learned from the catalog/registration.
+  // COALESCE on pack_size/dispense_mode so a later receipt that doesn't
+  // know them doesn't blank out values learned from the catalog.
   await db.runAsync(
-    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, on_hand, threshold, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, dispense_mode, on_hand, threshold, updated_at)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, 'pack'), ?, ?, ?)
      ON CONFLICT(barcode) DO UPDATE SET
        name=excluded.name,
        category=excluded.category,
        unit=excluded.unit,
        pack_size=COALESCE(excluded.pack_size, stock_levels.pack_size),
+       dispense_mode=COALESCE(excluded.dispense_mode, stock_levels.dispense_mode),
        updated_at=excluded.updated_at`,
     [
       row.barcode,
@@ -66,6 +70,7 @@ export async function upsertStock(row: {
       row.category,
       row.unit,
       row.pack_size ?? null,
+      row.dispense_mode ?? null,
       row.on_hand ?? 0,
       row.threshold ?? 0,
       now(),
@@ -84,22 +89,24 @@ export async function syncStockFromRemote(row: {
   category: string | null;
   unit: string | null;
   pack_size: number | null;
+  dispense_mode?: 'pack' | 'divisible';
   on_hand: number;
   threshold: number;
 }): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, on_hand, threshold, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, dispense_mode, on_hand, threshold, updated_at)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, 'pack'), ?, ?, ?)
      ON CONFLICT(barcode) DO UPDATE SET
        name=excluded.name,
        category=excluded.category,
        unit=excluded.unit,
        pack_size=excluded.pack_size,
+       dispense_mode=excluded.dispense_mode,
        on_hand=excluded.on_hand,
        threshold=excluded.threshold,
        updated_at=excluded.updated_at`,
-    [row.barcode, row.name, row.category, row.unit, row.pack_size, row.on_hand, row.threshold, now()]
+    [row.barcode, row.name, row.category, row.unit, row.pack_size, row.dispense_mode ?? null, row.on_hand, row.threshold, now()]
   );
 }
 
@@ -116,6 +123,7 @@ export async function replaceStockFromRemote(
     category: string | null;
     unit: string | null;
     pack_size: number | null;
+    dispense_mode?: 'pack' | 'divisible';
     on_hand: number;
     threshold: number;
   }>,

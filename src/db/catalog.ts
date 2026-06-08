@@ -38,6 +38,8 @@ export type CanonicalProduct = {
   hsn_code: string | null;
   unit: string;
   pack_size: number;
+  /** Defaulted to 'pack' at the DB layer when omitted by writers. */
+  dispense_mode?: 'pack' | 'divisible';
   /** 1 if any barcode is mapped to this product on the server, else 0.
    *  Drives the "hide already-taken products" filter when registering a
    *  brand-new barcode. SQLite has no bool, so it's stored as 0/1. */
@@ -102,14 +104,15 @@ export async function findBarcodeForProduct(
 export async function upsertCanonicalProduct(product: CanonicalProduct): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO canonical_products (product_id, canonical_name, category, hsn_code, unit, pack_size, has_barcode, primary_barcode, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO canonical_products (product_id, canonical_name, category, hsn_code, unit, pack_size, dispense_mode, has_barcode, primary_barcode, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(product_id) DO UPDATE SET
        canonical_name = excluded.canonical_name,
        category = excluded.category,
        hsn_code = excluded.hsn_code,
        unit = excluded.unit,
        pack_size = excluded.pack_size,
+       dispense_mode = excluded.dispense_mode,
        has_barcode = excluded.has_barcode,
        primary_barcode = excluded.primary_barcode,
        updated_at = excluded.updated_at`,
@@ -120,6 +123,7 @@ export async function upsertCanonicalProduct(product: CanonicalProduct): Promise
       product.hsn_code,
       product.unit,
       product.pack_size,
+      product.dispense_mode ?? 'pack',
       product.has_barcode ? 1 : 0,
       product.primary_barcode ?? null,
       product.updated_at,
@@ -163,6 +167,7 @@ export async function replaceCanonicalProducts(
           typeof p.pack_size === 'number' && Number.isFinite(p.pack_size)
             ? p.pack_size
             : 1,
+        dispense_mode: p.dispense_mode === 'divisible' ? 'divisible' : 'pack',
         has_barcode: p.has_barcode ? 1 : 0,
         primary_barcode: p.primary_barcode ?? null,
         updated_at: p.updated_at ?? Date.now(),

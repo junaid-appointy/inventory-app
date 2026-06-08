@@ -32,16 +32,6 @@ import { BatchEditor, Batch } from '../components/BatchEditor';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Receiving'>;
 
-/** Format ISO date to DD/MM/YYYY for display */
-function formatForDisplay(iso: string): string {
-  try {
-    const [y, m, d] = iso.split('-');
-    return `${d}/${m}/${y}`;
-  } catch {
-    return iso;
-  }
-}
-
 /** Convert Date object to ISO date string */
 function toISO(d: Date): string {
   return d.toISOString().split('T')[0];
@@ -67,7 +57,12 @@ export function ReceivingScreen({ route, navigation }: Props) {
   // One row per distinct expiry. Default to a single batch carrying
   // qty=1 — matches the 90% case of "one pack, one expiry". Guard taps
   // "+ Add another expiry batch" to break into groups.
-  const [batches, setBatches] = useState<Batch[]>([{ qty: 1, expiry: null }]);
+  // ReceivingScreen always asks in packs (integer) even for divisible
+  // products: physical intake is always whole packs. The translation to
+  // base units (e.g. 3 packs × 5 kg → 15 kg lot qty) happens at submit.
+  // Initial batch is "unset" (undefined) — forces the guard to actively
+  // pick "Pick expiry" or "No expiry" rather than silently defaulting.
+  const [batches, setBatches] = useState<Batch[]>([{ qty: 1, expiry: undefined }]);
   const qty = useMemo(() => batches.reduce((s, b) => s + (b.qty || 0), 0), [batches]);
 
   // Resolved product name: canonical name takes priority over legacy product name
@@ -79,9 +74,13 @@ export function ReceivingScreen({ route, navigation }: Props) {
       ? `${resolvedPackSize} ${resolvedUnit}`
       : resolvedUnit ?? null;
 
+  const [dispenseMode, setDispenseMode] = useState<'pack' | 'divisible'>('pack');
+
   useEffect(() => {
     (async () => {
       setProduct(await findProduct(barcode));
+      const stockRow = await findStock(barcode);
+      if (stockRow?.dispense_mode === 'divisible') setDispenseMode('divisible');
       // If we have a productId from catalog, look up order item by product_id
       if (productId) {
         const byProduct = await findOpenItemByProductId(productId);
@@ -92,11 +91,19 @@ export function ReceivingScreen({ route, navigation }: Props) {
     })();
   }, [barcode, productId]);
 
+  /** Convert a "packs received" integer into the units stored in lots:
+   *  packs for pack-mode; packs × pack_size (base units) for divisible. */
+  const toLotQty = (packsQty: number): number => {
+    if (dispenseMode !== 'divisible') return packsQty;
+    const ps = resolvedPackSize && resolvedPackSize > 0 ? resolvedPackSize : 1;
+    return packsQty * ps;
+  };
+
   // Auto-fill expiry on the (single) initial batch from the last scanned
   // item in this order session — matches "same expiry as the last pack
   // off the truck" behaviour.
   useEffect(() => {
-    if (orderSession.lastExpiry && batches.length === 1 && batches[0].expiry === null) {
+    if (orderSession.lastExpiry && batches.length === 1 && batches[0].expiry === undefined) {
       setBatches([{ qty: batches[0].qty, expiry: orderSession.lastExpiry }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,11 +114,18 @@ export function ReceivingScreen({ route, navigation }: Props) {
     const session = getSession();
     // One receipt per distinct expiry batch. Each batch carries its
     // total qty (no exploding into N qty=1 rows).
-    const cleanBatches = batches.filter((b) => b.qty > 0);
+    // Coerce the editor's tri-state (undefined = unset) into the binary
+    // string|null the persistence layer expects. Unset at submit time
+    // = same as "no expiry" — submit shouldn't block on an indecision.
+    const cleanBatches = batches
+      .filter((b) => b.qty > 0)
+      .map((b) => ({ ...b, expiry: b.expiry ?? null }));
+    // For divisible products, the lot is stored in base units (pack count
+    // × pack_size). Pack-mode lots keep the raw count.
     const receipts: Array<{ id: string; qty: number; expiry: string | null }> =
       cleanBatches.map((b) => ({
         id: `rcp_${nanoid(12)}`,
-        qty: b.qty,
+        qty: toLotQty(b.qty),
         expiry: b.expiry,
       }));
 
@@ -159,11 +173,14 @@ export function ReceivingScreen({ route, navigation }: Props) {
         flagged_at: Date.now(),
       });
     }
-    if (item) await addReceivedQty(item.id, qty);
+    // Order item received_qty and stock on_hand track the same lot units —
+    // packs for pack-mode, base units for divisible. Mirror toLotQty.
+    const totalLotQty = toLotQty(qty);
+    if (item) await addReceivedQty(item.id, totalLotQty);
 
     const existing = await findStock(barcode);
     if (existing) {
-      await adjustOnHand(barcode, qty);
+      await adjustOnHand(barcode, totalLotQty);
     } else {
       await upsertStock({
         barcode,
@@ -171,21 +188,22 @@ export function ReceivingScreen({ route, navigation }: Props) {
         category: product?.category ?? null,
         unit: resolvedUnit,
         pack_size: resolvedPackSize,
-        on_hand: qty,
+        dispense_mode: dispenseMode,
+        on_hand: totalLotQty,
         threshold: 0,
       });
     }
 
     flushOnce().catch(() => {});
 
-    // Track expiry for future alerts — one entry per batch.
+    // Track expiry for future alerts — one entry per batch (qty in lot units).
     for (const b of cleanBatches) {
       if (!b.expiry) continue;
       await trackExpiry({
         barcode,
         productName: resolvedName,
         expiryDate: b.expiry,
-        qty: b.qty,
+        qty: toLotQty(b.qty),
         receiptId: id,
         performedBy: session?.guardId ?? null,
         performedByName: session?.guardName ?? null,
@@ -206,7 +224,9 @@ export function ReceivingScreen({ route, navigation }: Props) {
       unit: resolvedUnit,
       packSize: resolvedPackSize,
       qty: totalQty,
-      batches: cleanBatches.map((b) => ({ qty: b.qty, expiry: b.expiry })),
+      // Coerce tri-state expiry into the binary string|null the session
+      // expects — submit shouldn't carry an indecision past this point.
+      batches: cleanBatches.map((b) => ({ qty: b.qty, expiry: b.expiry ?? null })),
     });
     haptic.success();
     navigation.navigate('OrderSession');
@@ -361,6 +381,8 @@ export function ReceivingScreen({ route, navigation }: Props) {
           onChange={setBatches}
           minDate={new Date()}
           unit={resolvedUnit ?? null}
+          packSize={resolvedPackSize ?? null}
+          dispenseMode={dispenseMode}
         />
 
         {mismatch ? (

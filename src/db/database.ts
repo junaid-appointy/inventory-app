@@ -6,7 +6,7 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
  * Current schema version. Bump this and add a migration block in
  * `runMigrations()` whenever you need additive schema changes.
  */
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
@@ -21,6 +21,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       category TEXT,
       unit TEXT,
       pack_size REAL,
+      dispense_mode TEXT NOT NULL DEFAULT 'pack',
       updated_at INTEGER NOT NULL
     );
 
@@ -72,6 +73,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       category TEXT,
       unit TEXT,
       pack_size REAL,
+      dispense_mode TEXT NOT NULL DEFAULT 'pack',
       on_hand REAL NOT NULL DEFAULT 0,
       threshold REAL NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL
@@ -278,6 +280,38 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       PRAGMA user_version = 8;
     `);
     version = 8;
+  }
+
+  if (version < 9) {
+    // dispense_mode mirrors the server's inventory_products.dispense_mode
+    // / canonical_products.dispense_mode. Drives whether the dispense/edit
+    // UI accepts decimals (divisible) or stays pack-only.
+    const stockCols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(stock_levels)',
+    );
+    if (!stockCols.some((c) => c.name === 'dispense_mode')) {
+      await db.execAsync(
+        `ALTER TABLE stock_levels ADD COLUMN dispense_mode TEXT NOT NULL DEFAULT 'pack';`,
+      );
+    }
+    const prodCols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(products)',
+    );
+    if (!prodCols.some((c) => c.name === 'dispense_mode')) {
+      await db.execAsync(
+        `ALTER TABLE products ADD COLUMN dispense_mode TEXT NOT NULL DEFAULT 'pack';`,
+      );
+    }
+    const canonCols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(canonical_products)',
+    );
+    if (!canonCols.some((c) => c.name === 'dispense_mode')) {
+      await db.execAsync(
+        `ALTER TABLE canonical_products ADD COLUMN dispense_mode TEXT NOT NULL DEFAULT 'pack';`,
+      );
+    }
+    await db.execAsync(`PRAGMA user_version = 9;`);
+    version = 9;
   }
 }
 

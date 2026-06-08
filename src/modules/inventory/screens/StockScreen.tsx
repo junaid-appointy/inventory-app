@@ -41,9 +41,12 @@ function countColor(row: StockRow): string {
 }
 
 /** Format the pack-size hint that sits under the on-hand count.
- *  pack_size null/1 → just the unit ("g"); otherwise "× 100 g". */
+ *  pack_size null/1 → just the unit ("g"); otherwise "× 100 g".
+ *  Divisible products store on_hand in the base unit, so the hint is
+ *  just the unit (the count already reads "47.5 kg"). */
 function packSizeLabel(row: StockRow): string {
   const unit = row.unit ?? '';
+  if (row.dispense_mode === 'divisible') return unit;
   if (row.pack_size == null || row.pack_size === 1) return unit;
   // Trim trailing zero on whole numbers (100 not 100.0) but keep "1.5".
   const ps = Number.isInteger(row.pack_size) ? String(row.pack_size) : String(row.pack_size);
@@ -94,6 +97,7 @@ export function StockScreen({ navigation }: Props) {
         category: r.category,
         unit: r.unit,
         pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+        dispense_mode: r.dispense_mode ?? 'pack',
         on_hand: Number(r.on_hand),
         threshold: Number(r.threshold),
       })),
