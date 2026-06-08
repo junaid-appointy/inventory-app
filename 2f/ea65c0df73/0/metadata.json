@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "2fea65c0df73",
+  "session_id": "b436ae72-7925-4109-907f-e493d53e8f1d",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-08T07:58:08.345186Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/db/catalog.ts",
+    "src/db/database.ts",
+    "src/db/products.ts",
+    "src/db/stock.ts",
+    "src/modules/inventory/components/BatchEditor.tsx",
+    "src/modules/inventory/components/LotPicker.tsx",
+    "src/modules/inventory/components/OrderSessionContext.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/EditStockScreen.tsx",
+    "src/modules/inventory/screens/OrderSessionScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/syncService.ts",
+    "src/utils/expiry.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "9b98891e3fae",
+  "token_usage": {
+    "input_tokens": 412,
+    "cache_creation_tokens": 586248,
+    "cache_read_tokens": 59976483,
+    "output_tokens": 160954,
+    "api_call_count": 301
+  },
+  "session_metrics": {
+    "turn_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-08T07:58:08.304797Z",
+    "agent_lines": 853,
+    "agent_removed": 245,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 853,
+    "total_lines_changed": 1098,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
