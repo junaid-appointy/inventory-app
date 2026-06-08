@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { Camera, Search, X } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   AppBar,
   radius,
@@ -20,10 +20,13 @@ import {
 import { enqueue } from '../../../db/outbox';
 import { getDb } from '../../../db/database';
 import { RootStackParamList } from '../../../navigation/types';
+import { api, ApiError } from '../../../sync/api';
 import { getLastCatalogSync, syncCanonicalProducts, syncOrders } from '../../../sync/syncService';
+import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
 import { useT } from '../../../i18n';
-import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
+import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
+import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CatalogPicker'>;
 
@@ -61,7 +64,20 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
   const [products, setProducts] = useState<CanonicalProduct[]>([]);
   const [openItemMap, setOpenItemMap] = useState<Record<string, OpenOrderItem>>({});
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  // JIT verification state: which product we're currently fetching the
+  // freshest server-side row for, and the last error to show in a
+  // small banner. Only one verification at a time; tapping a second row
+  // while the first is in flight is ignored.
+  const [verifyingProductId, setVerifyingProductId] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const catalogStatus = useCacheStatus('catalog');
+  // Show the picker skeleton only while we've never loaded a catalog
+  // in this session AND we're not in a terminal failure state (where
+  // we'd rather show whatever local SQLite has, even if empty).
+  const showSkeleton =
+    !catalogStatus.hasEverBeenWarm &&
+    catalogStatus.state !== 'error' &&
+    catalogStatus.state !== 'offline';
 
   const loadFromCache = useCallback(async () => {
     const all = await listCanonicalProducts();
@@ -77,25 +93,36 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
     const map: Record<string, OpenOrderItem> = {};
     for (const r of rows) map[r.product_id] = r;
     setOpenItemMap(map);
-    setLoading(false);
   }, []);
 
+  // Always refetch on focus. The throttle in refetchThrottled stops a
+  // navigate-back-then-forward burst from firing N parallel pulls.
   const refresh = useCallback(async (forceRefresh = false) => {
-    const lastSync = await getLastSyncTime('catalog');
-    const stale = isCacheStale(lastSync);
-
-    if (forceRefresh || stale) {
-      await Promise.all([syncCanonicalProducts(), syncOrders()]);
-      await setLastSyncTime('catalog');
+    if (forceRefresh) {
+      invalidateRefetchThrottle('catalog');
+      invalidateRefetchThrottle('orders');
     }
-
+    await Promise.all([
+      refetchThrottled('catalog', async () => { await syncCanonicalProducts(); }),
+      refetchThrottled('orders', async () => { await syncOrders(); }),
+    ]);
     await loadFromCache();
   }, [loadFromCache]);
 
   useFocusEffect(
     useCallback(() => {
+      void loadFromCache();
       void refresh(false);
-    }, [refresh]),
+      // When the catalog or orders cache warms from any source (warmCache,
+      // background sync, post-write invalidation), refresh the local list.
+      const unsubCatalog = onCacheStateChange('catalog', (s) => {
+        if (s.state === 'warm') void loadFromCache();
+      });
+      const unsubOrders = onCacheStateChange('orders', (s) => {
+        if (s.state === 'warm') void loadFromCache();
+      });
+      return () => { unsubCatalog(); unsubOrders(); };
+    }, [loadFromCache, refresh]),
   );
 
   /** Build the dropdown list:
@@ -161,9 +188,30 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
     };
   }, [products, openItemMap, query]);
 
+  /**
+   * Promise that rejects after `ms` so a slow / dead network doesn't leave
+   * the row spinning forever. 3 s is long enough for real ngrok / Bifrost
+   * hops on warehouse Wi-Fi but short enough that the user knows to retry.
+   */
+  function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const id = setTimeout(() => reject(new Error('JIT timeout')), ms);
+      p.then(
+        (v) => { clearTimeout(id); resolve(v); },
+        (e) => { clearTimeout(id); reject(e); },
+      );
+    });
+  }
+
   async function pick(product: CanonicalProduct) {
+    if (verifyingProductId) return; // de-dupe rapid taps
+    setVerifyError(null);
+    setVerifyingProductId(product.product_id);
+    haptic.tap();
+
     // Learn barcode → product the moment the guard picks, so a future
     // scan auto-resolves even if they cancel the receipt downstream.
+    // This is local-only + an outbox row; safe before JIT.
     if (incomingBarcode) {
       try {
         await learnBarcode(incomingBarcode, product.product_id, 'scan');
@@ -175,23 +223,58 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
         // Non-fatal: the receipt flow has its own learning step.
       }
     }
-    // No-barcode pick path: if this product already has a real barcode
-    // learned, reuse it so the receipt rolls into the same stock row and
-    // the user sees the actual barcode (not `catalog_…`). Only fall back
-    // to the synthetic id when nothing is mapped yet — the format is
-    // stable per product_id so a later real-barcode learn keeps history
-    // and stock aligned.
+
+    // JIT verification — fetch the freshest single-row view of this
+    // product (live has_barcode + primary_barcode). The cached row is
+    // a visual hint; this fetched row is what we commit against.
+    // Fail-closed: any error / timeout cancels the navigation so a
+    // stale cache can't produce a wrong receipt.
+    let verified: CanonicalProduct;
+    try {
+      const remote = await withTimeout(api.fetch.canonicalProduct(product.product_id), 3000);
+      verified = {
+        product_id: remote.product_id,
+        canonical_name: remote.canonical_name,
+        category: remote.category,
+        hsn_code: remote.hsn_code,
+        unit: remote.unit,
+        pack_size: remote.pack_size,
+        has_barcode: remote.has_barcode ? 1 : 0,
+        primary_barcode: remote.primary_barcode ?? null,
+        updated_at: Date.now(),
+      };
+    } catch (err) {
+      setVerifyingProductId(null);
+      haptic.warn();
+      // 401 is already handled centrally (session cleared, navigator
+      // re-renders into Login). For everything else — timeout, offline,
+      // 4xx, 5xx — block the pick with a small banner.
+      if (err instanceof ApiError && err.status === 401) return;
+      setVerifyError(t('couldntVerify'));
+      return;
+    }
+    setVerifyingProductId(null);
+
+    // No-barcode pick path: pick the real barcode in this order so the
+    // receipt rolls into the same stock row as future scans.
+    //   1. `incomingBarcode` if the user came in via Scan-then-pick.
+    //   2. The just-verified `primary_barcode` — guaranteed-fresh.
+    //   3. Local `product_barcodes` — covers offline gap where this
+    //      device just learned a barcode the server hasn't seen yet.
+    //   4. Synthetic `catalog_<product_id>` — stable per product_id so a
+    //      later real-barcode learn keeps history and stock aligned.
     let barcode = incomingBarcode;
     if (!barcode) {
-      const existing = await findBarcodeForProduct(product.product_id);
-      barcode = existing ?? `catalog_${product.product_id}`;
+      const fromCatalog = verified.primary_barcode ?? null;
+      const fromLocal = fromCatalog ? null : await findBarcodeForProduct(verified.product_id);
+      barcode = fromCatalog ?? fromLocal ?? `catalog_${verified.product_id}`;
     }
     navigation.push('Receiving', {
       barcode,
-      productId: product.product_id,
-      productName: product.canonical_name,
-      unit: product.unit,
-      packSize: product.pack_size,
+      productId: verified.product_id,
+      productName: verified.canonical_name,
+      unit: verified.unit,
+      packSize: verified.pack_size,
     });
   }
 
@@ -246,7 +329,7 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
         </View>
       </View>
 
-      {loading ? (
+      {showSkeleton ? (
         <View style={{ paddingHorizontal: spacing.md, gap: spacing.sm }}>
           <Skeleton height={48} />
           <Skeleton height={48} />
@@ -274,10 +357,13 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
               )}
               renderItem={({ item: p }) => {
                 const oi = openItemMap[p.product_id];
+                const isVerifying = verifyingProductId === p.product_id;
+                const isAnyVerifying = verifyingProductId !== null;
                 return (
                   <Pressable
                     android_ripple={{ color: palette.surfaceContainerLowest }}
                     onPress={() => { void pick(p); }}
+                    disabled={isAnyVerifying}
                     style={({ pressed }) => [
                       {
                         paddingHorizontal: spacing.md,
@@ -287,6 +373,7 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
                         alignItems: 'center',
                         gap: spacing.md,
                         backgroundColor: pressed ? palette.surfaceContainerLowest : 'transparent',
+                        opacity: isAnyVerifying && !isVerifying ? 0.5 : 1,
                       },
                     ]}
                   >
@@ -301,16 +388,25 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
                         ) : null}
                       </View>
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text variant="labelLarge" color={palette.onSurface}>
-                        {p.pack_size} {p.unit}
-                      </Text>
-                      {oi && (
+                    {isVerifying ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <ActivityIndicator color={palette.primary} size="small" />
                         <Text variant="labelMedium" color={palette.onSurfaceVariant}>
-                          {oi.received_qty}/{oi.expected_qty}
+                          {t('verifying')}
                         </Text>
-                      )}
-                    </View>
+                      </View>
+                    ) : (
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text variant="labelLarge" color={palette.onSurface}>
+                          {p.pack_size} {p.unit}
+                        </Text>
+                        {oi && (
+                          <Text variant="labelMedium" color={palette.onSurfaceVariant}>
+                            {oi.received_qty}/{oi.expected_qty}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                   </Pressable>
                 );
               }}
@@ -326,6 +422,28 @@ export function CatalogPickerScreen({ navigation, route }: Props) {
 
           {/* Footer: one closest-match pill + photo escape hatch */}
           <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+            {verifyError && (
+              <Pressable onPress={() => setVerifyError(null)}>
+                <View
+                  style={{
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.md,
+                    borderWidth: 1,
+                    borderColor: palette.error,
+                    borderRadius: radius.md,
+                    backgroundColor: palette.errorContainer ?? palette.surfaceContainerLowest,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.sm,
+                  }}
+                >
+                  <Text variant="bodyMedium" color={palette.error} style={{ flex: 1 }}>
+                    {verifyError}
+                  </Text>
+                  <X size={16} color={palette.error} strokeWidth={2.2} />
+                </View>
+              </Pressable>
+            )}
             {suggestion && (
               <Pressable onPress={() => { void pick(suggestion); }}>
                 <View

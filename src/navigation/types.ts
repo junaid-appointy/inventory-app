@@ -34,6 +34,7 @@ export type RootStackParamList = {
   Outbox: undefined;
   Orders: undefined;
   Stock: undefined;
+  EditStock: { barcode: string };
   Dispense: { barcode?: string } | undefined;
   Alerts: undefined;
   DeliverySummary: DeliverySummaryParams;

@@ -8,7 +8,8 @@ export type OutboxKind =
   | 'dispense'
   | 'reorder_request'
   | 'mismatch_flag'
-  | 'learn_barcode';
+  | 'learn_barcode'
+  | 'stock_correction';
 
 export type OutboxRow = {
   id: string;

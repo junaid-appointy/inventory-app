@@ -1,6 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { ANONYMOUS_PRINCIPAL, can, Principal } from '../rbac';
 import { api } from '../sync/api';
+import { resetAllCacheStates } from '../sync/cacheStatus';
+import { resetAllRefetchThrottles } from '../sync/refetch';
+import { warmCache } from '../sync/warmCache';
 import { clearSession, GuardSession, getSession, hydrateSession, onSessionChange, setSession } from './session';
 
 type Ctx = {
@@ -41,8 +44,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hydrateSession().then((s) => {
       setSessionState(s);
       setReady(true);
+      // Re-opening the app with a persisted session: warm the cache
+      // immediately so Home/Stock/Catalog skeletons fill in before the
+      // user reaches them. Fire-and-forget — non-blocking by design.
+      if (s) void warmCache();
     });
-    return onSessionChange(setSessionState);
+    // Subscribe to session changes from any source — manual logout,
+    // 401 auto-clear in sync/api.ts, or another tab updating storage.
+    // When the session becomes null we also reset cache states so the
+    // next login starts cold.
+    return onSessionChange((next) => {
+      setSessionState(next);
+      if (next === null) {
+        resetAllCacheStates();
+        resetAllRefetchThrottles();
+      }
+    });
   }, []);
 
   const login = useCallback(async ({ guardName, pin }: { guardName: string; pin: string }) => {
@@ -53,9 +70,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       guardName: res.guardName,
       language: res.language,
     });
+    // Kick off the warm-up so Home tiles populate without waiting for
+    // the periodic 30 s sync tick. Non-blocking — login() returns
+    // immediately so the LoginScreen can navigate to Home and the user
+    // sees skeletons that fill in as each request returns.
+    void warmCache();
   }, []);
 
   const logout = useCallback(async () => {
+    // clearSession() fires onSessionChange → the listener above resets
+    // cache states. No need to call resetAllCacheStates here.
     await clearSession();
   }, []);
 

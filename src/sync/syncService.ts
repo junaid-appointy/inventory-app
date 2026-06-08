@@ -4,8 +4,11 @@ import { OutboxKind } from '../db/outbox';
 import { markFailed, markSending, markSent, nextBatch, pendingCount, recoverOrphanedSending } from '../db/outbox';
 import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
 import { upsertOrdersFromRemote } from '../db/orders';
+import { replaceStockFromRemote } from '../db/stock';
 import { api } from './api';
 import { getSession } from '../auth/session';
+import { cache, type CacheKey } from './cacheStatus';
+import { invalidateRefetchThrottle } from './refetch';
 
 type Listener = (count: number, lastSyncAt: number | null) => void;
 
@@ -40,7 +43,76 @@ const DISPATCH: Record<OutboxKind, (payload: object) => Promise<unknown>> = {
   reorder_request: api.send.reorderRequest,
   mismatch_flag: api.send.mismatchFlag,
   learn_barcode: api.send.learnBarcode,
+  stock_correction: api.send.stockCorrection,
 };
+
+// Per-kind cache invalidation map. After a successful dispatch we
+// refetch the listed caches so the local view reflects the server's
+// truth instead of just the optimistic write — closes the lag where
+// "I just dispensed, but the Stock list still shows the old count".
+// Empty list = no read-side cache touched (e.g. learn_barcode is
+// internal plumbing, no user-visible refresh needed).
+const POST_WRITE_INVALIDATES: Record<OutboxKind, CacheKey[]> = {
+  receipt: ['stock', 'orders'],
+  product_registration: ['catalog'],
+  issue: ['stock', 'alerts'],
+  dispense: ['stock', 'alerts'],
+  reorder_request: ['alerts'],
+  mismatch_flag: ['orders'],
+  learn_barcode: [],
+  stock_correction: ['stock', 'alerts'],
+};
+
+/**
+ * Pull the freshest read-side data for each touched cache. Called once
+ * per flushOnce after the outbox batch settles. Each fetch runs in
+ * parallel and updates its cache state independently so a stock pull
+ * failing doesn't block an orders pull.
+ */
+async function invalidateAffectedCaches(keys: Set<CacheKey>): Promise<void> {
+  const work: Promise<void>[] = [];
+  for (const key of keys) {
+    invalidateRefetchThrottle(key);
+    work.push(refreshOne(key));
+  }
+  await Promise.allSettled(work);
+}
+
+async function refreshOne(key: CacheKey): Promise<void> {
+  cache.refreshing(key);
+  try {
+    if (key === 'stock' || key === 'alerts') {
+      const remote = await api.fetch.stock();
+      await replaceStockFromRemote(
+        remote.map((r) => ({
+          barcode: r.barcode,
+          name: r.name,
+          category: r.category,
+          unit: r.unit,
+          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+          on_hand: Number(r.on_hand),
+          threshold: Number(r.threshold),
+        })),
+      );
+    } else if (key === 'orders') {
+      await syncOrders();
+    } else if (key === 'catalog') {
+      await syncCanonicalProducts();
+    }
+    cache.warm(key);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes('Network request failed') ||
+      msg.includes('TypeError: Network') ||
+      msg.includes('Unable to resolve host')
+    ) {
+      cache.offline(key);
+    } else {
+      cache.error(key);
+    }
+  }
+}
 
 export async function flushOnce(): Promise<{ sent: number; failed: number }> {
   if (running) {
@@ -59,6 +131,12 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
     // the batch — otherwise the stuck row will be skipped again.
     await recoverOrphanedSending().catch(() => 0);
 
+    // Track which read-side caches got touched by this batch so we can
+    // refresh them once, after the loop. Refetching per-row would
+    // multiply network calls on a delivery scan (50 receipts → 50 stock
+    // pulls); coalescing here means at most one pull per cache per batch.
+    const touched = new Set<CacheKey>();
+
     const batch = await nextBatch(config.outboxBatchSize);
     for (const row of batch) {
       const dispatch = DISPATCH[row.kind];
@@ -72,6 +150,7 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
         await dispatch(JSON.parse(row.payload));
         await markSent(row.id);
         sent++;
+        for (const k of POST_WRITE_INVALIDATES[row.kind]) touched.add(k);
       } catch (err) {
         await markFailed(row.id, err instanceof Error ? err.message : String(err));
         failed++;
@@ -79,6 +158,14 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
     }
     if (sent > 0 || failed > 0) {
       _lastSyncAt = Date.now();
+    }
+
+    // Post-write cache refresh — runs only when at least one write
+    // committed AND we're still logged in. Bypasses the throttle so the
+    // user sees their write reflected immediately, without waiting for
+    // the next periodic timer tick.
+    if (touched.size > 0 && getSession()?.token) {
+      await invalidateAffectedCaches(touched);
     }
 
     // Skip pulls when not logged in — they'd 401 and only add log noise.
@@ -130,6 +217,7 @@ export async function syncCanonicalProducts(): Promise<{ remote: number; written
       unit: r.unit,
       pack_size: r.pack_size,
       has_barcode: r.has_barcode ? 1 : 0,
+      primary_barcode: r.primary_barcode ?? null,
       updated_at: Date.now(),
     }));
     const result = await replaceCanonicalProducts(local);

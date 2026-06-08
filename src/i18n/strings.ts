@@ -214,6 +214,25 @@ export const STR = {
   expiryDate:         ['Expiry date',                        'एक्सपायरी की तारीख'],
   packsLabel:         ['packs',                               'पैक'],
 
+  // Edit stock (correction flow)
+  editStock:          ['Edit stock',                           'स्टॉक बदलें'],
+  editStockSub:       ['Update count or expiry',               'गिनती या एक्सपायरी बदलें'],
+  currentCount:       ['Current count',                        'अभी की गिनती'],
+  newCount:           ['New count',                            'नई गिनती'],
+  saveChanges:        ['Save changes',                         'सेव करें'],
+  noChanges:          ['No changes',                           'कोई बदलाव नहीं'],
+
+  // JIT verification + freshness UX
+  verifying:          ['Verifying…',                            'जाँच हो रही…'],
+  couldntVerify:      ["Couldn't verify — try again",           'जाँच नहीं हुई — फिर कोशिश करें'],
+  refreshingLabel:    ['Refreshing…',                           'रीफ़्रेश हो रहा…'],
+  offlineBanner:      ['Offline — showing saved data',          'ऑफ़लाइन — सेव किया हुआ दिखा रहे हैं'],
+  loginNeedsInternet: ['Login needs internet',                  'लॉगिन के लिए इंटरनेट ज़रूरी है'],
+  stockUpdatedTitle:  ['Stock updated',                         'स्टॉक बदला'],
+  stockUpdatedBody:   ['Stock has changed since you opened this screen.', 'जब से आपने यह स्क्रीन खोली, स्टॉक बदला है।'],
+  useNewCount:        ['Use new count',                         'नई गिनती लें'],
+  keepMyEdit:         ['Keep my edit',                          'मेरा बदलाव रखें'],
+
   // Settings → Data section
   dataSection:        ['DATA',                                'डेटा'],
   clearLocalData:     ['Clear local data',                    'स्थानीय डेटा मिटाएँ'],

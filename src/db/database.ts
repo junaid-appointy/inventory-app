@@ -6,7 +6,7 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
  * Current schema version. Bump this and add a migration block in
  * `runMigrations()` whenever you need additive schema changes.
  */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
@@ -236,6 +236,24 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     }
     await db.execAsync(`PRAGMA user_version = 6;`);
     version = 6;
+  }
+
+  if (version < 7) {
+    // Cache the canonical product's primary (most-recent) barcode locally
+    // so the "No barcode → catalog pick" path can reuse an existing
+    // mapping created by another guard / admin / bill upload without a
+    // round-trip. Without this, the device only knows barcodes IT has
+    // learned, so a server-side mapping invisible here forces the synthetic
+    // `catalog_*` id and the "No barcode yet" chip on the receiving screen.
+    const cols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(canonical_products)',
+    );
+    const hasPrimary = cols.some((c) => c.name === 'primary_barcode');
+    if (!hasPrimary) {
+      await db.execAsync(`ALTER TABLE canonical_products ADD COLUMN primary_barcode TEXT;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 7;`);
+    version = 7;
   }
 }
 

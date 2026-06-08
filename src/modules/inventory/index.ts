@@ -12,6 +12,7 @@ import { RegisterProductScreen } from './screens/RegisterProductScreen';
 import { ScannerScreen } from './screens/ScannerScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { StockScreen } from './screens/StockScreen';
+import { EditStockScreen } from './screens/EditStockScreen';
 
 export const inventoryModule: Module = {
   id: 'inventory',
@@ -31,6 +32,7 @@ export const inventoryModule: Module = {
     { name: 'Outbox', component: OutboxScreen },
     { name: 'Orders', component: OrdersScreen },
     { name: 'Stock', component: StockScreen },
+    { name: 'EditStock', component: EditStockScreen },
     { name: 'Dispense', component: DispenseScreen },
     { name: 'Alerts', component: AlertsScreen },
     { name: 'Settings', component: SettingsScreen },

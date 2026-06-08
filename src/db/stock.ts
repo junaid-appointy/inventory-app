@@ -140,3 +140,31 @@ export async function adjustOnHand(barcode: string, delta: number): Promise<void
     [delta, now(), barcode]
   );
 }
+
+/**
+ * Set on_hand and nearest_expiry directly. Used by the "Edit stock"
+ * correction flow — guard is overwriting the count/expiry, not adding or
+ * dispensing. Caller is also expected to enqueue a `stock_correction` row
+ * so the server keeps an audit trail.
+ */
+export async function correctStockLocal(
+  barcode: string,
+  onHand: number,
+  expiry: string | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE stock_levels SET on_hand = ?, nearest_expiry = ?, updated_at = ? WHERE barcode = ?`,
+    [Math.max(0, onHand), expiry, now(), barcode],
+  );
+}
+
+/** Read the current row's nearest_expiry (TEXT column added in migration 2). */
+export async function getNearestExpiry(barcode: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ nearest_expiry: string | null }>(
+    `SELECT nearest_expiry FROM stock_levels WHERE barcode = ?`,
+    [barcode],
+  );
+  return row?.nearest_expiry ?? null;
+}

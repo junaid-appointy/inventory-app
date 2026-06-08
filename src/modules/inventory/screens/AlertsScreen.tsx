@@ -20,7 +20,8 @@ import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
-import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
+import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
+import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Alerts'>;
 
@@ -29,56 +30,59 @@ export function AlertsScreen({ navigation }: Props) {
   const { palette } = useTheme();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
-  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Alerts derive from the stock cache (low-or-out is computed from
+  // stock_levels). Mirror its status — when stock warms, alerts warm.
+  const stockStatus = useCacheStatus('stock');
+  const showSkeleton =
+    !stockStatus.hasEverBeenWarm &&
+    stockStatus.state !== 'error' &&
+    stockStatus.state !== 'offline';
 
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
-    try {
-      const remote = await api.fetch.stock();
-      await replaceStockFromRemote(
-        remote.map((r) => ({
-          barcode: r.barcode,
-          name: r.name,
-          category: r.category,
-          unit: r.unit,
-          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-          on_hand: Number(r.on_hand),
-          threshold: Number(r.threshold),
-        })),
-      );
-      await setLastSyncTime('alerts');
-    } catch {
-      // Fall back to local SQLite cache.
-    }
+    const remote = await api.fetch.stock();
+    await replaceStockFromRemote(
+      remote.map((r) => ({
+        barcode: r.barcode,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+        on_hand: Number(r.on_hand),
+        threshold: Number(r.threshold),
+      })),
+    );
   }, []);
 
-  const load = useCallback(async (forceRefresh = false) => {
-    const lastSync = await getLastSyncTime('alerts');
-    const stale = isCacheStale(lastSync);
-
-    if (forceRefresh || stale) {
-      await fetchRemote();
-    }
-
+  const readLocal = useCallback(async () => {
     setRows(await listLowOrOut());
-    setInitialLoading(false);
-  }, [fetchRemote]);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await refetchThrottled('stock', fetchRemote);
+    await readLocal();
+  }, [fetchRemote, readLocal]);
 
   useEffect(() => {
-    load(false);
-    const unsub = navigation.addListener('focus', () => load(false));
-    return unsub;
-  }, [navigation, load]);
+    void readLocal();
+    void refresh();
+    const unsub = navigation.addListener('focus', () => { void refresh(); });
+    const unsubCache = onCacheStateChange('stock', (s) => {
+      if (s.state === 'warm') void readLocal();
+    });
+    return () => { unsub(); unsubCache(); };
+  }, [navigation, refresh, readLocal]);
 
   const onRefresh = useCallback(async () => {
+    invalidateRefetchThrottle('stock');
     setRefreshing(true);
     try {
-      await load(true);
+      await refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [load]);
+  }, [refresh]);
 
   const reorder = async (row: StockRow) => {
     haptic.tap();
@@ -98,7 +102,7 @@ export function AlertsScreen({ navigation }: Props) {
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('alerts')} subtitle={t('alertsSub')} onBack={() => navigation.goBack()} />
-      {initialLoading && rows.length === 0 ? (
+      {showSkeleton && rows.length === 0 ? (
         <View style={styles.list}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={{ marginBottom: spacing.md }}>

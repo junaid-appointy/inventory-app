@@ -13,7 +13,8 @@ import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
-import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
+import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
+import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -29,66 +30,87 @@ export function HomeScreen({ navigation }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchRemote = useCallback(async () => {
+  // Tile loading is driven by cache status, not just `stats === null`.
+  // Reading SQLite when the cache is cold returns zeros (empty table),
+  // which would render "0" instead of a Skeleton — wrong. Use the
+  // hasEverBeenWarm flag so once a cache has succeeded at least once
+  // this session, subsequent refreshes don't re-skeleton the tile.
+  const stockStatus = useCacheStatus('stock');
+  const ordersStatus = useCacheStatus('orders');
+  const alertsStatus = useCacheStatus('alerts');
+  const stillLoading = (s: { state: string; hasEverBeenWarm: boolean }) =>
+    !s.hasEverBeenWarm && s.state !== 'error' && s.state !== 'offline';
+
+  // Stock fetch — pulled out separately so refetchThrottled can manage
+  // its cache state. Throws on failure so the state machine sees it.
+  const fetchStock = useCallback(async () => {
     await flushOnce().catch(() => {});
-
-    try {
-      const remote = await api.fetch.stock();
-      await replaceStockFromRemote(
-        remote.map((r) => ({
-          barcode: r.barcode,
-          name: r.name,
-          category: r.category,
-          unit: r.unit,
-          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-          on_hand: Number(r.on_hand),
-          threshold: Number(r.threshold),
-        })),
-      );
-    } catch {
-      // offline — keep local cache
-    }
-
-    try {
-      const remoteOrders = await api.fetch.orders();
-      await upsertOrdersFromRemote(remoteOrders).catch(() => {});
-    } catch {
-      // offline — keep local cache
-    }
-
-    await setLastSyncTime('home');
+    const remote = await api.fetch.stock();
+    await replaceStockFromRemote(
+      remote.map((r) => ({
+        barcode: r.barcode,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+        on_hand: Number(r.on_hand),
+        threshold: Number(r.threshold),
+      })),
+    );
   }, []);
 
-  const load = useCallback(async (forceRefresh = false) => {
-    const lastSync = await getLastSyncTime('home');
-    const stale = isCacheStale(lastSync);
+  const fetchOrders = useCallback(async () => {
+    const remoteOrders = await api.fetch.orders();
+    await upsertOrdersFromRemote(remoteOrders);
+  }, []);
 
-    if (forceRefresh || stale) {
-      await fetchRemote();
-    }
-
+  const readLocal = useCallback(async () => {
     const [stock, openOrders, alerts] = await Promise.all([
       listStock(),
       listOpenOrders(),
       listLowOrOut(),
     ]);
     setStats({ stock: stock.length, orders: openOrders.length, alerts: alerts.length });
-  }, [fetchRemote]);
+  }, []);
+
+  // Each tile-relevant cache key gets its own throttled refetch in
+  // parallel. Errors flip the per-key state via refetchThrottled; we
+  // never throw out of here so the UI stays responsive.
+  const refresh = useCallback(async () => {
+    await Promise.all([
+      refetchThrottled('stock', fetchStock),
+      refetchThrottled('orders', fetchOrders),
+    ]);
+    await readLocal();
+  }, [fetchStock, fetchOrders, readLocal]);
 
   useEffect(() => {
-    load(false);
-    const unsub = navigation.addListener('focus', () => load(false));
-    return unsub;
-  }, [navigation, load]);
+    void readLocal();
+    void refresh();
+    const unsub = navigation.addListener('focus', () => { void refresh(); });
+    // Re-read SQLite whenever another caller (warmCache, post-write
+    // invalidation in flushOnce) successfully refreshes one of our
+    // upstream caches. Cheap because listStock/listOpenOrders/
+    // listLowOrOut are local-only SELECTs.
+    const unsubStock = onCacheStateChange('stock', (s) => {
+      if (s.state === 'warm') void readLocal();
+    });
+    const unsubOrders = onCacheStateChange('orders', (s) => {
+      if (s.state === 'warm') void readLocal();
+    });
+    return () => { unsub(); unsubStock(); unsubOrders(); };
+  }, [navigation, refresh, readLocal]);
 
   const onRefresh = useCallback(async () => {
+    invalidateRefetchThrottle('stock');
+    invalidateRefetchThrottle('orders');
     setRefreshing(true);
     try {
-      await load(true);
+      await refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [load]);
+  }, [refresh]);
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -133,7 +155,7 @@ export function HomeScreen({ navigation }: Props) {
           <Tile
             label={t('receiving')}
             value={stats?.orders}
-            loading={!stats}
+            loading={stillLoading(ordersStatus)}
             sub={t('expectedToday')}
             Icon={Truck}
             onPress={() => navigation.navigate('Orders')}
@@ -141,7 +163,7 @@ export function HomeScreen({ navigation }: Props) {
           <Tile
             label={t('stock')}
             value={stats?.stock}
-            loading={!stats}
+            loading={stillLoading(stockStatus)}
             sub={t('stockSub')}
             Icon={Package}
             onPress={() => navigation.navigate('Stock')}
@@ -158,7 +180,7 @@ export function HomeScreen({ navigation }: Props) {
           <Tile
             label={t('alerts')}
             value={stats?.alerts || undefined}
-            loading={!stats}
+            loading={stillLoading(alertsStatus)}
             sub={t('alertsSub')}
             Icon={Bell}
             tone={stats && stats.alerts > 0 ? 'warn' : 'neutral'}

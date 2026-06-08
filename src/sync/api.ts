@@ -13,7 +13,7 @@
  */
 
 import { config } from '../config';
-import { getSession } from '../auth/session';
+import { clearSession, getSession } from '../auth/session';
 import { getDeviceId } from '../utils/device';
 
 export class ApiError extends Error {
@@ -52,12 +52,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     'X-Site-Id': config.siteId,
     ...((init?.headers as Record<string, string>) ?? {}),
   };
-  if (session?.token) headers['X-Guard-Token'] = session.token;
+  const sentToken = session?.token ?? null;
+  if (sentToken) headers['X-Guard-Token'] = sentToken;
 
   const res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const body = text.slice(0, 500);
+    // 401 with a sent token means the session expired or was revoked
+    // server-side. Clear it centrally so:
+    //  - the polling/warm-up loop stops spamming "Invalid or expired
+    //    session" warnings on every tick,
+    //  - the AuthProvider's onSessionChange listener fires and the
+    //    RootNavigator drops back to LoginScreen.
+    // Skip when no token was sent (the login call itself surfaces 401
+    // via ApiError to the LoginScreen; there's no session to clear).
+    if (res.status === 401 && sentToken) {
+      // Fire-and-forget — clearing is best-effort and shouldn't block
+      // the error path.
+      void clearSession().catch(() => {});
+    }
     throw new ApiError(res.status, ApiError.format(res.status, path, body), body);
   }
   return res.json() as Promise<T>;
@@ -128,6 +142,10 @@ export type RemoteCanonicalProduct = {
    *  Drives the "hide already-taken products" filter when registering a
    *  brand-new barcode on the field-app. */
   has_barcode?: boolean;
+  /** Most-recently learned real barcode mapped to this product. Lets the
+   *  "no barcode" → catalog pick flow reuse the existing mapping instead
+   *  of synthesising a `catalog_*` id. Null when no barcode is mapped. */
+  primary_barcode?: string | null;
 };
 
 export const api = {
@@ -175,6 +193,8 @@ export const api = {
       post('/api/inventory/mismatch-flags', payload),
     learnBarcode: (payload: object) =>
       post('/api/inventory/canonical-products/learn-barcode', payload),
+    stockCorrection: (payload: object) =>
+      post('/api/inventory/corrections', payload),
   },
 
   // Reads (called by screens).
@@ -203,5 +223,24 @@ export const api = {
       request<{ products: RemoteCanonicalProduct[] }>(
         '/api/inventory/canonical-products',
       ).then((r) => r.products),
+    /** Single-row catalog read with live-computed `has_barcode` and
+     *  `primary_barcode`. Used by the catalog picker's JIT verification
+     *  right before navigating to ReceivingScreen, so the receipt is
+     *  built against the freshest server state (catches barcode
+     *  mappings learned by another guard / admin / bill flow that the
+     *  periodic sync hadn't pulled yet). */
+    canonicalProduct: (productId: string) =>
+      request<{ product: RemoteCanonicalProduct }>(
+        `/api/inventory/canonical-products/${encodeURIComponent(productId)}`,
+      ).then((r) => r.product),
+    /** Single-row stock read with nearest future expiry. Used by
+     *  EditStock and Dispense JIT verification so the user is editing
+     *  / dispensing against the authoritative on-hand. 404 if the
+     *  barcode has no server-side stock row yet — caller treats that
+     *  as "use the local view" rather than as an error. */
+    stockOne: (barcode: string) =>
+      request<{ stock: RemoteStockRow & { nearest_expiry: string | null } }>(
+        `/api/inventory/stock/${encodeURIComponent(barcode)}`,
+      ).then((r) => r.stock),
   },
 };

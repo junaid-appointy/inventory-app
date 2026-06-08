@@ -3,6 +3,7 @@ import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +28,7 @@ import { adjustOnHand, findStock, listStock, StockRow, statusFor } from '../../.
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
+import { api, ApiError } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
@@ -43,6 +45,17 @@ const STATUS_OPTIONS: FilterOption[] = [
   { key: 'Low', label: 'Low' },
   { key: 'Out', label: 'Out of Stock' },
 ];
+
+type VerifyStatus = 'verifying' | 'ok' | 'absent' | 'offline' | 'error';
+
+function isOfflineError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes('Network request failed') ||
+    msg.includes('TypeError: Network') ||
+    msg.includes('Unable to resolve host')
+  );
+}
 
 /** Subtle background tint per stock health */
 function cardBg(row: StockRow): string {
@@ -77,6 +90,15 @@ export function DispenseScreen({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
+  // JIT verification — fetch the server's authoritative on_hand the
+  // moment a product is selected. Dispense MUST commit against the
+  // freshest count so we never let a guard dispense 10 from a stock
+  // of 8. Fail-closed: if the JIT fetch fails or times out, the
+  // confirm button stays disabled until the user goes back and tries
+  // again with network.
+  const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('verifying');
+  const [verifiedOnHand, setVerifiedOnHand] = useState<number | null>(null);
+
   const categoryOptions = useMemo<FilterOption[]>(() => {
     const cats = new Set(all.map((r) => r.category).filter(Boolean) as string[]);
     return [{ key: 'All', label: 'All Categories' }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
@@ -94,6 +116,54 @@ export function DispenseScreen({ route, navigation }: Props) {
       findStock(initialBarcode).then((r) => r && setSelected(r));
     }
   }, [initialBarcode]);
+
+  // Whenever an item gets selected, re-run JIT verification. The
+  // dependency on `selected?.barcode` (not the whole row) means
+  // refetching only happens for an actual product change, not for the
+  // optimistic update we apply after submit.
+  useEffect(() => {
+    if (!selected) {
+      setVerifyStatus('verifying');
+      setVerifiedOnHand(null);
+      return;
+    }
+    let cancelled = false;
+    setVerifyStatus('verifying');
+    setVerifiedOnHand(null);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 3000);
+    (async () => {
+      try {
+        const remote = await api.fetch.stockOne(selected.barcode);
+        if (cancelled) return;
+        const remoteQty = Number(remote.on_hand);
+        setVerifiedOnHand(remoteQty);
+        setVerifyStatus('ok');
+        // Clamp qty to the verified ceiling. If the user had a stale
+        // higher qty in mind (e.g. local cache said 10, server says 7),
+        // drop to the new max so they can't accidentally submit over.
+        if (qty > remoteQty) setQty(Math.max(1, remoteQty));
+      } catch (err) {
+        if (cancelled) return;
+        // 404: the server has no record of this barcode (might be a
+        // device-only item never received server-side). Treat as
+        // "absent" — block dispense; you can't dispense what the
+        // server doesn't know exists.
+        if (err instanceof ApiError && err.status === 404) {
+          setVerifyStatus('absent');
+          return;
+        }
+        if (err instanceof ApiError && err.status === 401) return;
+        setVerifyStatus(isOfflineError(err) ? 'offline' : 'error');
+      } finally {
+        clearTimeout(t);
+      }
+    })();
+    return () => { cancelled = true; clearTimeout(t); controller.abort(); };
+    // intentionally NOT in deps: `qty` would re-run the JIT on every
+    // stepper tap; only refire when the selected barcode changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.barcode]);
 
   const results = useMemo(() => {
     if (selected) return [];
@@ -241,6 +311,30 @@ export function DispenseScreen({ route, navigation }: Props) {
           contentContainerStyle={[styles.body, { paddingBottom: spacing.xl + kbHeight }]}
           keyboardShouldPersistTaps="handled"
         >
+          {/* JIT verification banners. While verifying, the user can
+              still scroll and pick a reason — they just can't confirm
+              the dispense yet. */}
+          {verifyStatus === 'verifying' && (
+            <View style={styles.statusBanner}>
+              <ActivityIndicator color={palette.primary} size="small" />
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginLeft: spacing.sm }}>
+                {t('verifying')}
+              </Text>
+            </View>
+          )}
+          {(verifyStatus === 'offline' || verifyStatus === 'error' || verifyStatus === 'absent') && (
+            <View
+              style={[
+                styles.statusBanner,
+                { borderColor: palette.error, backgroundColor: palette.errorContainer ?? 'transparent' },
+              ]}
+            >
+              <Text variant="bodyMedium" color={palette.error}>
+                {t('couldntVerify')}
+              </Text>
+            </View>
+          )}
+
           <Card tone="elevated" padding="xl">
             <Text variant="labelLarge" color={palette.onSurfaceVariant}>
               PRODUCT
@@ -249,7 +343,10 @@ export function DispenseScreen({ route, navigation }: Props) {
               {selected.name}
             </Text>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
-              {selected.on_hand}
+              {/* Show the verified on_hand once JIT resolves; fall back
+                  to the local cache value until then. Per pack/unit
+                  formatting unchanged. */}
+              {verifiedOnHand ?? selected.on_hand}
               {selected.pack_size != null && selected.pack_size !== 1 ? ` × ${selected.pack_size}` : ''}
               {selected.unit ? ` ${selected.unit}` : ''} {t('onHand')}
             </Text>
@@ -259,7 +356,14 @@ export function DispenseScreen({ route, navigation }: Props) {
             <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
               {t('howMany').toUpperCase()}
             </Text>
-            <QtyStepper value={qty} onChange={setQty} min={1} max={selected.on_hand || undefined} />
+            {/* Max is the JIT-verified count when we have it; otherwise
+                the cached value. Stepper itself enforces the ceiling. */}
+            <QtyStepper
+              value={qty}
+              onChange={setQty}
+              min={1}
+              max={(verifiedOnHand ?? selected.on_hand) || undefined}
+            />
           </View>
 
           <View>
@@ -287,10 +391,15 @@ export function DispenseScreen({ route, navigation }: Props) {
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
+          {/* Confirm is gated by verification — fail-closed per the
+              cache-freshness plan. While verifying or after a failed
+              verification, the user can adjust qty / reason but can't
+              commit until they reach a verified state. */}
           <Button
             label={t('confirm')}
             onPress={submit}
             loading={saving}
+            disabled={verifyStatus !== 'ok'}
             size="lg"
             fullWidth
             leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}
@@ -326,5 +435,13 @@ const styles = StyleSheet.create({
   footer: {
     padding: spacing.xl,
     borderTopWidth: 1,
+  },
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
 });

@@ -16,7 +16,8 @@ import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
 import { useTheme } from '../../../theme';
-import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
+import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
+import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
@@ -62,61 +63,76 @@ export function StockScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const stockStatus = useCacheStatus('stock');
+  // Skeleton only while we have NEVER successfully warmed the stock
+  // cache this session AND we're not currently sitting on a known
+  // failure state (error / offline) — in those terminal states we'd
+  // rather show whatever's in local SQLite than a forever-spinner.
+  const showInitialSkeleton =
+    !stockStatus.hasEverBeenWarm &&
+    stockStatus.state !== 'error' &&
+    stockStatus.state !== 'offline';
 
   const categoryOptions = useMemo<FilterOption[]>(() => {
     const cats = new Set(rows.map((r) => r.category).filter(Boolean) as string[]);
     return [{ key: 'All', label: 'All Categories' }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
   }, [rows]);
 
+  // Pull the latest stock from the server and replace the local cache.
+  // Throws on failure so refetchThrottled() can flip the cache state to
+  // error / offline appropriately. flushOnce() runs first so any
+  // just-queued local writes hit the server before this read.
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
-    try {
-      const remote = await api.fetch.stock();
-      await replaceStockFromRemote(
-        remote.map((r) => ({
-          barcode: r.barcode,
-          name: r.name,
-          category: r.category,
-          unit: r.unit,
-          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-          on_hand: Number(r.on_hand),
-          threshold: Number(r.threshold),
-        })),
-      );
-      await setLastSyncTime('stock');
-    } catch {
-      // Offline fallback
-    }
+    const remote = await api.fetch.stock();
+    await replaceStockFromRemote(
+      remote.map((r) => ({
+        barcode: r.barcode,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+        on_hand: Number(r.on_hand),
+        threshold: Number(r.threshold),
+      })),
+    );
   }, []);
 
-  const load = useCallback(async (forceRefresh = false) => {
-    const lastSync = await getLastSyncTime('stock');
-    const stale = isCacheStale(lastSync);
-
-    if (forceRefresh || stale) {
-      await fetchRemote();
-    }
-
+  const readLocal = useCallback(async () => {
     setRows(await listStock());
-    setInitialLoading(false);
-  }, [fetchRemote]);
+  }, []);
+
+  // Always refetch on focus; the throttle in refetchThrottled stops a
+  // back-tap burst from firing N parallel requests.
+  const refresh = useCallback(async () => {
+    await refetchThrottled('stock', fetchRemote);
+    await readLocal();
+  }, [fetchRemote, readLocal]);
 
   useEffect(() => {
-    load(false);
-    const unsub = navigation.addListener('focus', () => load(false));
-    return unsub;
-  }, [navigation, load]);
+    void readLocal();
+    void refresh();
+    const unsub = navigation.addListener('focus', () => { void refresh(); });
+    // Subscribe to cache state changes too — warmCache or
+    // post-write invalidation in flushOnce can update the cache from
+    // outside this screen; re-read SQLite so the list reflects it.
+    const unsubCache = onCacheStateChange('stock', (s) => {
+      if (s.state === 'warm') void readLocal();
+    });
+    return () => { unsub(); unsubCache(); };
+  }, [navigation, refresh, readLocal]);
 
   const onRefresh = useCallback(async () => {
+    // Pull-to-refresh is a user-initiated request — never skip it.
+    invalidateRefetchThrottle('stock');
     setRefreshing(true);
     try {
-      await load(true);
+      await refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [load]);
+  }, [refresh]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -173,7 +189,7 @@ export function StockScreen({ navigation }: Props) {
         />
       </View>
 
-      {initialLoading && rows.length === 0 ? (
+      {showInitialSkeleton && rows.length === 0 ? (
         <View style={styles.list}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={{ marginBottom: spacing.sm }}>
@@ -199,7 +215,12 @@ export function StockScreen({ navigation }: Props) {
         }
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         renderItem={({ item }) => (
-          <Card tone="filled" padding="lg" style={{ backgroundColor: cardBg(item) }}>
+          <Card
+            tone="filled"
+            padding="lg"
+            style={{ backgroundColor: cardBg(item) }}
+            onPress={() => navigation.navigate('EditStock', { barcode: item.barcode })}
+          >
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <Text variant="titleMedium">{item.name}</Text>

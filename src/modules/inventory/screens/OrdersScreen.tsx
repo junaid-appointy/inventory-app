@@ -8,7 +8,8 @@ import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { useTheme } from '../../../theme';
-import { getLastSyncTime, setLastSyncTime, isCacheStale } from '../../../sync/cacheTime';
+import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
+import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Orders'>;
 type Enriched = Order & { items: OrderItem[] };
@@ -28,72 +29,50 @@ export function OrdersScreen({ navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
   const [orders, setOrders] = useState<Enriched[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const ordersStatus = useCacheStatus('orders');
+  const showSkeleton =
+    !ordersStatus.hasEverBeenWarm &&
+    ordersStatus.state !== 'error' &&
+    ordersStatus.state !== 'offline';
 
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
-
-    try {
-      const remote = await api.fetch.orders();
-      await upsertOrdersFromRemote(remote).catch(() => {});
-      setOrders(
-        remote.map((o) => ({
-          id: o.id,
-          vendor: o.vendor,
-          expected_at: o.expected_at ? new Date(o.expected_at).getTime() : null,
-          status: o.status,
-          updated_at: Date.now(),
-          items: o.items.map((i) => ({
-            id: i.id,
-            order_id: i.order_id,
-            barcode: i.barcode,
-            product_name: i.product_name,
-            expected_qty: Number(i.expected_qty),
-            received_qty: Number(i.received_qty),
-          })),
-        })),
-      );
-      await setLastSyncTime('orders');
-      return true;
-    } catch {
-      return false;
-    }
+    const remote = await api.fetch.orders();
+    await upsertOrdersFromRemote(remote).catch(() => {});
   }, []);
 
-  const load = useCallback(async (forceRefresh = false) => {
-    const lastSync = await getLastSyncTime('orders');
-    const stale = isCacheStale(lastSync);
-
-    if (forceRefresh || stale) {
-      const success = await fetchRemote();
-      if (success) {
-        setInitialLoading(false);
-        return;
-      }
-    }
-
+  const readLocal = useCallback(async () => {
     const list = await listOpenOrders();
     setOrders(
       await Promise.all(list.map(async (o) => ({ ...o, items: await getOrderItems(o.id) })))
     );
-    setInitialLoading(false);
-  }, [fetchRemote]);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await refetchThrottled('orders', fetchRemote);
+    await readLocal();
+  }, [fetchRemote, readLocal]);
 
   useEffect(() => {
-    load(false);
-    const unsub = navigation.addListener('focus', () => load(false));
-    return unsub;
-  }, [navigation, load]);
+    void readLocal();
+    void refresh();
+    const unsub = navigation.addListener('focus', () => { void refresh(); });
+    const unsubCache = onCacheStateChange('orders', (s) => {
+      if (s.state === 'warm') void readLocal();
+    });
+    return () => { unsub(); unsubCache(); };
+  }, [navigation, refresh, readLocal]);
 
   const onRefresh = useCallback(async () => {
+    invalidateRefetchThrottle('orders');
     setRefreshing(true);
     try {
-      await load(true);
+      await refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [load]);
+  }, [refresh]);
 
   const sections = useMemo(() => {
     const groups: Record<Bucket, Enriched[]> = { arrived: [], awaited: [], done: [] };
@@ -113,7 +92,7 @@ export function OrdersScreen({ navigation }: Props) {
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('receiving')} subtitle={t('expectedToday')} onBack={() => navigation.goBack()} />
-      {initialLoading && orders.length === 0 ? (
+      {showSkeleton && orders.length === 0 ? (
         <View style={styles.list}>
           <View style={[styles.sectionHeader, { marginBottom: spacing.sm }]}>
             <Skeleton width="35%" height={14} />

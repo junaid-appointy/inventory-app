@@ -1,7 +1,9 @@
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { View } from 'react-native';
 import { useAuth } from '../auth';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { getAllScreens } from '../modules';
 import { OrderSessionProvider } from '../modules/inventory/components/OrderSessionContext';
 import { LoginScreen } from '../modules/inventory/screens/LoginScreen';
@@ -30,28 +32,34 @@ export function RootNavigator() {
 
   return (
     <OrderSessionProvider>
-    <NavigationContainer theme={navTheme}>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: palette.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        {!ready || !session ? (
-          <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'fade' }} />
-        ) : (
-          screens.map((s) => (
-            <Stack.Screen
-              key={s.name}
-              name={s.name}
-              component={s.component}
-              options={s.options as any}
-            />
-          ))
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+      {/* Global "Offline" banner — pinned above the navigator so every
+          screen shows it without needing to wire it locally. Zero
+          height when online (no layout shift). */}
+      <View style={{ flex: 1 }}>
+        <OfflineBanner />
+        <NavigationContainer theme={navTheme}>
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: palette.background },
+              animation: 'slide_from_right',
+            }}
+          >
+            {!ready || !session ? (
+              <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'fade' }} />
+            ) : (
+              screens.map((s) => (
+                <Stack.Screen
+                  key={s.name}
+                  name={s.name}
+                  component={s.component}
+                  options={s.options as any}
+                />
+              ))
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </View>
     </OrderSessionProvider>
   );
 }

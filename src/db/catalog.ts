@@ -42,6 +42,10 @@ export type CanonicalProduct = {
    *  Drives the "hide already-taken products" filter when registering a
    *  brand-new barcode. SQLite has no bool, so it's stored as 0/1. */
   has_barcode: number;
+  /** Most-recently learned real barcode mapped to this product on the
+   *  server, or null. Read by the "No barcode" pick flow so it reuses
+   *  the existing mapping instead of falling back to a synthetic id. */
+  primary_barcode: string | null;
   updated_at: number;
 };
 
@@ -98,8 +102,8 @@ export async function findBarcodeForProduct(
 export async function upsertCanonicalProduct(product: CanonicalProduct): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO canonical_products (product_id, canonical_name, category, hsn_code, unit, pack_size, has_barcode, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO canonical_products (product_id, canonical_name, category, hsn_code, unit, pack_size, has_barcode, primary_barcode, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(product_id) DO UPDATE SET
        canonical_name = excluded.canonical_name,
        category = excluded.category,
@@ -107,6 +111,7 @@ export async function upsertCanonicalProduct(product: CanonicalProduct): Promise
        unit = excluded.unit,
        pack_size = excluded.pack_size,
        has_barcode = excluded.has_barcode,
+       primary_barcode = excluded.primary_barcode,
        updated_at = excluded.updated_at`,
     [
       product.product_id,
@@ -116,6 +121,7 @@ export async function upsertCanonicalProduct(product: CanonicalProduct): Promise
       product.unit,
       product.pack_size,
       product.has_barcode ? 1 : 0,
+      product.primary_barcode ?? null,
       product.updated_at,
     ],
   );
@@ -158,6 +164,7 @@ export async function replaceCanonicalProducts(
             ? p.pack_size
             : 1,
         has_barcode: p.has_barcode ? 1 : 0,
+        primary_barcode: p.primary_barcode ?? null,
         updated_at: p.updated_at ?? Date.now(),
       });
       ok++;

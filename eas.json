@@ -8,6 +8,10 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://unyearning-olympia-unclimactic.ngrok-free.dev",
+        "EXPO_PUBLIC_SITE_ID": "site-dev"
+      },
       "android": {
         "buildType": "apk"
       }
@@ -26,6 +30,10 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://ops-engine-dev-330299.bifrost.saastack.site",
+        "EXPO_PUBLIC_SITE_ID": "site-dev"
+      },
       "android": {
         "buildType": "app-bundle"
       }
