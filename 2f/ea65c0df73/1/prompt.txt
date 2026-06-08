@@ -1,0 +1,5 @@
+the whole UI got broken, and in the dispense screen, I do not even see the UI to put in count in the dispense screen. do I need to rebuild app?
+
+---
+
+it works, now continue
