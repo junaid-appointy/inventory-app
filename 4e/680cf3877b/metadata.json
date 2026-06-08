@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.6.2",
+  "checkpoint_id": "4e680cf3877b",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/OfflineBanner.tsx",
+    "src/modules/inventory/components/BatchEditor.tsx",
+    "src/sync/api.ts",
+    "src/sync/networkState.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/4e/680cf3877b/0/metadata.json",
+      "transcript": "/4e/680cf3877b/0/full.jsonl",
+      "content_hash": "/4e/680cf3877b/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 53,
+    "cache_creation_tokens": 373828,
+    "cache_read_tokens": 13532261,
+    "output_tokens": 22341,
+    "api_call_count": 38
+  }
+}
