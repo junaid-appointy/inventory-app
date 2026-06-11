@@ -26,7 +26,7 @@ export const STR = {
   alreadyReceived: ['already received',   'पहले मिला'],
   noMatchingOrder: ['No matching order',   'कोई ऑर्डर नहीं मिला'],
   greeting:        ['Hello',              'नमस्ते'],
-  guard:           ['Guard at Gate',      'गेट सुरक्षाकर्मी'],
+  guard:           ['Support Staff',       'सपोर्ट स्टाफ'],
   settings:        ['Settings',           'सेटिंग्स'],
   signOut:         ['Sign out',           'लॉगआउट'],
   signIn:          ['Sign in',            'लॉग इन'],
@@ -168,7 +168,7 @@ export const STR = {
   submitOrder:     ['Submit Order',       'ऑर्डर भेजें'],
 
   // Login
-  guardName:       ['Guard name',         'गार्ड का नाम'],
+  guardName:       ['Your name',          'आपका नाम'],
   guardNameHint:   ['As registered by your supervisor', 'आपके सुपरवाइज़र ने जो लिखा'],
   cameraHint:      ['We use the camera only to read barcodes — no photos are taken.', 'कैमरा सिर्फ़ बारकोड पढ़ने के लिए — कोई फ़ोटो नहीं।'],
 

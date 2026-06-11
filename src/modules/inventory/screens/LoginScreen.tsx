@@ -78,10 +78,7 @@ export function LoginScreen() {
           </View>
 
           <View style={styles.header}>
-            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-              {t('guard').toUpperCase()}
-            </Text>
-            <Text variant="displayMedium" style={{ marginTop: spacing.xs }}>
+            <Text variant="displayMedium">
               {t('appName')}
             </Text>
             <Text
