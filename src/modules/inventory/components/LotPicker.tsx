@@ -182,7 +182,7 @@ export function LotPicker({
               {(() => {
                 const urgency = expiryUrgency(lot.expiry);
                 const colors = urgencyColors(urgency, palette);
-                const rel = relativeExpiry(lot.expiry);
+                const rel = relativeExpiry(lot.expiry, t);
                 return (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
                     <View

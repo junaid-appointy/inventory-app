@@ -225,6 +225,8 @@ export const STR = {
   // JIT verification + freshness UX
   verifying:          ['Verifying…',                            'जाँच हो रही…'],
   couldntVerify:      ["Couldn't verify — try again",           'जाँच नहीं हुई — फिर कोशिश करें'],
+  dispenseOfflineNote:['Offline — using your saved count',      'ऑफ़लाइन — आपकी सेव की गई गिनती इस्तेमाल हो रही है'],
+  itemNotOnServer:    ['This item is not on the server yet',    'यह सामान अभी सर्वर पर नहीं है'],
   refreshingLabel:    ['Refreshing…',                           'रीफ़्रेश हो रहा…'],
   offlineBanner:      ['Offline — showing saved data',          'ऑफ़लाइन — सेव किया हुआ दिखा रहे हैं'],
   loginNeedsInternet: ['Login needs internet',                  'लॉगिन के लिए इंटरनेट ज़रूरी है'],
@@ -261,12 +263,138 @@ export const STR = {
   errorOccurred:      ['Something went wrong',               'कुछ गड़बड़ हुई'],
   tryAgain:           ['Try again',                          'फिर कोशिश करें'],
   networkOffline:     ['Offline — will sync when online',    'ऑफ़लाइन — ऑनलाइन होने पर भेजेंगे'],
+
+  // Connectivity banner
+  backOnline:         ['Back online',                        'फिर ऑनलाइन'],
+
+  // Generic in-progress label (Button loading state)
+  working:            ['Working…',                           'हो रहा है…'],
+
+  // Status filter options (label only — filter logic keys off the key)
+  statusAll:          ['All Status',                         'सभी स्थिति'],
+  statusInStock:      ['In Stock',                           'स्टॉक में'],
+  statusLow:          ['Low',                                'कम'],
+  statusOut:          ['Out of Stock',                       'खत्म'],
+  allCategories:      ['All Categories',                     'सभी श्रेणियाँ'],
+
+  // Empty / list states
+  noItemsMatch:       ['No items match.',                    'कोई सामान नहीं मिला।'],
+  nothingMatches:     ['Nothing matches',                    'कुछ नहीं मिला'],
+  tryDifferentFilter: ['Try a different filter or clear the search.', 'दूसरा फ़िल्टर आज़माएँ या खोज मिटाएँ।'],
+  allStockedUp:       ['All stocked up',                     'सब स्टॉक में'],
+  nothingBelowThreshold: ['Nothing is below its threshold right now.', 'अभी कुछ भी सीमा से नीचे नहीं है।'],
+  noDeliveries:       ['No deliveries scheduled',            'कोई डिलिवरी तय नहीं'],
+  ordersAppearHint:   ['Orders appear here once the office processes a bill.', 'ऑफिस के बिल प्रोसेस करते ही ऑर्डर यहाँ दिखेंगे।'],
+  noItemsScanned:     ['No items scanned yet',               'अभी कोई सामान स्कैन नहीं'],
+
+  // Dispense reasons (label only — canonical English value is stored)
+  reasonOfficeUse:    ['Office use',                         'ऑफिस उपयोग'],
+  reasonPantry:       ['Pantry',                             'पैंट्री'],
+  reasonCleaning:     ['Cleaning',                           'सफाई'],
+  reasonMaintenance:  ['Maintenance',                        'मेंटेनेंस'],
+  reasonOther:        ['Other',                              'अन्य'],
+
+  // Order session alerts
+  removeItem:         ['Remove item',                        'सामान हटाएँ'],
+  removeItemBody:     ['Remove "{name}" from this order?',   '"{name}" को इस ऑर्डर से हटाएँ?'],
+  discardScannedItems:['Discard all {count} scanned items?', 'सभी {count} स्कैन किए सामान हटाएँ?'],
+  keepScanning:       ['Keep scanning',                      'स्कैन जारी रखें'],
+  discardAll:         ['Discard all',                        'सब हटाएँ'],
+
+  // Sync queue (outbox)
+  statusWaiting:      ['Waiting',                            'इंतज़ार में'],
+  statusSending:      ['Sending…',                           'भेजा जा रहा…'],
+  statusFailed:       ['Failed',                             'विफल'],
+  everythingSent:     ['Everything has been sent to the server.', 'सब कुछ सर्वर पर भेज दिया गया है।'],
+  clearQueue:         ['Clear queue',                        'कतार मिटाएँ'],
+  clearQueueConfirm:  ['Clear sync queue?',                  'सिंक कतार मिटाएँ?'],
+  clearQueueBody:     ['{count} pending items will be permanently deleted. They will NOT be sent to the server.', '{count} बाकी सामान हमेशा के लिए मिट जाएँगे। ये सर्वर पर नहीं भेजे जाएँगे।'],
+  clearBtn:           ['Clear',                              'मिटाएँ'],
+  queueCleared:       ['Queue cleared',                      'कतार साफ़ हो गई'],
+  syncedCount:        ['Synced {sent}',                      '{sent} भेजे'],
+  syncedCountFailed:  ['Synced {sent}, {failed} failed',     '{sent} भेजे, {failed} विफल'],
+  syncFailedConn:     ['Sync failed — check connection',     'सिंक विफल — कनेक्शन जाँचें'],
+  itemsWaiting:       ['{count} items waiting',              '{count} सामान बाकी'],
+  nFailed:            ['{count} failed',                     '{count} विफल'],
+  lastSync:           ['Last sync: {time}',                  'आखिरी सिंक: {time}'],
+  nAttempts:          ['{count} attempts',                   '{count} कोशिशें'],
+  // Outbox row descriptions
+  descReceived:       ['Received {qty}× {name}',             '{qty}× {name} मिला'],
+  descNewProduct:     ['New product: {name}',                'नया सामान: {name}'],
+  descDispensed:      ['Dispensed {qty}× {name}',            '{qty}× {name} दिया'],
+  descReorder:        ['Reorder: {name}',                    'दोबारा ऑर्डर: {name}'],
+  descMismatch:       ['Mismatch: {received} vs {expected} expected', 'फ़र्क: {received} बनाम {expected} अपेक्षित'],
+  descInventoryUpdate:['Inventory update',                   'इन्वेंटरी अपडेट'],
+  // Relative time
+  justNow:            ['Just now',                           'अभी'],
+  minAgo:             ['{n} min ago',                        '{n} मिनट पहले'],
+  hourAgo:            ['{n}h ago',                            '{n} घंटे पहले'],
+  dayAgo:             ['{n}d ago',                            '{n} दिन पहले'],
+
+  // Receiving — shelf-life quick pick (label only; months value is kept)
+  shelf3mo:           ['3 mo',                               '3 माह'],
+  shelf6mo:           ['6 mo',                               '6 माह'],
+  shelf1yr:           ['1 yr',                               '1 साल'],
+  shelf2yr:           ['2 yr',                               '2 साल'],
+
+  // Batch editor
+  expires:            ['Expires',                            'एक्सपायरी'],
+  pickExpiry:         ['Pick expiry',                        'एक्सपायरी चुनें'],
+  tapToPickDate:      ['Tap to pick a date instead',         'इसके बजाय तारीख चुनें'],
+
+  // Register product — categories (label only; canonical value is stored)
+  catGrocery:         ['Grocery',                            'किराना'],
+  catOffice:          ['Office',                             'ऑफिस'],
+  catCafeteria:       ['Cafeteria',                          'कैफेटेरिया'],
+  catOther:           ['Other',                              'अन्य'],
+  // Register product — units (label only; canonical value is stored)
+  unitPcs:            ['pcs',                                'पीस'],
+  unitPackShort:      ['pack',                               'पैक'],
+  // Register product — tracking mode
+  trackingMode:       ['Tracking mode',                      'ट्रैकिंग मोड'],
+  wholePacks:         ['Whole packs ({size} {unit}/pack)',   'पूरे पैक ({size} {unit}/पैक)'],
+  divisibleMode:      ['Divisible (decimal {unit})',         'विभाज्य (दशमलव {unit})'],
+  dispenseFractionalHint: ['Dispense will accept fractional {unit} (e.g. 1.5 {unit}).', 'वितरण में आंशिक {unit} चलेगा (जैसे 1.5 {unit})।'],
+  dispenseWholeHint:  ['Dispense will be whole packs only (1, 2, 3…).', 'वितरण सिर्फ़ पूरे पैक में होगा (1, 2, 3…)।'],
+
+  // Relative expiry phrases (the date itself stays locale-neutral)
+  expiresToday:       ['expires today',                      'आज एक्सपायर'],
+  expiresTomorrow:    ['expires tomorrow',                   'कल एक्सपायर'],
+  expiredYesterday:   ['expired yesterday',                  'कल एक्सपायर हुआ'],
+  expiresInDays:      ['in {n} days',                        '{n} दिन में'],
+  expiresInWeeks:     ['in {n} weeks',                       '{n} हफ़्ते में'],
+  expiresInMonths:    ['in {n} months',                      '{n} महीने में'],
+  expiresInYears:     ['in {n} years',                       '{n} साल में'],
+  expiredDaysAgo:     ['expired {n} days ago',               '{n} दिन पहले एक्सपायर'],
+  expiredWeeksAgo:    ['expired {n} weeks ago',              '{n} हफ़्ते पहले एक्सपायर'],
+  expiredMonthsAgo:   ['expired {n} months ago',             '{n} महीने पहले एक्सपायर'],
+  expiredYearsAgo:    ['expired {n} years ago',              '{n} साल पहले एक्सपायर'],
+  // Order session batch summary
+  expShort:           ['Exp: {date}',                        'एक्स.: {date}'],
+  expiriesEarliest:   ['{count} expiries (earliest {date})', '{count} एक्सपायरी (सबसे पहले {date})'],
+
+  // Scanner
+  scanBarcode:        ['Scan barcode',                       'बारकोड स्कैन करें'],
+  holdSteadyHint:     ['Hold the barcode steady for a moment.', 'बारकोड को थोड़ी देर स्थिर रखें।'],
+  noBarcode:          ['No barcode',                         'बारकोड नहीं है'],
+  typeBarcode:        ['Type the barcode',                   'बारकोड टाइप करें'],
+  damagedLabelHint:   ["Use this when the label is damaged or won't scan.", 'जब लेबल खराब हो या स्कैन न हो तब इसका उपयोग करें।'],
 } as const satisfies Record<string, Pair>;
 
 export type StringKey = keyof typeof STR;
 
-export function translate(key: StringKey, lang: Lang): string {
+/** Values interpolated into a translated string's `{token}` placeholders. */
+export type TParams = Record<string, string | number>;
+
+export function translate(key: StringKey, lang: Lang, params?: TParams): string {
   const entry = STR[key];
   if (!entry) return key;
-  return lang === 'hi' ? entry[1] : entry[0];
+  let out: string = lang === 'hi' ? entry[1] : entry[0];
+  if (params) {
+    // Translate the frame, interpolate the data: replace {token} with the
+    // caller's value. Dynamic bits (names, counts) are data, not words to
+    // translate — keep them out of the string table.
+    out = out.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
+  }
+  return out;
 }

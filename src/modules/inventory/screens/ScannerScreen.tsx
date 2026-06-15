@@ -333,7 +333,7 @@ export function ScannerScreen({ navigation }: Props) {
         <View style={styles.topBarRow}>
           <IconButton Icon={X} onPress={() => navigation.goBack()} tone="inverse" />
           <Text variant="titleMedium" color="#fff">
-            Scan barcode
+            {t('scanBarcode')}
           </Text>
           <IconButton
             Icon={torch ? Zap : ZapOff}
@@ -349,7 +349,7 @@ export function ScannerScreen({ navigation }: Props) {
           color="#fff"
           style={{ textAlign: 'center', paddingHorizontal: spacing.xl }}
         >
-          Hold the barcode steady for a moment.
+          {t('holdSteadyHint')}
         </Text>
         <Pressable
           onPress={() => setManualOpen(true)}
@@ -361,7 +361,7 @@ export function ScannerScreen({ navigation }: Props) {
         >
           <Keyboard size={18} color="#fff" strokeWidth={2.2} />
           <Text variant="labelLarge" color="#fff">
-            Type code
+            {t('enterCode')}
           </Text>
         </Pressable>
         <Pressable
@@ -379,7 +379,7 @@ export function ScannerScreen({ navigation }: Props) {
         >
           <List size={18} color="#fff" strokeWidth={2.2} />
           <Text variant="labelLarge" color="#fff">
-            No barcode
+            {t('noBarcode')}
           </Text>
         </Pressable>
       </SafeAreaView>
@@ -395,13 +395,13 @@ export function ScannerScreen({ navigation }: Props) {
               onPress={(e) => e.stopPropagation()}
               style={[styles.modalCard, { backgroundColor: palette.surface }]}
             >
-              <Text variant="titleLarge">Type the barcode</Text>
+              <Text variant="titleLarge">{t('typeBarcode')}</Text>
               <Text
                 variant="bodyMedium"
                 color={palette.onSurfaceVariant}
                 style={{ marginTop: spacing.xs }}
               >
-                Use this when the label is damaged or won't scan.
+                {t('damagedLabelHint')}
               </Text>
               <TextInput
                 value={manualValue}

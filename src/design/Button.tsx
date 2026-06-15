@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme';
+import { useT } from '../i18n';
 import { haptic } from '../utils/haptics';
 import { Text } from './Text';
 import { motion, radius, spacing } from './tokens';
@@ -70,6 +71,7 @@ export function Button({
   testID,
 }: Props) {
   const { palette } = useTheme();
+  const tr = useT();
   const scale = useRef(new Animated.Value(1)).current;
   const s = SIZES[size];
   const isDisabled = !!disabled || !!loading;
@@ -155,8 +157,20 @@ export function Button({
       >
         <View style={[styles.row, { gap: s.gap }]}>
           {leadingIcon ? <View>{leadingIcon}</View> : null}
-          <Text variant={s.variant} color={t.fg} numberOfLines={1} adjustsFontSizeToFit>
-            {loading ? 'Working…' : label}
+          {/* flexShrink gives adjustsFontSizeToFit a width bound to shrink
+              against — without it, a long label (e.g. Hindi, which runs
+              wider than English) wraps to a second line inside the button
+              instead of scaling the font down. minimumFontScale stops it
+              shrinking to an unreadable size. */}
+          <Text
+            variant={s.variant}
+            color={t.fg}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            style={{ flexShrink: 1, textAlign: 'center' }}
+          >
+            {loading ? tr('working') : label}
           </Text>
           {trailingIcon ? <View>{trailingIcon}</View> : null}
         </View>

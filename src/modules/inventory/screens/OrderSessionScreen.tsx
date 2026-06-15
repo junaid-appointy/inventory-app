@@ -12,6 +12,7 @@ import {
   Text,
 } from '../../../design';
 import { useT } from '../../../i18n';
+import { StringKey, TParams } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
 import { haptic } from '../../../utils/haptics';
 import { useOrderSession, OrderSessionItem, OrderBatch } from '../components/OrderSessionContext';
@@ -47,12 +48,12 @@ export function OrderSessionScreen({ navigation }: Props) {
 
   const handleCancel = useCallback(() => {
     Alert.alert(
-      'Cancel Order',
-      `Discard all ${items.length} scanned item${items.length === 1 ? '' : 's'}?`,
+      t('cancelOrder'),
+      t('discardScannedItems', { count: items.length }),
       [
-        { text: 'Keep scanning', style: 'cancel' },
+        { text: t('keepScanning'), style: 'cancel' },
         {
-          text: 'Discard all',
+          text: t('discardAll'),
           style: 'destructive',
           onPress: () => {
             clear();
@@ -62,14 +63,14 @@ export function OrderSessionScreen({ navigation }: Props) {
         },
       ],
     );
-  }, [items.length, clear, navigation]);
+  }, [items.length, clear, navigation, t]);
 
   const handleRemoveItem = useCallback(
     (barcode: string, name: string) => {
-      Alert.alert('Remove item', `Remove "${name}" from this order?`, [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('removeItem'), t('removeItemBody', { name }), [
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('remove'),
           style: 'destructive',
           onPress: () => {
             removeItem(barcode);
@@ -78,7 +79,7 @@ export function OrderSessionScreen({ navigation }: Props) {
         },
       ]);
     },
-    [removeItem],
+    [removeItem, t],
   );
 
   const renderItem = useCallback(
@@ -94,7 +95,7 @@ export function OrderSessionScreen({ navigation }: Props) {
             >
               {item.category ?? '—'}
               {formatPack(item)}
-              {formatBatches(item.batches)}
+              {formatBatches(item.batches, t)}
             </Text>
           </View>
           <View style={[styles.qtyBadge, { backgroundColor: palette.primaryContainer }]}>
@@ -112,7 +113,7 @@ export function OrderSessionScreen({ navigation }: Props) {
         </View>
       </Card>
     ),
-    [handleRemoveItem],
+    [handleRemoveItem, t],
   );
 
   return (
@@ -135,7 +136,7 @@ export function OrderSessionScreen({ navigation }: Props) {
               variant="headlineSmall"
               style={{ textAlign: 'center' }}
             >
-              No items scanned yet
+              {t('noItemsScanned')}
             </Text>
             <Text
               variant="bodyLarge"
@@ -191,12 +192,15 @@ function formatPack(item: OrderSessionItem): string {
   return ` · ${parts.join(' ')}`;
 }
 
-function formatBatches(batches: OrderBatch[]): string {
+function formatBatches(
+  batches: OrderBatch[],
+  t: (key: StringKey, params?: TParams) => string,
+): string {
   const dated = batches.filter((b) => b.expiry);
   if (dated.length === 0) return '';
   const unique = Array.from(new Set(dated.map((b) => b.expiry as string))).sort();
-  if (unique.length === 1) return ` · Exp: ${formatExpiry(unique[0])}`;
-  return ` · ${unique.length} expiries (earliest ${formatExpiry(unique[0])})`;
+  if (unique.length === 1) return ` · ${t('expShort', { date: formatExpiry(unique[0]) })}`;
+  return ` · ${t('expiriesEarliest', { count: unique.length, date: formatExpiry(unique[0]) })}`;
 }
 
 const styles = StyleSheet.create({

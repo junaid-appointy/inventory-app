@@ -30,11 +30,17 @@ export function OrdersScreen({ navigation }: Props) {
   const { palette } = useTheme();
   const [orders, setOrders] = useState<Enriched[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  // False until the first local read resolves. Without this the empty
+  // state flashes: warmCache() flips hasEverBeenWarm at login (before this
+  // screen mounts), so the skeleton is already suppressed while `orders`
+  // is still [] for the frame before readLocal() returns.
+  const [loadedLocal, setLoadedLocal] = useState(false);
   const ordersStatus = useCacheStatus('orders');
   const showSkeleton =
-    !ordersStatus.hasEverBeenWarm &&
-    ordersStatus.state !== 'error' &&
-    ordersStatus.state !== 'offline';
+    !loadedLocal ||
+    (!ordersStatus.hasEverBeenWarm &&
+      ordersStatus.state !== 'error' &&
+      ordersStatus.state !== 'offline');
 
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
@@ -47,6 +53,7 @@ export function OrdersScreen({ navigation }: Props) {
     setOrders(
       await Promise.all(list.map(async (o) => ({ ...o, items: await getOrderItems(o.id) })))
     );
+    setLoadedLocal(true);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -187,14 +194,14 @@ export function OrdersScreen({ navigation }: Props) {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-              No deliveries scheduled
+              {t('noDeliveries')}
             </Text>
             <Text
               variant="bodyLarge"
               color={palette.onSurfaceVariant}
               style={{ textAlign: 'center', marginTop: spacing.sm }}
             >
-              Orders appear here once the office processes a bill.
+              {t('ordersAppearHint')}
             </Text>
           </View>
         }

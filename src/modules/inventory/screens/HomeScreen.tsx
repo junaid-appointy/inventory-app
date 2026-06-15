@@ -155,7 +155,7 @@ export function HomeScreen({ navigation }: Props) {
           <Tile
             label={t('receiving')}
             value={stats?.orders}
-            loading={stillLoading(ordersStatus)}
+            loading={stillLoading(ordersStatus) || stats === null}
             sub={t('expectedToday')}
             Icon={Truck}
             onPress={() => navigation.navigate('Orders')}
@@ -163,7 +163,7 @@ export function HomeScreen({ navigation }: Props) {
           <Tile
             label={t('stock')}
             value={stats?.stock}
-            loading={stillLoading(stockStatus)}
+            loading={stillLoading(stockStatus) || stats === null}
             sub={t('stockSub')}
             Icon={Package}
             onPress={() => navigation.navigate('Stock')}
@@ -180,7 +180,7 @@ export function HomeScreen({ navigation }: Props) {
           <Tile
             label={t('alerts')}
             value={stats?.alerts || undefined}
-            loading={stillLoading(alertsStatus)}
+            loading={stillLoading(alertsStatus) || stats === null}
             sub={t('alertsSub')}
             Icon={Bell}
             tone={stats && stats.alerts > 0 ? 'warn' : 'neutral'}

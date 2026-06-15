@@ -7,6 +7,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -24,14 +25,16 @@ import {
   Text,
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
-import { adjustOnHand, findStock, listStock, StockRow, statusFor } from '../../../db/stock';
-import { decrementLotsLocal, listLots } from '../../../db/lots';
+import { adjustOnHand, findStock, getNearestExpiry, listStock, replaceStockFromRemote, StockRow, statusFor } from '../../../db/stock';
+import { decrementLotsLocal, listLots, pruneLotsToBarcodes, replaceLotsLocal } from '../../../db/lots';
 import { LotAllocation, LotPicker, suggestFEFO } from '../components/LotPicker';
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
+import { StringKey } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
 import { api, ApiError } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
+import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
 import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
@@ -39,13 +42,23 @@ import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dispense'>;
 
-const REASONS = ['Office use', 'Pantry', 'Cleaning', 'Maintenance', 'Other'];
+// `value` is the canonical English string recorded on the dispense; only
+// the displayed label is translated, so reporting/grouping stays stable
+// regardless of the guard's chosen language.
+const REASONS: { value: string; labelKey: StringKey }[] = [
+  { value: 'Office use', labelKey: 'reasonOfficeUse' },
+  { value: 'Pantry', labelKey: 'reasonPantry' },
+  { value: 'Cleaning', labelKey: 'reasonCleaning' },
+  { value: 'Maintenance', labelKey: 'reasonMaintenance' },
+  { value: 'Other', labelKey: 'reasonOther' },
+];
 
-const STATUS_OPTIONS: FilterOption[] = [
-  { key: 'All', label: 'All Status' },
-  { key: 'In Stock', label: 'In Stock' },
-  { key: 'Low', label: 'Low' },
-  { key: 'Out', label: 'Out of Stock' },
+// Stable keys drive the filter logic; labels are resolved per-render.
+const STATUS_OPTIONS: { key: string; labelKey: StringKey }[] = [
+  { key: 'All', labelKey: 'statusAll' },
+  { key: 'In Stock', labelKey: 'statusInStock' },
+  { key: 'Low', labelKey: 'statusLow' },
+  { key: 'Out', labelKey: 'statusOut' },
 ];
 
 type VerifyStatus = 'verifying' | 'ok' | 'absent' | 'offline' | 'error';
@@ -88,9 +101,10 @@ export function DispenseScreen({ route, navigation }: Props) {
   const [category, setCategory] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [qty, setQty] = useState(1);
-  const [reason, setReason] = useState(REASONS[0]);
+  const [reason, setReason] = useState(REASONS[0].value);
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // JIT verification — fetch the server's authoritative on_hand the
   // moment a product is selected. Dispense MUST commit against the
@@ -110,15 +124,69 @@ export function DispenseScreen({ route, navigation }: Props) {
 
   const categoryOptions = useMemo<FilterOption[]>(() => {
     const cats = new Set(all.map((r) => r.category).filter(Boolean) as string[]);
-    return [{ key: 'All', label: 'All Categories' }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
-  }, [all]);
+    return [{ key: 'All', label: t('allCategories') }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
+  }, [all, t]);
+  const statusOptions = useMemo<FilterOption[]>(
+    () => STATUS_OPTIONS.map((o) => ({ key: o.key, label: t(o.labelKey) })),
+    [t],
+  );
+
+  // Pull the latest stock from the server and replace the local cache,
+  // then re-read SQLite into the picker list. Mirrors StockScreen so the
+  // dispense picker stays in sync with the source of truth — without this
+  // it only ever showed whatever warmCache last left behind. Shares the
+  // 'stock' refetch key with Stock/Alerts (same stock_levels table).
+  const fetchRemote = useCallback(async () => {
+    await flushOnce().catch(() => {});
+    const remote = await api.fetch.stock();
+    await replaceStockFromRemote(
+      remote.map((r) => ({
+        barcode: r.barcode,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+        dispense_mode: r.dispense_mode ?? 'pack',
+        on_hand: Number(r.on_hand),
+        threshold: Number(r.threshold),
+      })),
+    );
+    for (const r of remote) {
+      await replaceLotsLocal(
+        r.barcode,
+        (r.lots ?? []).map((l) => ({ expiry_date: l.expiry_date, qty: Number(l.qty) })),
+      );
+    }
+    await pruneLotsToBarcodes(remote.map((r) => r.barcode));
+  }, []);
+
+  const readLocal = useCallback(async () => {
+    setAll(await listStock());
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await refetchThrottled('stock', fetchRemote);
+    await readLocal();
+  }, [fetchRemote, readLocal]);
 
   useEffect(() => {
-    listStock().then((rows) => {
-      setAll(rows);
-      setInitialLoading(false);
-    });
-  }, []);
+    readLocal().then(() => setInitialLoading(false));
+    void refresh();
+    const unsub = navigation.addListener('focus', () => { void refresh(); });
+    return unsub;
+  }, [navigation, refresh, readLocal]);
+
+  const onRefresh = useCallback(async () => {
+    // Pull-to-refresh is user-initiated — bypass the throttle so a pull
+    // right after a focus-fetch isn't swallowed.
+    invalidateRefetchThrottle('stock');
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
 
   useEffect(() => {
     if (initialBarcode) {
@@ -191,6 +259,32 @@ export function DispenseScreen({ route, navigation }: Props) {
           return;
         }
         if (err instanceof ApiError && err.status === 401) return;
+
+        // Couldn't reach the server (offline) or the check failed/timed
+        // out. Offline-first decision: fall back to the last-known CACHED
+        // count + local lots so the guard can still dispense. The write
+        // queues in the outbox and reconciles on sync. Only the 404
+        // "absent" case above stays blocked — everything else degrades to
+        // the saved count rather than a dead button.
+        const cachedQty = selected.on_hand;
+        setVerifiedOnHand(cachedQty);
+        const minStep = selected.dispense_mode === 'divisible' ? 0.001 : 1;
+        const clampedQty = qty > cachedQty ? Math.max(minStep, cachedQty) : qty;
+        if (clampedQty !== qty) setQty(clampedQty);
+        let lots = (await listLots(selected.barcode)).map((l) => ({
+          expiry_date: l.expiry_date,
+          qty: Number(l.qty),
+        }));
+        if (lots.length === 0 && cachedQty > 0) {
+          lots = [{ expiry_date: await getNearestExpiry(selected.barcode), qty: cachedQty }];
+        }
+        if (cancelled) return;
+        const nextAvailability = lots.map((l) => ({
+          expiry: l.expiry_date,
+          available: Number(l.qty),
+        }));
+        setAvailability(nextAvailability);
+        setAllocation(suggestFEFO(nextAvailability, clampedQty));
         setVerifyStatus(isOfflineError(err) ? 'offline' : 'error');
       } finally {
         clearTimeout(t);
@@ -205,19 +299,20 @@ export function DispenseScreen({ route, navigation }: Props) {
   const results = useMemo(() => {
     if (selected) return [];
     const q = query.trim().toLowerCase();
-    return all
-      .filter((r) => {
-        if (category !== 'All' && r.category !== category) return false;
-        if (statusFilter !== 'All') {
-          const s = statusFor(r);
-          if (statusFilter === 'In Stock' && s !== 'ok') return false;
-          if (statusFilter === 'Low' && s !== 'low') return false;
-          if (statusFilter === 'Out' && s !== 'out') return false;
-        }
-        if (!q) return true;
-        return r.name.toLowerCase().includes(q) || r.barcode.includes(q) || (r.category ?? '').toLowerCase().includes(q);
-      })
-      .slice(0, 30);
+    // No cap: FlatList virtualizes, so the picker shows every stock item
+    // when browsing. Capping here (was slice(0, 30)) silently hid items
+    // for inventories with more than 30 SKUs.
+    return all.filter((r) => {
+      if (category !== 'All' && r.category !== category) return false;
+      if (statusFilter !== 'All') {
+        const s = statusFor(r);
+        if (statusFilter === 'In Stock' && s !== 'ok') return false;
+        if (statusFilter === 'Low' && s !== 'low') return false;
+        if (statusFilter === 'Out' && s !== 'out') return false;
+      }
+      if (!q) return true;
+      return r.name.toLowerCase().includes(q) || r.barcode.includes(q) || (r.category ?? '').toLowerCase().includes(q);
+    });
   }, [all, query, selected, category, statusFilter]);
 
   const totalTaken = useMemo(
@@ -334,7 +429,7 @@ export function DispenseScreen({ route, navigation }: Props) {
           />
           <FilterDropdown
             label={t('filterStatus')}
-            options={STATUS_OPTIONS}
+            options={statusOptions}
             selected={statusFilter}
             onSelect={setStatusFilter}
           />
@@ -356,6 +451,9 @@ export function DispenseScreen({ route, navigation }: Props) {
             data={results}
             keyExtractor={(r) => r.barcode}
             contentContainerStyle={styles.list}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
+            }
             ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
             renderItem={({ item }) => (
               <Card tone="filled" padding="lg" onPress={() => setSelected(item)} style={{ backgroundColor: cardBg(item) }}>
@@ -379,7 +477,7 @@ export function DispenseScreen({ route, navigation }: Props) {
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
-                  No items match.
+                  {t('noItemsMatch')}
                 </Text>
               </View>
             }
@@ -415,7 +513,24 @@ export function DispenseScreen({ route, navigation }: Props) {
               </Text>
             </View>
           )}
-          {(verifyStatus === 'offline' || verifyStatus === 'error' || verifyStatus === 'absent') && (
+          {/* Offline / failed check: dispense is still allowed against the
+              saved count (offline-first), so this is an informational note,
+              not a blocking error. */}
+          {(verifyStatus === 'offline' || verifyStatus === 'error') && (
+            <View
+              style={[
+                styles.statusBanner,
+                { borderColor: palette.outline, backgroundColor: palette.surfaceContainerHigh ?? 'transparent' },
+              ]}
+            >
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                {t('dispenseOfflineNote')}
+              </Text>
+            </View>
+          )}
+          {/* Absent: the server has no record of this item — dispense stays
+              blocked. */}
+          {verifyStatus === 'absent' && (
             <View
               style={[
                 styles.statusBanner,
@@ -423,14 +538,14 @@ export function DispenseScreen({ route, navigation }: Props) {
               ]}
             >
               <Text variant="bodyMedium" color={palette.error}>
-                {t('couldntVerify')}
+                {t('itemNotOnServer')}
               </Text>
             </View>
           )}
 
           <Card tone="elevated" padding="xl">
             <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-              PRODUCT
+              {t('product').toUpperCase()}
             </Text>
             <Text variant="headlineSmall" style={{ marginTop: spacing.xs }}>
               {selected.name}
@@ -449,35 +564,53 @@ export function DispenseScreen({ route, navigation }: Props) {
             </Text>
           </Card>
 
-          {/* Primary "How many?" stepper — the familiar input. Max is
-              the verified total available across all lots so the user
-              can't ask for more than exists. */}
-          <View style={styles.qtySection}>
-            <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
-              {t('howMany').toUpperCase()}
-            </Text>
-            <QtyStepper
-              value={qty}
-              onChange={setQty}
-              min={selected.dispense_mode === 'divisible' ? 0.001 : 1}
-              max={(totalAvailable || verifiedOnHand || selected.on_hand) || undefined}
-              decimal={selected.dispense_mode === 'divisible'}
-            />
-          </View>
+          {/* Quantity area. We can't know whether this is a single-lot
+              (stepper only) or multi-lot (stepper + per-lot picker)
+              product until JIT verification returns the lot breakdown.
+              Rendering the stepper immediately and letting the LotPicker
+              pop in later is jarring, so while verifying we show a
+              skeleton placeholder and commit the real controls in one
+              paint once the breakdown is known. */}
+          {verifyStatus === 'verifying' ? (
+            <View style={styles.qtySection}>
+              <View style={{ alignItems: 'center' }}>
+                <Skeleton width={120} height={16} />
+              </View>
+              <Skeleton width="100%" height={64} rounded="md" />
+            </View>
+          ) : (
+            <>
+              {/* Primary "How many?" stepper — the familiar input. Max is
+                  the verified total available across all lots so the user
+                  can't ask for more than exists. */}
+              <View style={styles.qtySection}>
+                <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
+                  {t('howMany').toUpperCase()}
+                </Text>
+                <QtyStepper
+                  value={qty}
+                  onChange={setQty}
+                  min={selected.dispense_mode === 'divisible' ? 0.001 : 1}
+                  max={(totalAvailable || verifiedOnHand || selected.on_hand) || undefined}
+                  decimal={selected.dispense_mode === 'divisible'}
+                />
+              </View>
 
-          {/* Per-lot picker. Only worth showing when there are 2+ lots —
-              for the common single-lot case the big stepper above is the
-              whole story. FEFO is highlighted as "← suggested"; guard
-              can override per-row. */}
-          {availability.length > 1 && (
-            <LotPicker
-              lots={allocation}
-              onChange={onAllocationChange}
-              desiredQty={qty}
-              unit={selected.unit ?? null}
-              packSize={selected.pack_size ?? null}
-              decimal={selected.dispense_mode === 'divisible'}
-            />
+              {/* Per-lot picker. Only worth showing when there are 2+ lots —
+                  for the common single-lot case the big stepper above is the
+                  whole story. FEFO is highlighted as "← suggested"; guard
+                  can override per-row. */}
+              {availability.length > 1 && (
+                <LotPicker
+                  lots={allocation}
+                  onChange={onAllocationChange}
+                  desiredQty={qty}
+                  unit={selected.unit ?? null}
+                  packSize={selected.pack_size ?? null}
+                  decimal={selected.dispense_mode === 'divisible'}
+                />
+              )}
+            </>
           )}
 
           <View>
@@ -486,7 +619,12 @@ export function DispenseScreen({ route, navigation }: Props) {
             </Text>
             <View style={styles.chipRow}>
               {REASONS.map((r) => (
-                <Chip key={r} label={r} selected={r === reason} onPress={() => setReason(r)} />
+                <Chip
+                  key={r.value}
+                  label={t(r.labelKey)}
+                  selected={r.value === reason}
+                  onPress={() => setReason(r.value)}
+                />
               ))}
             </View>
           </View>
@@ -505,15 +643,16 @@ export function DispenseScreen({ route, navigation }: Props) {
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
-          {/* Confirm is gated by verification — fail-closed per the
-              cache-freshness plan. While verifying or after a failed
-              verification, the user can adjust qty / reason but can't
-              commit until they reach a verified state. */}
+          {/* Confirm is blocked only while the live check is still running
+              ('verifying') or when the server has no record of the item
+              ('absent'). Offline / failed checks fall back to the saved
+              count and are allowed (offline-first) — the write queues in
+              the outbox and reconciles on sync. */}
           <Button
             label={t('confirm')}
             onPress={submit}
             loading={saving}
-            disabled={verifyStatus !== 'ok' || totalTaken <= 0}
+            disabled={verifyStatus === 'verifying' || verifyStatus === 'absent' || totalTaken <= 0}
             size="lg"
             fullWidth
             leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}

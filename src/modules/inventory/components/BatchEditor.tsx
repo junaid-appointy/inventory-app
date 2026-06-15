@@ -158,7 +158,7 @@ export function BatchEditor({
               {/* Qty section */}
               <View style={{ gap: spacing.xs }}>
                 <Text variant="labelMedium" color={palette.onSurfaceVariant} style={styles.sectionLabel}>
-                  HOW MANY?
+                  {t('howMany').toUpperCase()}
                 </Text>
                 {divisible ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
@@ -199,7 +199,7 @@ export function BatchEditor({
               {/* Expiry section */}
               <View style={{ gap: spacing.xs }}>
                 <Text variant="labelMedium" color={palette.onSurfaceVariant} style={styles.sectionLabel}>
-                  EXPIRES
+                  {t('expires').toUpperCase()}
                 </Text>
               {/* Expiry row — three visual states:
                   • undefined → two chips, user must pick
@@ -226,7 +226,7 @@ export function BatchEditor({
                       color={palette.primary}
                       style={{ marginLeft: spacing.xs }}
                     >
-                      Pick expiry
+                      {t('pickExpiry')}
                     </Text>
                   </Pressable>
 
@@ -249,7 +249,7 @@ export function BatchEditor({
                       color={palette.onSurfaceVariant}
                       style={{ marginLeft: spacing.xs }}
                     >
-                      No expiry
+                      {t('noExpiry')}
                     </Text>
                   </Pressable>
                 </View>
@@ -270,10 +270,10 @@ export function BatchEditor({
                   <CalendarOff size={16} color={palette.onSurfaceVariant} strokeWidth={2.2} />
                   <View style={{ marginLeft: spacing.sm, flex: 1 }}>
                     <Text variant="titleMedium" color={palette.onSurface}>
-                      No expiry
+                      {t('noExpiry')}
                     </Text>
                     <Text variant="labelMedium" color={palette.onSurfaceVariant}>
-                      Tap to pick a date instead
+                      {t('tapToPickDate')}
                     </Text>
                   </View>
                   <Pressable
@@ -305,9 +305,9 @@ export function BatchEditor({
                     <Text variant="titleMedium" color={colors.fg}>
                       {formatExpiry(b.expiry)}
                     </Text>
-                    {relativeExpiry(b.expiry) ? (
+                    {relativeExpiry(b.expiry, t) ? (
                       <Text variant="labelMedium" color={colors.fg} style={{ opacity: 0.85 }}>
-                        {relativeExpiry(b.expiry)}
+                        {relativeExpiry(b.expiry, t)}
                       </Text>
                     ) : null}
                   </View>

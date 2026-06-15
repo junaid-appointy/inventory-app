@@ -5,17 +5,21 @@ import { AppBar, Button, Card, Skeleton, spacing, StatusPill, Text } from '../..
 import { getDb } from '../../../db/database';
 import { INTERNAL_OUTBOX_KINDS, OutboxRow } from '../../../db/outbox';
 import { useT } from '../../../i18n';
+import { StringKey, TParams } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce, getLastSyncAt } from '../../../sync/syncService';
 import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Outbox'>;
 
+/** Translator function shape, threaded into the module-level helpers so
+ *  their output follows the active language. */
+type TFn = (key: StringKey, params?: TParams) => string;
 
-const STATUS_LABEL: Record<string, string> = {
-  queued: 'Waiting',
-  sending: 'Sending…',
-  failed: 'Failed',
+const STATUS_LABEL_KEY: Record<string, StringKey> = {
+  queued: 'statusWaiting',
+  sending: 'statusSending',
+  failed: 'statusFailed',
 };
 
 const TONE: Record<string, 'warn' | 'danger' | 'neutral'> = {
@@ -25,39 +29,39 @@ const TONE: Record<string, 'warn' | 'danger' | 'neutral'> = {
 };
 
 /** Parse payload JSON to produce a human-readable description */
-function describeItem(kind: string, payloadStr: string): string {
+function describeItem(kind: string, payloadStr: string, t: TFn): string {
   try {
     const p = JSON.parse(payloadStr);
     const name = p.product_name ?? p.name ?? '';
     const qty = p.qty ?? '';
     switch (kind) {
       case 'receipt':
-        return `Received ${qty}× ${name}`.trim();
+        return t('descReceived', { qty, name }).trim();
       case 'product_registration':
-        return `New product: ${name}`.trim();
+        return t('descNewProduct', { name }).trim();
       case 'issue':
       case 'dispense':
-        return `Dispensed ${qty}× ${name}`.trim();
+        return t('descDispensed', { qty, name }).trim();
       case 'reorder_request':
-        return `Reorder: ${name}`.trim();
+        return t('descReorder', { name }).trim();
       case 'mismatch_flag':
-        return `Mismatch: ${p.received_total ?? '?'} vs ${p.expected ?? '?'} expected`;
+        return t('descMismatch', { received: p.received_total ?? '?', expected: p.expected ?? '?' });
       default:
-        return 'Inventory update';
+        return t('descInventoryUpdate');
     }
   } catch {
-    return 'Inventory update';
+    return t('descInventoryUpdate');
   }
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: TFn): string {
   const diff = Date.now() - ts;
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t('justNow');
+  if (minutes < 60) return t('minAgo', { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t('hourAgo', { n: hours });
+  return t('dayAgo', { n: Math.floor(hours / 24) });
 }
 
 export function OutboxScreen({ navigation }: Props) {
@@ -98,18 +102,18 @@ export function OutboxScreen({ navigation }: Props) {
   const clearQueue = () => {
     if (rows.length === 0) return;
     Alert.alert(
-      'Clear sync queue?',
-      `${rows.length} pending item${rows.length === 1 ? '' : 's'} will be permanently deleted. They will NOT be sent to the server.`,
+      t('clearQueueConfirm'),
+      t('clearQueueBody', { count: rows.length }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Clear',
+          text: t('clearBtn'),
           style: 'destructive',
           onPress: async () => {
             const db = await getDb();
             await db.runAsync(`DELETE FROM outbox WHERE status != 'sent'`);
             await load();
-            setSyncResult('Queue cleared');
+            setSyncResult(t('queueCleared'));
           },
         },
       ],
@@ -123,12 +127,16 @@ export function OutboxScreen({ navigation }: Props) {
       const result = await flushOnce();
       await load();
       if (result.sent > 0 || result.failed > 0) {
-        setSyncResult(`Synced ${result.sent} item${result.sent === 1 ? '' : 's'}${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
+        setSyncResult(
+          result.failed > 0
+            ? t('syncedCountFailed', { sent: result.sent, failed: result.failed })
+            : t('syncedCount', { sent: result.sent }),
+        );
       } else {
-        setSyncResult('All synced ✓');
+        setSyncResult(t('allSynced'));
       }
     } catch {
-      setSyncResult('Sync failed — check connection');
+      setSyncResult(t('syncFailedConn'));
     } finally {
       setBusy(false);
     }
@@ -142,10 +150,10 @@ export function OutboxScreen({ navigation }: Props) {
       <View style={styles.statusBar}>
         <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
           {rows.length === 0
-            ? 'All synced ✓'
-            : `${rows.length} item${rows.length === 1 ? '' : 's'} waiting`}
-          {failedCount > 0 ? ` · ${failedCount} failed` : ''}
-          {lastSyncAt ? `  ·  Last sync: ${timeAgo(lastSyncAt)}` : ''}
+            ? t('allSynced')
+            : t('itemsWaiting', { count: rows.length })}
+          {failedCount > 0 ? ` · ${t('nFailed', { count: failedCount })}` : ''}
+          {lastSyncAt ? `  ·  ${t('lastSync', { time: timeAgo(lastSyncAt, t) })}` : ''}
         </Text>
         {syncResult && (
           <Text
@@ -183,13 +191,16 @@ export function OutboxScreen({ navigation }: Props) {
           <Card tone="filled" padding="lg">
             <View style={styles.rowHead}>
               <Text variant="titleMedium" style={{ flex: 1 }}>
-                {describeItem(item.kind, item.payload)}
+                {describeItem(item.kind, item.payload, t)}
               </Text>
-              <StatusPill label={STATUS_LABEL[item.status] ?? item.status} tone={TONE[item.status] ?? 'neutral'} />
+              <StatusPill
+                label={STATUS_LABEL_KEY[item.status] ? t(STATUS_LABEL_KEY[item.status]) : item.status}
+                tone={TONE[item.status] ?? 'neutral'}
+              />
             </View>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
-              {timeAgo(item.created_at)}
-              {item.attempts > 0 ? ` · ${item.attempts} attempt${item.attempts === 1 ? '' : 's'}` : ''}
+              {timeAgo(item.created_at, t)}
+              {item.attempts > 0 ? ` · ${t('nAttempts', { count: item.attempts })}` : ''}
             </Text>
             {item.last_error ? (
               <Text variant="bodyMedium" color={palette.error} style={{ marginTop: spacing.xs }} numberOfLines={2}>
@@ -201,14 +212,14 @@ export function OutboxScreen({ navigation }: Props) {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-              All synced ✓
+              {t('allSynced')}
             </Text>
             <Text
               variant="bodyLarge"
               color={palette.onSurfaceVariant}
               style={{ textAlign: 'center', marginTop: spacing.sm }}
             >
-              Everything has been sent to the server.
+              {t('everythingSent')}
             </Text>
           </View>
         }
@@ -221,7 +232,7 @@ export function OutboxScreen({ navigation }: Props) {
         ) : null}
         {rows.length > 0 ? (
           <Button
-            label="Clear queue"
+            label={t('clearQueue')}
             onPress={clearQueue}
             variant="tonal"
             size="md"

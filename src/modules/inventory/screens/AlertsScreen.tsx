@@ -31,13 +31,17 @@ export function AlertsScreen({ navigation }: Props) {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  // False until the first local read resolves — stops the "All stocked
+  // up" empty state flashing before readLocal() returns.
+  const [loadedLocal, setLoadedLocal] = useState(false);
   // Alerts derive from the stock cache (low-or-out is computed from
   // stock_levels). Mirror its status — when stock warms, alerts warm.
   const stockStatus = useCacheStatus('stock');
   const showSkeleton =
-    !stockStatus.hasEverBeenWarm &&
-    stockStatus.state !== 'error' &&
-    stockStatus.state !== 'offline';
+    !loadedLocal ||
+    (!stockStatus.hasEverBeenWarm &&
+      stockStatus.state !== 'error' &&
+      stockStatus.state !== 'offline');
 
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
@@ -57,6 +61,7 @@ export function AlertsScreen({ navigation }: Props) {
 
   const readLocal = useCallback(async () => {
     setRows(await listLowOrOut());
+    setLoadedLocal(true);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -168,14 +173,14 @@ export function AlertsScreen({ navigation }: Props) {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-              All stocked up
+              {t('allStockedUp')}
             </Text>
             <Text
               variant="bodyLarge"
               color={palette.onSurfaceVariant}
               style={{ textAlign: 'center', marginTop: spacing.sm }}
             >
-              Nothing is below its threshold right now.
+              {t('nothingBelowThreshold')}
             </Text>
           </View>
         }

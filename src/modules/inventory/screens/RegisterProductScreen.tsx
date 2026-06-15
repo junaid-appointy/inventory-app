@@ -25,6 +25,7 @@ import { learnBarcode, type CanonicalProduct } from '../../../db/catalog';
 import { enqueue } from '../../../db/outbox';
 import { upsertProduct } from '../../../db/products';
 import { useT } from '../../../i18n';
+import { StringKey } from '../../../i18n/strings';
 import { useTheme } from '../../../theme';
 import { RootStackParamList } from '../../../navigation/types';
 import {
@@ -38,8 +39,23 @@ import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RegisterProduct'>;
 
+// The chip VALUE is the canonical string stored on the product; only the
+// displayed label is translated. Values not in these maps (e.g. a unit/
+// category inherited from a catalog match, or SI symbols like kg/ml that
+// aren't translated) fall back to the raw value.
 const CATEGORIES = ['Grocery', 'Cleaning', 'Office', 'Cafeteria', 'Other'];
 const UNITS = ['pcs', 'kg', 'g', 'l', 'ml', 'pack'];
+const CATEGORY_LABEL: Record<string, StringKey> = {
+  Grocery: 'catGrocery',
+  Cleaning: 'catCleaning',
+  Office: 'catOffice',
+  Cafeteria: 'catCafeteria',
+  Other: 'catOther',
+};
+const UNIT_LABEL: Record<string, StringKey> = {
+  pcs: 'unitPcs',
+  pack: 'unitPackShort',
+};
 
 export function RegisterProductScreen({ route, navigation }: Props) {
   const t = useT();
@@ -301,7 +317,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
                     gap: spacing.xs,
                   }}
                 >
-                  <Text variant="labelMedium" color={palette.onSurfaceVariant}>Did you mean:</Text>
+                  <Text variant="labelMedium" color={palette.onSurfaceVariant}>{t('didYouMean')}</Text>
                   <Text variant="labelLarge" color={palette.onSurface}>{suggestion.canonical_name}</Text>
                   <Text variant="labelMedium" color={palette.onSurfaceVariant}>
                     · {suggestion.pack_size} {suggestion.unit}
@@ -330,7 +346,12 @@ export function RegisterProductScreen({ route, navigation }: Props) {
             </Text>
             <View style={styles.chipRow} pointerEvents={pickedProductId ? 'none' : 'auto'}>
               {visibleCategories.map((c) => (
-                <Chip key={c} label={c} selected={c === category} onPress={() => setCategory(c)} />
+                <Chip
+                  key={c}
+                  label={CATEGORY_LABEL[c] ? t(CATEGORY_LABEL[c]) : c}
+                  selected={c === category}
+                  onPress={() => setCategory(c)}
+                />
               ))}
             </View>
           </View>
@@ -341,7 +362,12 @@ export function RegisterProductScreen({ route, navigation }: Props) {
             </Text>
             <View style={styles.chipRow} pointerEvents={pickedProductId ? 'none' : 'auto'}>
               {visibleUnits.map((u) => (
-                <Chip key={u} label={u} selected={u === unit} onPress={() => setUnit(u)} />
+                <Chip
+                  key={u}
+                  label={UNIT_LABEL[u] ? t(UNIT_LABEL[u]) : u}
+                  selected={u === unit}
+                  onPress={() => setUnit(u)}
+                />
               ))}
             </View>
           </View>
@@ -366,16 +392,16 @@ export function RegisterProductScreen({ route, navigation }: Props) {
           {!pickedProductId && parsedPackSize != null && parsedPackSize > 1 ? (
             <View style={{ marginTop: spacing.xl }}>
               <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ marginBottom: spacing.sm }}>
-                TRACKING MODE
+                {t('trackingMode').toUpperCase()}
               </Text>
               <View style={styles.chipRow}>
                 <Chip
-                  label={`Whole packs (${parsedPackSize} ${unit}/pack)`}
+                  label={t('wholePacks', { size: parsedPackSize, unit })}
                   selected={!divisible}
                   onPress={() => setDivisible(false)}
                 />
                 <Chip
-                  label={`Divisible (decimal ${unit})`}
+                  label={t('divisibleMode', { unit })}
                   selected={divisible}
                   onPress={() => setDivisible(true)}
                 />
@@ -386,8 +412,8 @@ export function RegisterProductScreen({ route, navigation }: Props) {
                 style={{ marginTop: spacing.sm }}
               >
                 {divisible
-                  ? `Dispense will accept fractional ${unit} (e.g. 1.5 ${unit}).`
-                  : `Dispense will be whole packs only (1, 2, 3…).`}
+                  ? t('dispenseFractionalHint', { unit })
+                  : t('dispenseWholeHint')}
               </Text>
             </View>
           ) : null}

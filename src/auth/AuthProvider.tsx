@@ -3,6 +3,7 @@ import { ANONYMOUS_PRINCIPAL, can, Principal } from '../rbac';
 import { api } from '../sync/api';
 import { resetAllCacheStates } from '../sync/cacheStatus';
 import { resetAllRefetchThrottles } from '../sync/refetch';
+import { startSync, stopSync } from '../sync/syncService';
 import { warmCache } from '../sync/warmCache';
 import { clearSession, GuardSession, getSession, hydrateSession, onSessionChange, setSession } from './session';
 
@@ -47,17 +48,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Re-opening the app with a persisted session: warm the cache
       // immediately so Home/Stock/Catalog skeletons fill in before the
       // user reaches them. Fire-and-forget — non-blocking by design.
-      if (s) void warmCache();
+      // Also start the background sync loop (periodic flush + push on
+      // reconnect) which is otherwise never started.
+      if (s) {
+        void warmCache();
+        startSync();
+      }
     });
     // Subscribe to session changes from any source — manual logout,
     // 401 auto-clear in sync/api.ts, or another tab updating storage.
-    // When the session becomes null we also reset cache states so the
-    // next login starts cold.
+    // When the session becomes null we also reset cache states and stop
+    // the sync loop so the next login starts cold.
     return onSessionChange((next) => {
       setSessionState(next);
       if (next === null) {
+        stopSync();
         resetAllCacheStates();
         resetAllRefetchThrottles();
+      } else {
+        // startSync is idempotent (no-op if already running), so it's
+        // safe to call on every login / session refresh.
+        startSync();
       }
     });
   }, []);

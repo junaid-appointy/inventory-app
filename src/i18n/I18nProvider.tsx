@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Lang, StringKey, translate } from './strings';
+import { Lang, StringKey, translate, TParams } from './strings';
 
 const STORAGE_KEY = 'app.lang';
 const DEFAULT_LANG: Lang = 'en';
@@ -8,8 +8,9 @@ const DEFAULT_LANG: Lang = 'en';
 type Ctx = {
   lang: Lang;
   setLang: (l: Lang) => void;
-  /** Translate a string key. Unknown keys are returned verbatim. */
-  t: (key: StringKey) => string;
+  /** Translate a string key. Unknown keys are returned verbatim.
+   *  Pass `params` to interpolate `{token}` placeholders. */
+  t: (key: StringKey, params?: TParams) => string;
 };
 
 const I18nContext = createContext<Ctx | null>(null);
@@ -32,7 +33,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     () => ({
       lang,
       setLang,
-      t: (key) => translate(key, lang),
+      t: (key, params) => translate(key, lang, params),
     }),
     [lang, setLang]
   );
@@ -47,7 +48,7 @@ export function useI18n(): Ctx {
     return {
       lang: DEFAULT_LANG,
       setLang: () => {},
-      t: (key) => translate(key, DEFAULT_LANG),
+      t: (key, params) => translate(key, DEFAULT_LANG, params),
     };
   }
   return ctx;

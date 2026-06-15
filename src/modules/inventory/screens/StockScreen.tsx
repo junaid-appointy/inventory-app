@@ -12,6 +12,7 @@ import {
 import { listStock, statusFor, StockRow, replaceStockFromRemote } from '../../../db/stock';
 import { pruneLotsToBarcodes, replaceLotsLocal } from '../../../db/lots';
 import { useT } from '../../../i18n';
+import { StringKey } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
@@ -53,11 +54,13 @@ function packSizeLabel(row: StockRow): string {
   return unit ? `× ${ps} ${unit}` : `× ${ps}`;
 }
 
-const STATUS_OPTIONS: FilterOption[] = [
-  { key: 'All', label: 'All Status' },
-  { key: 'In Stock', label: 'In Stock' },
-  { key: 'Low', label: 'Low' },
-  { key: 'Out', label: 'Out of Stock' },
+// Stable keys drive the filter logic; labels are resolved per-render via
+// t() so they follow the active language.
+const STATUS_OPTIONS: { key: string; labelKey: StringKey }[] = [
+  { key: 'All', labelKey: 'statusAll' },
+  { key: 'In Stock', labelKey: 'statusInStock' },
+  { key: 'Low', labelKey: 'statusLow' },
+  { key: 'Out', labelKey: 'statusOut' },
 ];
 
 export function StockScreen({ navigation }: Props) {
@@ -68,20 +71,30 @@ export function StockScreen({ navigation }: Props) {
   const [category, setCategory] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
+  // False until the first local read resolves — stops the "Nothing
+  // matches" empty state flashing before readLocal() returns (warmCache
+  // flips hasEverBeenWarm at login, before this screen mounts).
+  const [loadedLocal, setLoadedLocal] = useState(false);
   const stockStatus = useCacheStatus('stock');
-  // Skeleton only while we have NEVER successfully warmed the stock
-  // cache this session AND we're not currently sitting on a known
-  // failure state (error / offline) — in those terminal states we'd
-  // rather show whatever's in local SQLite than a forever-spinner.
+  // Skeleton until the first local read lands, OR while we have NEVER
+  // successfully warmed the stock cache this session AND we're not
+  // sitting on a known failure state (error / offline) — in those
+  // terminal states we'd rather show whatever's in local SQLite than a
+  // forever-spinner.
   const showInitialSkeleton =
-    !stockStatus.hasEverBeenWarm &&
-    stockStatus.state !== 'error' &&
-    stockStatus.state !== 'offline';
+    !loadedLocal ||
+    (!stockStatus.hasEverBeenWarm &&
+      stockStatus.state !== 'error' &&
+      stockStatus.state !== 'offline');
 
   const categoryOptions = useMemo<FilterOption[]>(() => {
     const cats = new Set(rows.map((r) => r.category).filter(Boolean) as string[]);
-    return [{ key: 'All', label: 'All Categories' }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
-  }, [rows]);
+    return [{ key: 'All', label: t('allCategories') }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
+  }, [rows, t]);
+  const statusOptions = useMemo<FilterOption[]>(
+    () => STATUS_OPTIONS.map((o) => ({ key: o.key, label: t(o.labelKey) })),
+    [t],
+  );
 
   // Pull the latest stock from the server and replace the local cache.
   // Throws on failure so refetchThrottled() can flip the cache state to
@@ -116,6 +129,7 @@ export function StockScreen({ navigation }: Props) {
 
   const readLocal = useCallback(async () => {
     setRows(await listStock());
+    setLoadedLocal(true);
   }, []);
 
   // Always refetch on focus; the throttle in refetchThrottled stops a
@@ -198,7 +212,7 @@ export function StockScreen({ navigation }: Props) {
         />
         <FilterDropdown
           label={t('filterStatus')}
-          options={STATUS_OPTIONS}
+          options={statusOptions}
           selected={statusFilter}
           onSelect={setStatusFilter}
         />
@@ -263,14 +277,14 @@ export function StockScreen({ navigation }: Props) {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-              Nothing matches
+              {t('nothingMatches')}
             </Text>
             <Text
               variant="bodyLarge"
               color={palette.onSurfaceVariant}
               style={{ textAlign: 'center', marginTop: spacing.sm }}
             >
-              Try a different filter or clear the search.
+              {t('tryDifferentFilter')}
             </Text>
           </View>
         }

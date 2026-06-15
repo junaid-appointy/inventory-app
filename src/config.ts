@@ -10,6 +10,13 @@ export const config = {
     process.env.EXPO_PUBLIC_API_BASE_URL ??
     'https://unyearning-olympia-unclimactic.ngrok-free.dev',
   siteId: process.env.EXPO_PUBLIC_SITE_ID ?? 'site-dev',
+  // How often the background loop pushes queued writes (outbox flush).
+  // Cheap when the outbox is empty — no read payloads are pulled on this
+  // tick.
   syncIntervalMs: 30_000,
+  // How often the background loop re-pulls read-side data (catalog +
+  // orders). Deliberately slow to respect limited warehouse bandwidth;
+  // screen-focus and reconnect still pull fresh data during active use.
+  readPullIntervalMs: 300_000,
   outboxBatchSize: 20,
 };

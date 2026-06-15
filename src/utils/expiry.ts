@@ -5,7 +5,13 @@
  * ("15 Aug 2026") and urgency colors follow one rule set.
  */
 
+import type { StringKey, TParams } from '../i18n/strings';
+
 export type ExpiryUrgency = 'expired' | 'soon' | 'ok' | 'none';
+
+/** Translator function shape — passed in so the relative-time phrasing
+ *  follows the active language without this util holding lang state. */
+type TFn = (key: StringKey, params?: TParams) => string;
 
 const MONTHS_SHORT = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -60,25 +66,26 @@ export function expiryUrgency(iso: string | null | undefined): ExpiryUrgency {
 }
 
 /** Human-readable relative time hint: "in 8 days", "in 3 months",
- *  "expired 2 weeks ago", "today", "tomorrow". null when no expiry. */
-export function relativeExpiry(iso: string | null | undefined): string | null {
+ *  "expired 2 weeks ago", "today", "tomorrow". null when no expiry.
+ *  Pass the `t` translator so the phrasing follows the active language. */
+export function relativeExpiry(iso: string | null | undefined, t: TFn): string | null {
   const days = daysUntilExpiry(iso);
   if (days === null) return null;
-  if (days === 0) return 'expires today';
-  if (days === 1) return 'expires tomorrow';
-  if (days === -1) return 'expired yesterday';
+  if (days === 0) return t('expiresToday');
+  if (days === 1) return t('expiresTomorrow');
+  if (days === -1) return t('expiredYesterday');
   if (days > 0) {
-    if (days < 14) return `in ${days} days`;
-    if (days < 60) return `in ${Math.round(days / 7)} weeks`;
-    if (days < 365 * 2) return `in ${Math.round(days / 30)} months`;
-    return `in ${Math.round(days / 365)} years`;
+    if (days < 14) return t('expiresInDays', { n: days });
+    if (days < 60) return t('expiresInWeeks', { n: Math.round(days / 7) });
+    if (days < 365 * 2) return t('expiresInMonths', { n: Math.round(days / 30) });
+    return t('expiresInYears', { n: Math.round(days / 365) });
   }
   // Past
   const abs = -days;
-  if (abs < 14) return `expired ${abs} days ago`;
-  if (abs < 60) return `expired ${Math.round(abs / 7)} weeks ago`;
-  if (abs < 365 * 2) return `expired ${Math.round(abs / 30)} months ago`;
-  return `expired ${Math.round(abs / 365)} years ago`;
+  if (abs < 14) return t('expiredDaysAgo', { n: abs });
+  if (abs < 60) return t('expiredWeeksAgo', { n: Math.round(abs / 7) });
+  if (abs < 365 * 2) return t('expiredMonthsAgo', { n: Math.round(abs / 30) });
+  return t('expiredYearsAgo', { n: Math.round(abs / 365) });
 }
 
 /** Theme-color lookup table for an urgency bucket. Pass a theme palette

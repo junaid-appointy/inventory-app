@@ -88,7 +88,7 @@ export function OfflineBanner() {
         <View style={styles.bar}>
           <Wifi size={16} color={successFg} strokeWidth={2.4} />
           <Text variant="labelLarge" color={successFg} style={{ marginLeft: 8 }}>
-            Back online
+            {t('backOnline')}
           </Text>
         </View>
       </SafeAreaView>

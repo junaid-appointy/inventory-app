@@ -14,6 +14,7 @@ import { invalidateRefetchThrottle } from './refetch';
 type Listener = (count: number, lastSyncAt: number | null) => void;
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let readTimer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 let retryQueued = false;
 let _lastSyncAt: number | null = null;
@@ -128,7 +129,19 @@ async function refreshOne(key: CacheKey): Promise<void> {
   }
 }
 
-export async function flushOnce(): Promise<{ sent: number; failed: number }> {
+/**
+ * Push the outbox and (optionally) pull read-side data.
+ *
+ * `pullReads` controls the trailing catalog + orders GETs. Default true so
+ * focus-refetch, reconnect, and manual "Sync now" keep data fresh during
+ * active use. The frequent background timer passes `false` so idle ticks
+ * only push queued writes (≈free when the outbox is empty) instead of
+ * re-downloading the full catalog every 30s — read pulls run on the slower
+ * `readPullIntervalMs` cadence instead. Post-write cache invalidation
+ * (driven by what actually committed) always runs regardless.
+ */
+export async function flushOnce(opts?: { pullReads?: boolean }): Promise<{ sent: number; failed: number }> {
+  const pullReads = opts?.pullReads ?? true;
   if (running) {
     // Queue a retry so manual "Sync Now" taps aren't silently dropped.
     retryQueued = true;
@@ -183,11 +196,12 @@ export async function flushOnce(): Promise<{ sent: number; failed: number }> {
     }
 
     // Skip pulls when not logged in — they'd 401 and only add log noise.
-    // Login screen / AuthProvider will trigger a flush after a successful login.
-    if (getSession()?.token) {
-      // Pull latest canonical products catalog on each sync cycle.
-      // This is lightweight (just a GET) and ensures guards always
-      // have the latest admin-curated product names.
+    // Login screen / AuthProvider will trigger a flush after a successful
+    // login. Gated on pullReads so idle background ticks don't re-download
+    // the catalog every cycle (bandwidth/cost constraint).
+    if (pullReads && getSession()?.token) {
+      // Pull latest canonical products catalog so guards always have the
+      // latest admin-curated product names.
       await syncCanonicalProducts().catch(() => {});
       // Also mirror the open-orders list so ReceivingScreen can resolve
       // catalog picks to the right order item without a round-trip.
@@ -289,11 +303,19 @@ export function startSync(): void {
     })
     .catch(() => {})
     .finally(() => {
+      // First run after launch pulls fresh read-data too.
       flushOnce().catch(() => {});
     });
+  // Frequent tick: push queued writes only. Cheap when the outbox is
+  // empty — no read payloads downloaded.
   timer = setInterval(() => {
-    flushOnce().catch(() => {});
+    flushOnce({ pullReads: false }).catch(() => {});
   }, config.syncIntervalMs);
+  // Slow tick: re-pull read-side data (catalog + orders) on a relaxed
+  // cadence so idle devices don't keep re-downloading the catalog.
+  readTimer = setInterval(() => {
+    flushOnce({ pullReads: true }).catch(() => {});
+  }, config.readPullIntervalMs);
 
   // Trigger a flush the moment connectivity returns, instead of waiting
   // up to syncIntervalMs for the next timer tick. This makes "I just
@@ -317,6 +339,8 @@ export function startSync(): void {
 export function stopSync(): void {
   if (timer) clearInterval(timer);
   timer = null;
+  if (readTimer) clearInterval(readTimer);
+  readTimer = null;
   if (netSub) {
     try { netSub.remove(); } catch { /* ignore */ }
     netSub = null;
