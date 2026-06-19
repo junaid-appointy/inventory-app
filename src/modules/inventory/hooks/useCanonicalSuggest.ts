@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { CanonicalProduct, listCanonicalProducts } from '../../../db/catalog';
 
 /** Dice (bigram) similarity — surfaces a single "did you mean…" pick
@@ -56,9 +56,12 @@ export function useCanonicalSuggest(
     reload().catch(() => {});
   }, [reload]);
 
+  // Defer the scoring/sorting off the keystroke so the input stays smooth
+  // while typing against a large canonical catalog.
+  const deferredQuery = useDeferredValue(query);
   const { matches, suggestion } = useMemo(() => {
     const pool = excludeMapped ? catalog.filter((p) => !p.has_barcode) : catalog;
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     if (!q) {
       return {
         matches: [...pool].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)),
@@ -97,7 +100,10 @@ export function useCanonicalSuggest(
     }
 
     return { matches: hits, suggestion: bestSuggestion };
-  }, [catalog, query, excludeMapped]);
+  }, [catalog, deferredQuery, excludeMapped]);
 
-  return { matches, suggestion, catalog, reload };
+  // True while the deferred match is still catching up to the latest input.
+  const searching = query.trim().length > 0 && query !== deferredQuery;
+
+  return { matches, suggestion, catalog, searching, reload };
 }

@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ScanLine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -80,7 +81,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
   // Reached only when the scanned barcode is unmapped. Hide canonical
   // products that already have a barcode so the guard can't accidentally
   // map a second barcode to the same product (one-barcode-per-product).
-  const { matches, suggestion, catalog, reload } = useCanonicalSuggest(name, {
+  const { matches, suggestion, catalog, searching, reload } = useCanonicalSuggest(name, {
     excludeMapped: true,
   });
 
@@ -243,6 +244,23 @@ export function RegisterProductScreen({ route, navigation }: Props) {
               returnKeyType="done"
               clearable
             />
+
+            {dropdownOpen && searching && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.xs,
+                  marginTop: spacing.xs,
+                  paddingHorizontal: spacing.xs,
+                }}
+              >
+                <ActivityIndicator size="small" color={palette.primary} />
+                <Text variant="labelMedium" color={palette.onSurfaceVariant}>
+                  {t('searchingCatalog')}
+                </Text>
+              </View>
+            )}
 
             {dropdownOpen && matches.length > 0 && (
               <View

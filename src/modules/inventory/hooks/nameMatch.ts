@@ -103,6 +103,7 @@ export interface NameIndexEntry<T> {
   normalized: string;
   phonetic: string;
   tokens: string[];
+  tokenPhonetics: string[]; // phonetic key per token, precomputed once
 }
 
 export function buildNameIndex<T>(items: T[], getName: (item: T) => string): NameIndexEntry<T>[] {
@@ -118,6 +119,9 @@ export function buildNameIndex<T>(items: T[], getName: (item: T) => string): Nam
       normalized,
       phonetic: phoneticKey(name),
       tokens,
+      // Precompute per-token phonetic keys at index-build time so the hot
+      // ranking loop never recomputes a Soundex key per keystroke.
+      tokenPhonetics: tokens.map((t) => phoneticKey(t)),
     };
   });
 }
@@ -127,6 +131,15 @@ export interface ScoredMatch<T> {
   score: number;
 }
 
+// Returns the top-N items ranked by similarity to the query.
+// Lower score = better. Returns empty list if query is empty.
+//
+// Scoring tiers (lower wins): exact/token-exact 0, prefix 1, substring 2,
+// phonetic 3, multi-token 4+, Levenshtein fallback 5+. Because the tiers are
+// ordered, once a candidate has a cheap match we can SKIP the expensive
+// phonetic / multi-token / Levenshtein passes — they could only ever produce
+// a worse (higher) score. This short-circuit is what keeps typing responsive
+// on a few-hundred-row catalog on a low-end phone.
 export function rankByName<T>(
   index: NameIndexEntry<T>[],
   query: string,
@@ -136,6 +149,7 @@ export function rankByName<T>(
   if (!q) return [];
   const qPhonetic = phoneticKey(query);
   const qTokens = query.split(/\s+/).map(normalize).filter(Boolean);
+  const multiToken = qTokens.length > 1;
 
   const scored: ScoredMatch<T>[] = [];
   for (const entry of index) {
@@ -146,21 +160,27 @@ export function rankByName<T>(
     else if (entry.normalized.startsWith(q)) best = 1;
     else if (entry.normalized.includes(q)) best = 2;
 
-    for (const tok of entry.tokens) {
-      if (tok === q) best = Math.min(best, 0);
-      else if (tok.startsWith(q)) best = Math.min(best, 1);
-    }
-
-    if (qPhonetic && entry.phonetic === qPhonetic) {
-      best = Math.min(best, 3);
-    }
-    for (const tok of entry.tokens) {
-      if (phoneticKey(tok) === qPhonetic) {
-        best = Math.min(best, 3);
+    if (best > 0) {
+      for (const tok of entry.tokens) {
+        if (tok === q) { best = 0; break; }
+        if (best > 1 && tok.startsWith(q)) best = 1;
       }
     }
 
-    if (qTokens.length > 1) {
+    // phonetic key match → strong signal for sound-alikes / typos.
+    // Only worthwhile if nothing better than tier 3 was found.
+    if (best > 3 && qPhonetic) {
+      if (entry.phonetic === qPhonetic) best = 3;
+      else {
+        for (const tp of entry.tokenPhonetics) {
+          if (tp === qPhonetic) { best = 3; break; }
+        }
+      }
+    }
+
+    // multi-token query: sum of best-per-token edit distance. Tier 4+, so
+    // only run when we don't already have a tier ≤4 hit.
+    if (multiToken && best > 4) {
       let sum = 0;
       for (const qt of qTokens) {
         let local = Infinity;
@@ -173,10 +193,17 @@ export function rankByName<T>(
       best = Math.min(best, 4 + sum);
     }
 
-    const dist = levenshtein(q, entry.normalized);
-    const lenMax = Math.max(q.length, entry.normalized.length);
-    if (dist <= Math.max(2, Math.ceil(lenMax * 0.3))) {
-      best = Math.min(best, 5 + dist);
+    // Levenshtein fallback (tier 5+) — the most expensive pass, so it runs
+    // last and only when no cheaper tier matched.
+    if (best > 5) {
+      const lenMax = Math.max(q.length, entry.normalized.length);
+      const maxDist = Math.max(2, Math.ceil(lenMax * 0.3));
+      // Length difference is a lower bound on edit distance — skip the full
+      // DP when the words are too different in length to ever qualify.
+      if (Math.abs(q.length - entry.normalized.length) <= maxDist) {
+        const dist = levenshtein(q, entry.normalized);
+        if (dist <= maxDist) best = Math.min(best, 5 + dist);
+      }
     }
 
     if (best !== Infinity) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { KnownProduct, listKnownProducts } from '../../../db/catalog';
 import { buildNameIndex, rankByName, type NameIndexEntry } from './nameMatch';
 
@@ -35,11 +35,18 @@ export function useCatalogSuggest(query: string, limit = 3) {
     [catalog],
   );
 
+  // Defer the fuzzy ranking off the keystroke so the text field stays
+  // responsive while typing — the matcher runs when the UI thread is free.
+  const deferredQuery = useDeferredValue(query);
   const suggestions = useMemo<KnownProduct[]>(() => {
-    const q = query.trim();
+    const q = deferredQuery.trim();
     if (q.length < 2 || index.length === 0) return [];
     return rankByName(index, q, limit).map((r) => r.item);
-  }, [index, query, limit]);
+  }, [index, deferredQuery, limit]);
 
-  return { suggestions, reload };
+  // True while the deferred ranking is still catching up to the latest input,
+  // so callers can show a subtle "Checking…" hint.
+  const searching = query.trim().length >= 2 && query !== deferredQuery;
+
+  return { suggestions, searching, reload };
 }

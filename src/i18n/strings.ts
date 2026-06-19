@@ -189,6 +189,7 @@ export const STR = {
   itemsInCatalog:     ['items in catalog',                   'कैटलॉग में'],
   itemInCatalog:      ['item in catalog',                    'कैटलॉग में'],
   searchPlaceholder:  ['Type product name, category or HSN…','सामान का नाम, श्रेणी या HSN टाइप करें…'],
+  searchingCatalog:   ['Checking…',                          'देख रहे हैं…'],
   noExactMatch:       ['No exact match. Tap "Did you mean" below or flag with a photo.', 'कोई मेल नहीं। नीचे "क्या आपका मतलब" पर टैप करें या फ़ोटो से फ़्लैग करें।'],
   didYouMean:         ['Did you mean:',                      'क्या आपका मतलब:'],
   notInList:          ['Not in this list? Flag with a photo','सूची में नहीं? फ़ोटो से फ़्लैग करें'],

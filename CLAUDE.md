@@ -4,6 +4,7 @@ The **warehouse / floor mobile app** for inventory and asset operations. Android
 
 > Root context: see `../CLAUDE.md` for the product vision and the four constraints (cost, literacy, device capability, infrastructure) that govern all design decisions.
 > Long-form dev setup (toolchain, EAS, Android Studio): see `DEVELOPMENT.md` in this folder.
+> Repo map: see `REPO_GUIDE.md` for a self-contained, code-grounded description of what's actually in this repo and how it works — written to survive removal of the umbrella/Planning docs. Read it for "what exists and how it runs"; this file is for "how to behave here."
 
 ## What this app does
 
