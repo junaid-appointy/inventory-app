@@ -1,6 +1,15 @@
 import * as SQLite from 'expo-sqlite';
 
-let dbInstance: SQLite.SQLiteDatabase | null = null;
+// Cache the in-flight OPEN PROMISE, not just the resolved handle. Several
+// callers hit getDb() near-simultaneously at launch — warmCache fans out
+// catalog/orders/stock writes in parallel, the background sync loop runs,
+// and screens read on mount. Caching only the resolved instance let every
+// one of those see `null` and each call openDatabaseAsync('fieldapp.db'),
+// opening the same file concurrently. That races the native layer and
+// surfaces as "NativeDatabase.prepareAsync has been rejected → NullPointer-
+// Exception" on every subsequent query. One shared promise ⇒ exactly one
+// open + migrate, and all callers await it.
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Current schema version. Bump this and add a migration block in
@@ -8,8 +17,20 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
  */
 const SCHEMA_VERSION = 9;
 
-export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (dbInstance) return dbInstance;
+export function getDb(): Promise<SQLite.SQLiteDatabase> {
+  if (!dbPromise) {
+    dbPromise = openAndInit().catch((err) => {
+      // Never cache a rejected promise — null it so the next caller can
+      // retry the open (e.g. after a transient native failure) instead of
+      // wedging the DB for the rest of the session.
+      dbPromise = null;
+      throw err;
+    });
+  }
+  return dbPromise;
+}
+
+async function openAndInit(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync('fieldapp.db');
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -83,7 +104,6 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   `);
 
   await runMigrations(db);
-  dbInstance = db;
   return db;
 }
 

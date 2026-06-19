@@ -36,6 +36,13 @@ export class ApiError extends Error {
         // not JSON, fall through
       }
       const trimmed = body.trim();
+      // Gateway/proxy error pages (502/504 from ngrok, ingress, etc.) come
+      // back as full HTML documents. Dumping the markup into logs and the
+      // outbox `last_error` column is pure noise — collapse it to a short,
+      // accurate message instead.
+      if (/^<(?:!doctype|html|\?xml)/i.test(trimmed)) {
+        return `HTTP ${status} on ${path} — non-JSON response (gateway/proxy error; backend likely down or restarting)`;
+      }
       if (trimmed.length > 0) {
         return `HTTP ${status} on ${path} — ${trimmed.slice(0, 180)}`;
       }

@@ -303,8 +303,11 @@ export function startSync(): void {
     })
     .catch(() => {})
     .finally(() => {
-      // First run after launch pulls fresh read-data too.
-      flushOnce().catch(() => {});
+      // Push queued writes on start. Read-data warming at launch/login is
+      // owned by warmCache() (called from AuthProvider), so this initial
+      // flush is push-only — avoids a duplicate catalog/orders pull right
+      // after warmCache already did one.
+      flushOnce({ pullReads: false }).catch(() => {});
     });
   // Frequent tick: push queued writes only. Cheap when the outbox is
   // empty — no read payloads downloaded.
