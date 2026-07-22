@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Bell, type LucideIcon, HandCoins, Package, RefreshCw, ScanLine, Settings as SettingsIcon, Truck } from 'lucide-react-native';
+import { Bell, type LucideIcon, HandCoins, Package, RefreshCw, ScanFace, ScanLine, Settings as SettingsIcon, Truck } from 'lucide-react-native';
 import { QueueBadge } from '../components/QueueBadge';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -116,7 +116,12 @@ export function HomeScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Outbox')}
             trailing={<QueueBadge />}
           />
-          <View style={{ flex: 1 }} />
+          <Tile
+            label={t('attendance')}
+            sub={t('attendanceSub')}
+            Icon={ScanFace}
+            onPress={() => navigation.navigate('AttendanceGate')}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

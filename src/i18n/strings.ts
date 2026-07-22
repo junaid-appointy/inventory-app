@@ -58,6 +58,19 @@ export const STR = {
   dispenseSub:     ['Record what was used','खर्च दर्ज करें'],
   alerts:          ['Alerts',             'अलर्ट'],
   alertsSub:       ['Low stock & reorder','कम स्टॉक'],
+  attendance:      ['Attendance',         'हाज़िरी'],
+  attendanceSub:   ['Face check in & out','चेहरे से हाज़िरी'],
+
+  // Attendance gate
+  tapToCheckIn:    ['Tap to check in',    'हाज़िरी के लिए दबाएँ'],
+  lookAtCamera:    ['Look at the camera', 'कैमरे को देखें'],
+  checkingFace:    ['Checking…',          'जाँच हो रही…'],
+  checkedIn:       ['Checked in',         'हाज़िर'],
+  checkedOut:      ['Checked out',        'गया'],
+  faceNotMatched:  ['Not recognized',     'पहचान नहीं हुई'],
+  faceTryAgain:    ['Please try again',   'फिर कोशिश करें'],
+  savedOffline:    ['Saved, will confirm when online', 'सेव, ऑनलाइन होने पर पक्का'],
+  grantCamera:     ['Allow camera',       'कैमरा दें'],
 
   // Generic actions
   next:            ['Next',               'आगे'],

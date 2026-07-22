@@ -30,5 +30,6 @@ export type RootStackParamList = {
   Alerts: undefined;
   DeliverySummary: DeliverySummaryParams;
   Settings: undefined;
+  AttendanceGate: undefined;
 };
 
