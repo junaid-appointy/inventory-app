@@ -1,0 +1,9 @@
+okay so the automated decimal system is applied, but when I press plus or minus button, some random/weird values are coming up.
+
+---
+
+no the decimal is still not fixed, why does it start from max quantity and still on increase or decrease it goes up and down random quantities. like increment one or decrement one or one point.
+
+---
+
+why does the dispense take so much time, I set the dispense amount and clicked on done. I saw almost 6 api calls in backend. the user kept on waiting.

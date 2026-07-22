@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "43bb0db75fb5",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "src/design/QtyStepper.tsx",
+    "src/design/UnitAwareStepper.tsx",
+    "src/design/index.ts",
+    "src/modules/inventory/components/BatchEditor.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/EditStockScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/RegisterProductScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/syncService.ts",
+    "src/units/convert.ts",
+    "src/units/index.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/43/bb0db75fb5/0/metadata.json",
+      "transcript": "/43/bb0db75fb5/0/full.jsonl",
+      "content_hash": "/43/bb0db75fb5/0/content_hash.txt",
+      "prompt": "/43/bb0db75fb5/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 9950,
+    "cache_creation_tokens": 443041,
+    "cache_read_tokens": 8835927,
+    "output_tokens": 122328,
+    "api_call_count": 74
+  }
+}
