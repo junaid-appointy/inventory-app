@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "6a78a5a7536c",
+  "strategy": "manual-commit",
+  "branch": "feature/attendance",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/modules/attendance/README.md",
+    "src/modules/attendance/api/client.ts",
+    "src/modules/attendance/core/embedderFactory.ts",
+    "src/modules/attendance/core/geo.ts",
+    "src/modules/attendance/core/onnxEmbedder.ts",
+    "src/modules/attendance/core/runtime.ts",
+    "src/modules/attendance/core/types.ts",
+    "src/modules/attendance/db/store.ts",
+    "src/modules/attendance/screens/GateScreen.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6a/78a5a7536c/0/metadata.json",
+      "transcript": "/6a/78a5a7536c/0/full.jsonl",
+      "content_hash": "/6a/78a5a7536c/0/content_hash.txt",
+      "prompt": "/6a/78a5a7536c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 11539,
+    "cache_creation_tokens": 300383,
+    "cache_read_tokens": 14627828,
+    "output_tokens": 130006,
+    "api_call_count": 122
+  }
+}

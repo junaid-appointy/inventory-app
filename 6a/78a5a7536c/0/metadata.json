@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "6a78a5a7536c",
+  "session_id": "b4404dc2-690c-4c0a-beea-1638fb61a5e9",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-22T11:59:57.909639Z",
+  "branch": "feature/attendance",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/modules/attendance/core/types.ts",
+    "src/modules/attendance/screens/GateScreen.tsx",
+    "src/modules/attendance/api/client.ts",
+    "src/modules/attendance/db/store.ts",
+    "src/modules/attendance/core/geo.ts",
+    "src/modules/attendance/core/runtime.ts",
+    "src/modules/attendance/core/onnxEmbedder.ts",
+    "src/modules/attendance/core/embedderFactory.ts",
+    "src/modules/attendance/README.md"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "4b9918bec955",
+  "token_usage": {
+    "input_tokens": 11539,
+    "cache_creation_tokens": 300383,
+    "cache_read_tokens": 14627828,
+    "output_tokens": 130006,
+    "api_call_count": 122
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-22T11:59:57.886436Z",
+    "agent_lines": 750,
+    "agent_removed": 48,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 750,
+    "total_lines_changed": 798,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    }
+  ]
+}
