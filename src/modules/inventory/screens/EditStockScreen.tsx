@@ -30,6 +30,7 @@ import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 import { BatchEditor, Batch } from '../components/BatchEditor';
 import { formatExpiry } from '../../../utils/expiry';
+import { formatOnHand, resolveUnit } from '../../../units';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditStock'>;
 
@@ -176,25 +177,6 @@ export function EditStockScreen({ route, navigation }: Props) {
       .join('|');
     return a !== b;
   }, [row, batches, originalBatches]);
-
-  const packDisplay = row && row.pack_size != null && row.pack_size !== 1 && row.unit
-    ? `${row.pack_size} ${row.unit}`
-    : row?.unit ?? null;
-
-  // When pack_size > 1 the count is in packs, not in the base unit —
-  // " 1 g" is wrong for a 200 g pack. Drop the unit suffix in that case
-  // (the pack hint at the top already shows "200 g").
-  // Divisible products are the inverse: count IS in the base unit so the
-  // unit suffix is exactly what we want.
-  const countSuffix =
-    row?.dispense_mode === 'divisible'
-      ? row?.unit ? ` ${row.unit}` : ''
-      : row && row.pack_size != null && row.pack_size !== 1
-        ? ''
-        : row?.unit
-          ? ` ${row.unit}`
-          : '';
-
   /**
    * User accepted the server's view. Rebase originalQty / originalExpiry
    * and also replace what's in the steppers / date picker so the
@@ -327,7 +309,7 @@ export function EditStockScreen({ route, navigation }: Props) {
                 {t('stockUpdatedBody')}
               </Text>
               <Text variant="bodyMedium" color={palette.onSurface}>
-                {originalQty} → {serverQty}{countSuffix}
+                {formatOnHand(originalQty, row?.pack_size, row?.unit)} → {formatOnHand(serverQty, row?.pack_size, row?.unit)}
                 {serverExpiry && serverExpiry !== originalExpiry
                   ? ` · ${formatExpiry(serverExpiry)}`
                   : ''}
@@ -357,12 +339,9 @@ export function EditStockScreen({ route, navigation }: Props) {
             </Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: spacing.xs, gap: spacing.md }}>
               <Text variant="headlineSmall" style={{ flex: 1 }}>{row.name}</Text>
-              {packDisplay ? (
-                <Text variant="titleMedium" color={palette.onSurfaceVariant}>{packDisplay}</Text>
-              ) : null}
             </View>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              {t('currentCount')}: {originalQty}{countSuffix}
+              {t('currentCount')}: {formatOnHand(originalQty, row.pack_size, row.unit)}
             </Text>
           </Card>
 
@@ -371,7 +350,7 @@ export function EditStockScreen({ route, navigation }: Props) {
             onChange={setBatches}
             unit={row.unit ?? null}
             packSize={row.pack_size ?? null}
-            dispenseMode={row.dispense_mode ?? 'pack'}
+            decimal={resolveUnit(row.unit).nature === 'continuous'}
           />
         </ScrollView>
 

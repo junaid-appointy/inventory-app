@@ -73,43 +73,72 @@ const POST_WRITE_INVALIDATES: Record<OutboxKind, CacheKey[]> = {
  */
 async function invalidateAffectedCaches(keys: Set<CacheKey>): Promise<void> {
   const work: Promise<void>[] = [];
+  // 'stock' and 'alerts' are both backed by the SAME stock GET, so a
+  // write touching both (a dispense touches stock + alerts) would fire
+  // two identical stock pulls. Collapse them into one fetch that warms
+  // both caches.
+  const stockKeys = (['stock', 'alerts'] as CacheKey[]).filter((k) => keys.has(k));
+  if (stockKeys.length > 0) {
+    stockKeys.forEach((k) => invalidateRefetchThrottle(k));
+    work.push(refreshStockCaches(stockKeys));
+  }
   for (const key of keys) {
+    if (key === 'stock' || key === 'alerts') continue;
     invalidateRefetchThrottle(key);
     work.push(refreshOne(key));
   }
   await Promise.allSettled(work);
 }
 
-async function refreshOne(key: CacheKey): Promise<void> {
-  cache.refreshing(key);
+/** One stock GET that updates every stock-backed cache key passed in
+ *  (stock and/or alerts). Keeps a single dispense from pulling stock twice. */
+async function refreshStockCaches(keys: CacheKey[]): Promise<void> {
+  keys.forEach((k) => cache.refreshing(k));
   try {
-    if (key === 'stock' || key === 'alerts') {
-      const remote = await api.fetch.stock();
-      await replaceStockFromRemote(
-        remote.map((r) => ({
-          barcode: r.barcode,
-          name: r.name,
-          category: r.category,
-          unit: r.unit,
-          pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-          dispense_mode: r.dispense_mode ?? 'pack',
-          on_hand: Number(r.on_hand),
-          threshold: Number(r.threshold),
+    const remote = await api.fetch.stock();
+    await replaceStockFromRemote(
+      remote.map((r) => ({
+        barcode: r.barcode,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+        dispense_mode: r.dispense_mode ?? 'pack',
+        on_hand: Number(r.on_hand),
+        threshold: Number(r.threshold),
+      })),
+    );
+    // Mirror per-barcode lots locally too. Empty array clears the
+    // local lots for that barcode (matches server having no batches).
+    for (const r of remote) {
+      await replaceLotsLocal(
+        r.barcode,
+        (r.lots ?? []).map((l) => ({
+          expiry_date: l.expiry_date,
+          qty: Number(l.qty),
         })),
       );
-      // Mirror per-barcode lots locally too. Empty array clears the
-      // local lots for that barcode (matches server having no batches).
-      for (const r of remote) {
-        await replaceLotsLocal(
-          r.barcode,
-          (r.lots ?? []).map((l) => ({
-            expiry_date: l.expiry_date,
-            qty: Number(l.qty),
-          })),
-        );
-      }
-      await pruneLotsToBarcodes(remote.map((r) => r.barcode));
-    } else if (key === 'orders') {
+    }
+    await pruneLotsToBarcodes(remote.map((r) => r.barcode));
+    keys.forEach((k) => cache.warm(k));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const offline =
+      msg.includes('Network request failed') ||
+      msg.includes('TypeError: Network') ||
+      msg.includes('Unable to resolve host');
+    keys.forEach((k) => (offline ? cache.offline(k) : cache.error(k)));
+  }
+}
+
+async function refreshOne(key: CacheKey): Promise<void> {
+  if (key === 'stock' || key === 'alerts') {
+    await refreshStockCaches([key]);
+    return;
+  }
+  cache.refreshing(key);
+  try {
+    if (key === 'orders') {
       await syncOrders();
     } else if (key === 'catalog') {
       await syncCanonicalProducts();

@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { HandCoins, PackagePlus, Pencil, Search, type LucideIcon } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
+import { FlatList, LayoutAnimation, Platform, Pressable, RefreshControl, StyleSheet, TextInput, View, KeyboardAvoidingView } from 'react-native';
 import {
   AppBar,
   Card,
@@ -20,16 +21,24 @@ import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
 import { useTheme } from '../../../theme';
 import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
 import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
+import { formatOnHandShort } from '../../../units';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
-/** Subtle background tint per stock health */
+/** Card background per stock health — design uses white for OK, amber tint for LOW, red tint for OUT */
 function cardBg(row: StockRow): string {
   const s = statusFor(row);
-  if (s === 'out') return 'rgba(229, 57, 53, 0.07)';     // very faint red
-  if (s === 'low') return 'rgba(249, 168, 37, 0.07)';     // very faint amber
-  if (row.on_hand >= row.threshold * 2) return 'rgba(67, 160, 71, 0.06)'; // faint green
-  return 'rgba(129, 199, 132, 0.06)';                      // faint light green
+  if (s === 'out') return '#FFEBEE';
+  if (s === 'low') return '#FFF8E1';
+  return '#FFFFFF';
+}
+
+/** Vertical color strip on the left edge of each stock card */
+function stripColor(row: StockRow): string {
+  const s = statusFor(row);
+  if (s === 'out') return '#E53935';
+  if (s === 'low') return '#F9A825';
+  return '#43A047';
 }
 
 /** Count text color per stock health */
@@ -41,17 +50,17 @@ function countColor(row: StockRow): string {
   return '#66BB6A';
 }
 
-/** Format the pack-size hint that sits under the on-hand count.
- *  pack_size null/1 → just the unit ("g"); otherwise "× 100 g".
- *  Divisible products store on_hand in the base unit, so the hint is
- *  just the unit (the count already reads "47.5 kg"). */
-function packSizeLabel(row: StockRow): string {
-  const unit = row.unit ?? '';
-  if (row.dispense_mode === 'divisible') return unit;
-  if (row.pack_size == null || row.pack_size === 1) return unit;
-  // Trim trailing zero on whole numbers (100 not 100.0) but keep "1.5".
-  const ps = Number.isInteger(row.pack_size) ? String(row.pack_size) : String(row.pack_size);
-  return unit ? `× ${ps} ${unit}` : `× ${ps}`;
+/**
+ * Split the on-hand display into a big number and a small unit label so the
+ * count column reads as "86" / "kg" (design) instead of a single ragged
+ * "86 kg" string. formatOnHandShort never puts a space inside the number
+ * (thousands use commas), so the last space cleanly separates value/unit.
+ */
+function countParts(row: StockRow): { value: string; unit: string } {
+  const full = formatOnHandShort(row.on_hand, row.pack_size, row.unit);
+  const i = full.lastIndexOf(' ');
+  if (i === -1) return { value: full, unit: '' };
+  return { value: full.slice(0, i), unit: full.slice(i + 1) };
 }
 
 // Stable keys drive the filter logic; labels are resolved per-render via
@@ -63,7 +72,7 @@ const STATUS_OPTIONS: { key: string; labelKey: StringKey }[] = [
   { key: 'Out', labelKey: 'statusOut' },
 ];
 
-export function StockScreen({ navigation }: Props) {
+export function StockScreen({ route, navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
   const [rows, setRows] = useState<StockRow[]>([]);
@@ -75,6 +84,11 @@ export function StockScreen({ navigation }: Props) {
   // matches" empty state flashing before readLocal() returns (warmCache
   // flips hasEverBeenWarm at login, before this screen mounts).
   const [loadedLocal, setLoadedLocal] = useState(false);
+  // Smart Stock Card: which card is expanded to show action buttons.
+  // Supports deep-linking via route params (e.g. from AlertsScreen).
+  const [expandedBarcode, setExpandedBarcode] = useState<string | null>(
+    route.params?.expandBarcode ?? null,
+  );
   const stockStatus = useCacheStatus('stock');
   // Skeleton until the first local read lands, OR while we have NEVER
   // successfully warmed the stock cache this session AND we're not
@@ -186,20 +200,24 @@ export function StockScreen({ navigation }: Props) {
         style={{ flex: 1 }}
       >
         <View style={styles.search}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t('search')}
-          placeholderTextColor={palette.onSurfaceVariant}
+        <View
           style={[
-            styles.searchInput,
+            styles.searchBox,
             {
               backgroundColor: palette.surfaceContainerLowest,
               borderColor: palette.outlineVariant,
-              color: palette.onSurface,
             },
           ]}
-        />
+        >
+          <Search size={20} color={palette.onSurfaceVariant} strokeWidth={2} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t('search')}
+            placeholderTextColor={palette.onSurfaceVariant}
+            style={[styles.searchInput, { color: palette.onSurface }]}
+          />
+        </View>
       </View>
 
       {/* Dropdown filter row */}
@@ -243,37 +261,83 @@ export function StockScreen({ navigation }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
         }
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          const isExpanded = expandedBarcode === item.barcode;
+          const status = statusFor(item);
+          const count = countParts(item);
+          return (
           <Card
-            tone="filled"
+            tone="elevated"
             padding="lg"
             style={{ backgroundColor: cardBg(item) }}
-            onPress={() => navigation.navigate('EditStock', { barcode: item.barcode })}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setExpandedBarcode((prev) => (prev === item.barcode ? null : item.barcode));
+            }}
           >
             <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text variant="titleMedium">{item.name}</Text>
+              {/* Color strip — visual status indicator */}
+              <View style={[styles.strip, { backgroundColor: stripColor(item) }]} />
+              <View style={styles.nameCol}>
+                <Text variant="titleMedium" style={{ fontWeight: '700' }} numberOfLines={1}>
+                  {item.name}
+                </Text>
                 <Text
                   variant="bodyMedium"
                   color={palette.onSurfaceVariant}
                   style={{ marginTop: 2 }}
+                  numberOfLines={1}
                 >
                   {item.category ?? '—'}
                 </Text>
               </View>
               <View style={styles.countCol}>
-                <Text variant="titleLarge" color={countColor(item)} style={{ fontWeight: '700' }}>
-                  {item.on_hand}
+                <Text
+                  color={countColor(item)}
+                  style={styles.countValue}
+                  numberOfLines={1}
+                >
+                  {count.value}
                 </Text>
-                {packSizeLabel(item) ? (
-                  <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'right' }}>
-                    {packSizeLabel(item)}
+                {status === 'out' ? (
+                  <Text color="#E53935" style={styles.countLabel}>OUT</Text>
+                ) : status === 'low' ? (
+                  <Text color="#c98b00" style={styles.countLabel}>LOW</Text>
+                ) : count.unit ? (
+                  <Text color={palette.onSurfaceVariant} style={styles.countUnit}>
+                    {count.unit}
                   </Text>
                 ) : null}
               </View>
             </View>
+
+            {/* Smart Stock Card: action buttons (expanded only) */}
+            {isExpanded && (
+              <View style={styles.actionRow}>
+                <ActionButton
+                  icon={HandCoins}
+                  label={t('used')}
+                  color={palette.primary}
+                  onPress={() => navigation.navigate('Dispense', { barcode: item.barcode })}
+                  disabled={item.on_hand <= 0}
+                />
+                <ActionButton
+                  icon={PackagePlus}
+                  label={t('received')}
+                  color={palette.tertiary ?? palette.primary}
+                  onPress={() => navigation.navigate('Receiving', { barcode: item.barcode })}
+                />
+                <ActionButton
+                  icon={Pencil}
+                  label={t('editStock')}
+                  color={palette.onSurfaceVariant}
+                  onPress={() => navigation.navigate('EditStock', { barcode: item.barcode })}
+                />
+              </View>
+            )}
           </Card>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
@@ -295,15 +359,54 @@ export function StockScreen({ navigation }: Props) {
   );
 }
 
+// ── ActionButton (local to StockScreen) ──────────────────────────────
+
+type ActionButtonProps = {
+  icon: LucideIcon;
+  label: string;
+  color: string;
+  onPress: () => void;
+  disabled?: boolean;
+};
+
+function ActionButton({ icon: Icon, label, color, onPress, disabled }: ActionButtonProps) {
+  const { palette } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.actionBtn,
+        {
+          backgroundColor: pressed
+            ? palette.surfaceContainerHighest ?? 'rgba(0,0,0,0.08)'
+            : palette.surfaceContainerHigh ?? 'rgba(0,0,0,0.04)',
+          opacity: disabled ? 0.4 : 1,
+        },
+      ]}
+    >
+      <Icon size={20} color={color} strokeWidth={2.2} />
+      <Text variant="labelMedium" color={color}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   search: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  searchInput: {
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     borderRadius: radius.md,
     borderWidth: 1.5,
     paddingHorizontal: spacing.lg,
     minHeight: 52,
+  },
+  searchInput: {
+    flex: 1,
     fontSize: 17,
+    paddingVertical: 0,
   },
   filterRow: {
     flexDirection: 'row',
@@ -313,7 +416,38 @@ const styles = StyleSheet.create({
   },
   list: { padding: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xxxl },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  countCol: { minWidth: 64, alignItems: 'flex-end' },
+  strip: {
+    width: 10,
+    height: 44,
+    borderRadius: 6,
+  },
+  nameCol: { flex: 1 },
+  countCol: { minWidth: 56, alignItems: 'flex-end' },
+  countValue: { fontSize: 24, lineHeight: 28, fontWeight: '800', textAlign: 'right' },
+  countLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  countUnit: { fontSize: 13, lineHeight: 16, textAlign: 'right', marginTop: 2 },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  actionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+  },
   empty: { padding: spacing.xxl },
 });
 

@@ -10,6 +10,8 @@ export { Chip } from './Chip';
 export { ListItem } from './ListItem';
 export { StatusPill } from './StatusPill';
 export { QtyStepper } from './QtyStepper';
+export { UnitAwareStepper } from './UnitAwareStepper';
+export type { DispenseMode } from './UnitAwareStepper';
 export { CompactStepper } from './CompactStepper';
 export { Skeleton } from './Skeleton';
 

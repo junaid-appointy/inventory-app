@@ -18,12 +18,21 @@ import {
   Button,
   Card,
   Chip,
-  QtyStepper,
+  UnitAwareStepper,
   radius,
   Skeleton,
   spacing,
   Text,
 } from '../../../design';
+import type { DispenseMode } from '../../../design';
+import {
+  baseToPack,
+  packToBase,
+  canSubdivide,
+  formatOnHand,
+  formatOnHandShort,
+  resolveUnit,
+} from '../../../units';
 import { enqueue } from '../../../db/outbox';
 import { adjustOnHand, findStock, getNearestExpiry, listStock, replaceStockFromRemote, StockRow, statusFor } from '../../../db/stock';
 import { decrementLotsLocal, listLots, pruneLotsToBarcodes, replaceLotsLocal } from '../../../db/lots';
@@ -38,6 +47,7 @@ import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refet
 import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
+import { PackVisual } from '../components/PackVisual';
 import { useTheme } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dispense'>;
@@ -90,6 +100,27 @@ function countColor(row: StockRow): string {
   return '#66BB6A';
 }
 
+/**
+ * The value a fresh dispense should open on. Starts at ONE unit of the
+ * product's natural denomination — 1 pack for whole-pack goods, 1 base
+ * unit (e.g. 1 kg) for divisible ones — capped at what's actually in
+ * stock. Opening on the full available count read to guards as "take
+ * everything"; dialing UP from a small amount is how dispensing works.
+ * Returns the qty in packs (the denomination the lot system stores) plus
+ * the mode the stepper should open in.
+ */
+function startingDispense(
+  available: number,
+  packSize: number | null | undefined,
+  unit: string | null | undefined,
+): { mode: DispenseMode; qty: number } {
+  const ps = (packSize ?? 1) > 0 ? (packSize ?? 1) : 1;
+  const divisible = canSubdivide(packSize, unit) && resolveUnit(unit).nature === 'continuous';
+  const mode: DispenseMode = divisible ? 'unit' : 'pack';
+  const oneUnitInPacks = mode === 'unit' ? 1 / ps : 1;
+  return { mode, qty: Math.max(0, Math.min(available, oneUnitInPacks)) };
+}
+
 export function DispenseScreen({ route, navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
@@ -101,6 +132,10 @@ export function DispenseScreen({ route, navigation }: Props) {
   const [category, setCategory] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [qty, setQty] = useState(1);
+  // Whether the guard is picking in 'pack' (whole/fractional packs)
+  // or 'unit' (base units like kg, litres, bars). Driven by the
+  // UnitAwareStepper chip toggle.
+  const [dispenseMode, setDispenseMode] = useState<DispenseMode>('pack');
   const [reason, setReason] = useState(REASONS[0].value);
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -216,12 +251,17 @@ export function DispenseScreen({ route, navigation }: Props) {
         const remoteQty = Number(remote.on_hand);
         setVerifiedOnHand(remoteQty);
         setVerifyStatus('ok');
-        // Clamp qty to the verified ceiling. If the user had a stale
-        // higher qty in mind (e.g. local cache said 10, server says 7),
-        // drop to the new max so they can't accidentally submit over.
-        const minStep = selected.dispense_mode === 'divisible' ? 0.001 : 1;
-        const clampedQty = qty > remoteQty ? Math.max(minStep, remoteQty) : qty;
-        if (clampedQty !== qty) setQty(clampedQty);
+        // Open a fresh dispense low (1 unit of the natural denomination),
+        // capped at the verified ceiling so the guard can never submit
+        // over what exists. The stepper's `max` enforces the ceiling from
+        // here on, so we don't need to clamp a carried-over qty.
+        const { mode: startMode, qty: startQty } = startingDispense(
+          remoteQty,
+          selected.pack_size,
+          selected.unit,
+        );
+        setDispenseMode(startMode);
+        setQty(startQty);
 
         // Build the lot picker state. Prefer the remote lots (verified
         // truth); fall back to the local lots cache when the server
@@ -247,7 +287,7 @@ export function DispenseScreen({ route, navigation }: Props) {
           available: Number(l.qty),
         }));
         setAvailability(nextAvailability);
-        setAllocation(suggestFEFO(nextAvailability, clampedQty));
+        setAllocation(suggestFEFO(nextAvailability, startQty));
       } catch (err) {
         if (cancelled) return;
         // 404: the server has no record of this barcode (might be a
@@ -268,9 +308,13 @@ export function DispenseScreen({ route, navigation }: Props) {
         // the saved count rather than a dead button.
         const cachedQty = selected.on_hand;
         setVerifiedOnHand(cachedQty);
-        const minStep = selected.dispense_mode === 'divisible' ? 0.001 : 1;
-        const clampedQty = qty > cachedQty ? Math.max(minStep, cachedQty) : qty;
-        if (clampedQty !== qty) setQty(clampedQty);
+        const { mode: startMode, qty: startQty } = startingDispense(
+          cachedQty,
+          selected.pack_size,
+          selected.unit,
+        );
+        setDispenseMode(startMode);
+        setQty(startQty);
         let lots = (await listLots(selected.barcode)).map((l) => ({
           expiry_date: l.expiry_date,
           qty: Number(l.qty),
@@ -284,7 +328,7 @@ export function DispenseScreen({ route, navigation }: Props) {
           available: Number(l.qty),
         }));
         setAvailability(nextAvailability);
-        setAllocation(suggestFEFO(nextAvailability, clampedQty));
+        setAllocation(suggestFEFO(nextAvailability, startQty));
         setVerifyStatus(isOfflineError(err) ? 'offline' : 'error');
       } finally {
         clearTimeout(t);
@@ -364,6 +408,18 @@ export function DispenseScreen({ route, navigation }: Props) {
     const session = getSession();
     setSaving(true);
     try {
+      // totalTaken is always in pack-denomination (lot allocations are
+      // in packs). Convert the guard's stepper value for the audit trail.
+      const ps = (selected.pack_size ?? 1) > 0 ? (selected.pack_size ?? 1) : 1;
+      const unitDef = resolveUnit(selected.unit);
+      // For the audit trail: what the guard actually saw on screen.
+      const dispenseQty = dispenseMode === 'unit'
+        ? qty  // the raw value they typed (e.g. "2 litres")
+        : qty; // packs — recorded as-is
+      const dispenseUnit = dispenseMode === 'unit'
+        ? unitDef.symbol
+        : 'pack';
+
       const picks = allocation
         .filter((l) => l.take > 0)
         .map((l) => ({ expiry_date: l.expiry, qty: l.take }));
@@ -372,6 +428,9 @@ export function DispenseScreen({ route, navigation }: Props) {
         barcode: selected.barcode,
         product_name: selected.name,
         qty: totalTaken,
+        // Audit trail: what the guard saw on screen ("2 litres" vs "1 pack")
+        dispense_qty: dispenseQty,
+        dispense_unit: dispenseUnit,
         // Soft-nudge model: server records what the guard actually
         // picked rather than enforcing FEFO. Empty picks → server
         // falls back to FEFO (the suggestion the user accepted).
@@ -391,7 +450,16 @@ export function DispenseScreen({ route, navigation }: Props) {
         picks.map((p) => ({ expiry_date: p.expiry_date, qty: p.qty })),
       );
       await adjustOnHand(selected.barcode, -totalTaken);
-      await flushOnce().catch(() => {});
+      // Push the write + refresh stock before returning. `pullReads:false`
+      // skips the catalog + orders GETs a dispense never touches, and the
+      // stock/alerts caches now collapse into ONE stock pull — so this is
+      // 2 quick calls (write + stock) instead of the previous 5-6 that made
+      // "Done" drag. When offline, flushOnce returns immediately (the outbox
+      // reconciles on reconnect), so dispense still feels instant on a dead
+      // connection. Awaiting here (rather than firing in the background)
+      // keeps the destination Stock list from briefly flashing the stale
+      // pre-dispense count before the write lands.
+      await flushOnce({ pullReads: false }).catch(() => {});
       haptic.success();
       navigation.goBack();
     } finally {
@@ -469,7 +537,7 @@ export function DispenseScreen({ route, navigation }: Props) {
                     </Text>
                   </View>
                   <Text variant="titleLarge" color={countColor(item)} style={{ fontWeight: '700' }}>
-                    {item.on_hand}
+                    {formatOnHandShort(item.on_hand, item.pack_size, item.unit)}
                   </Text>
                 </View>
               </Card>
@@ -551,18 +619,29 @@ export function DispenseScreen({ route, navigation }: Props) {
               {selected.name}
             </Text>
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
-              {/* Show the verified on_hand once JIT resolves; fall back
-                  to the local cache value until then. For divisible
-                  products the on_hand IS the base unit — just append
-                  unit. For pack-mode products keep the "N × packSize"
-                  form. */}
-              {verifiedOnHand ?? selected.on_hand}
-              {selected.dispense_mode === 'divisible'
-                ? selected.unit ? ` ${selected.unit}` : ''
-                : `${selected.pack_size != null && selected.pack_size !== 1 ? ` × ${selected.pack_size}` : ''}${selected.unit ? ` ${selected.unit}` : ''}`}
+              {formatOnHand(verifiedOnHand ?? selected.on_hand, selected.pack_size, selected.unit)}
               {' '}{t('onHand')}
             </Text>
           </Card>
+
+          {/* Pack visual — fill box showing remaining stock after dispense.
+              on_hand/threshold/taken are all pack-denominated; re-express in
+              base units (× pack_size) so the numbers match the base-unit
+              label ("35 kg", not "7" packs shown as "7 kg"). Products with no
+              base unit stay in packs (factor 1). */}
+          {verifyStatus !== 'verifying' && (() => {
+            const ps = (selected.pack_size ?? 1) > 0 ? (selected.pack_size ?? 1) : 1;
+            const factor = selected.unit ? ps : 1;
+            const capBase = packToBase(verifiedOnHand ?? selected.on_hand, factor);
+            return (
+              <PackVisual
+                totalCapacity={capBase}
+                remaining={Math.max(0, capBase - packToBase(totalTaken, factor))}
+                unit={selected.unit ?? 'packs'}
+                threshold={packToBase(selected.threshold, factor)}
+              />
+            );
+          })()}
 
           {/* Quantity area. We can't know whether this is a single-lot
               (stepper only) or multi-lot (stepper + per-lot picker)
@@ -587,12 +666,37 @@ export function DispenseScreen({ route, navigation }: Props) {
                 <Text variant="labelLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
                   {t('howMany').toUpperCase()}
                 </Text>
-                <QtyStepper
-                  value={qty}
-                  onChange={setQty}
-                  min={selected.dispense_mode === 'divisible' ? 0.001 : 1}
-                  max={(totalAvailable || verifiedOnHand || selected.on_hand) || undefined}
-                  decimal={selected.dispense_mode === 'divisible'}
+                <UnitAwareStepper
+                  // `qty` is always stored in packs (the denomination the
+                  // lot system expects). The stepper wants `value` in the
+                  // active mode's unit, so re-express packs → base units
+                  // when the guard is in 'unit' mode. Without this the
+                  // number collapsed through baseToPack on every render.
+                  value={
+                    dispenseMode === 'unit'
+                      ? packToBase(qty, (selected.pack_size ?? 1) > 0 ? (selected.pack_size ?? 1) : 1)
+                      : qty
+                  }
+                  onChange={(v, m) => {
+                    // When in 'unit' mode, convert to packs for lot allocation
+                    // so totalTaken stays in the pack denomination the lot
+                    // system expects. Store the pack value at FULL precision —
+                    // rounding packs to 3 dp here is too coarse to reconstruct
+                    // the base-unit value when pack_size doesn't divide evenly
+                    // (5.1 kg → 1.017 packs → 6.102 kg drift). The stepper's
+                    // own display rounding keeps the on-screen number clean.
+                    if (m === 'unit') {
+                      const ps = (selected.pack_size ?? 1) > 0 ? (selected.pack_size ?? 1) : 1;
+                      setQty(baseToPack(v, ps));
+                    } else {
+                      setQty(v);
+                    }
+                  }}
+                  packSize={selected.pack_size}
+                  unit={selected.unit}
+                  maxPacks={(totalAvailable || verifiedOnHand || selected.on_hand) || 0}
+                  mode={dispenseMode}
+                  onModeChange={setDispenseMode}
                 />
               </View>
 
@@ -607,7 +711,7 @@ export function DispenseScreen({ route, navigation }: Props) {
                   desiredQty={qty}
                   unit={selected.unit ?? null}
                   packSize={selected.pack_size ?? null}
-                  decimal={selected.dispense_mode === 'divisible'}
+                  decimal={resolveUnit(selected.unit).nature === 'continuous'}
                 />
               )}
             </>

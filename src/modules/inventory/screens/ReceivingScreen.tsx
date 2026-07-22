@@ -74,13 +74,10 @@ export function ReceivingScreen({ route, navigation }: Props) {
       ? `${resolvedPackSize} ${resolvedUnit}`
       : resolvedUnit ?? null;
 
-  const [dispenseMode, setDispenseMode] = useState<'pack' | 'divisible'>('pack');
-
   useEffect(() => {
     (async () => {
       setProduct(await findProduct(barcode));
       const stockRow = await findStock(barcode);
-      if (stockRow?.dispense_mode === 'divisible') setDispenseMode('divisible');
       // If we have a productId from catalog, look up order item by product_id
       if (productId) {
         const byProduct = await findOpenItemByProductId(productId);
@@ -92,11 +89,9 @@ export function ReceivingScreen({ route, navigation }: Props) {
   }, [barcode, productId]);
 
   /** Convert a "packs received" integer into the units stored in lots:
-   *  packs for pack-mode; packs × pack_size (base units) for divisible. */
+   *  Under the new unit-aware system, all stock is stored in packs. */
   const toLotQty = (packsQty: number): number => {
-    if (dispenseMode !== 'divisible') return packsQty;
-    const ps = resolvedPackSize && resolvedPackSize > 0 ? resolvedPackSize : 1;
-    return packsQty * ps;
+    return packsQty;
   };
 
   // Auto-fill expiry on the (single) initial batch from the last scanned
@@ -188,7 +183,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
         category: product?.category ?? null,
         unit: resolvedUnit,
         pack_size: resolvedPackSize,
-        dispense_mode: dispenseMode,
+        dispense_mode: 'pack',
         on_hand: totalLotQty,
         threshold: 0,
       });
@@ -382,7 +377,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
           minDate={new Date()}
           unit={resolvedUnit ?? null}
           packSize={resolvedPackSize ?? null}
-          dispenseMode={dispenseMode}
+
         />
 
         {mismatch ? (

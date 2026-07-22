@@ -218,6 +218,11 @@ export const STR = {
   // Edit stock (correction flow)
   editStock:          ['Edit stock',                           'स्टॉक बदलें'],
   editStockSub:       ['Update count or expiry',               'गिनती या एक्सपायरी बदलें'],
+
+  // Smart Stock Card actions
+  used:               ['Used',                                 'खर्च'],
+  received:           ['Received',                             'मिला'],
+
   currentCount:       ['Current count',                        'अभी की गिनती'],
   newCount:           ['New count',                            'नई गिनती'],
   saveChanges:        ['Save changes',                         'सेव करें'],

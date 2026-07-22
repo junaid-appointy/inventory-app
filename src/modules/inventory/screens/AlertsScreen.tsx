@@ -9,7 +9,6 @@ import {
   Card,
   Skeleton,
   spacing,
-  StatusPill,
   Text,
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
@@ -136,35 +135,61 @@ export function AlertsScreen({ navigation }: Props) {
         ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         renderItem={({ item }) => {
           const status = statusFor(item);
-          const tone = status === 'out' ? 'danger' : 'warn';
-          const label = status === 'out' ? t('outStock') : t('lowStock');
+          const isOut = status === 'out';
+          const label = isOut ? t('outStock') : t('lowStock');
           const done = requested.has(item.barcode);
+          // Design: red bg for OUT, amber bg for LOW
+          const alertCardBg = isOut ? '#FFEBEE' : '#FFF8E1';
+          // Bold pill: solid red/amber bg
+          const pillBg = isOut ? '#E53935' : '#F9A825';
+          const pillFg = isOut ? '#fff' : '#3d2c00';
           return (
-            <Card tone="filled" padding="lg">
+            <Card
+              tone="elevated"
+              padding="lg"
+              style={{ backgroundColor: alertCardBg }}
+              onPress={() => navigation.navigate('Stock', { expandBarcode: item.barcode })}
+            >
               <View style={styles.head}>
                 <View style={{ flex: 1 }}>
-                  <Text variant="titleMedium">{item.name}</Text>
+                  <Text variant="titleMedium" style={{ fontWeight: '800', fontSize: 18 }}>{item.name}</Text>
                   <Text
                     variant="bodyMedium"
-                    color={palette.onSurfaceVariant}
+                    color="rgba(30,26,29,0.6)"
                     style={{ marginTop: 2 }}
                   >
-                    {item.on_hand}
-                    {item.pack_size != null && item.pack_size !== 1 ? ` × ${item.pack_size}` : ''}
-                    {item.unit ? ` ${item.unit}` : ''} {t('onHand')} · threshold {item.threshold}
+                    {item.on_hand} {t('onHand')} · threshold {item.threshold}
                   </Text>
                 </View>
-                <StatusPill label={label} tone={tone} />
+                <View style={{
+                  borderRadius: 999,
+                  backgroundColor: pillBg,
+                  paddingHorizontal: 13,
+                  paddingVertical: 6,
+                }}>
+                  <Text variant="labelLarge" color={pillFg} style={{ fontWeight: '700' }}>
+                    {label}
+                  </Text>
+                </View>
               </View>
               <View style={{ height: spacing.md }} />
               {done ? (
-                <StatusPill label={t('reorderSent')} tone="success" Icon={Check} />
+                <Button
+                  label={t('reorderSent')}
+                  variant="tonal"
+                  size="md"
+                  leadingIcon={<Check size={18} color="#2E7D32" strokeWidth={2.6} />}
+                  style={{ backgroundColor: '#E8F5E9' }}
+                  disabled
+                  onPress={() => {}}
+                />
               ) : (
                 <Button
                   label={t('requestReorder')}
-                  variant="tonal"
+                  variant={isOut ? 'outlined' : 'tonal'}
                   size="md"
                   onPress={() => reorder(item)}
+                  style={isOut ? { borderColor: '#E53935' } : undefined}
                 />
               )}
             </Card>

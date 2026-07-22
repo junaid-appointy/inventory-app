@@ -45,7 +45,7 @@ export function BatchEditor({
   minDate,
   unit,
   packSize,
-  dispenseMode = 'pack',
+  decimal = false,
 }: {
   batches: Batch[];
   onChange: (next: Batch[]) => void;
@@ -55,14 +55,12 @@ export function BatchEditor({
   /** Pack size — needed to render "2 × 500 g" (pack mode) vs raw unit
    *  (divisible). When omitted, falls back to bare qty + unit. */
   packSize?: number | null;
-  /** 'pack' → integer CompactStepper. 'divisible' → decimal TextInput
-   *  in base units (e.g. kg, ml). */
-  dispenseMode?: 'pack' | 'divisible';
+  decimal?: boolean;
 }) {
   const t = useT();
   const { palette } = useTheme();
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
-  const divisible = dispenseMode === 'divisible';
+  const divisible = decimal;
 
   // Auto-sort by expiry (earliest first, null last). Caller still owns
   // the array; we just present it FEFO-ordered.

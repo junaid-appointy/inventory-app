@@ -34,9 +34,9 @@ export function Card({ onPress, tone = 'filled', padding = 'lg', style, children
           borderColor: palette.outlineVariant,
           ...(tone === 'elevated'
             ? {
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 6,
+                shadowColor: 'rgb(45,27,43)',
+                shadowOpacity: 0.06,
+                shadowRadius: 8,
                 shadowOffset: { width: 0, height: 2 },
                 elevation: 2,
               }
