@@ -3,20 +3,27 @@
   "checkpoint_id": "43bb0db75fb5",
   "strategy": "manual-commit",
   "branch": "feature/bill-mapping",
-  "checkpoints_count": 3,
+  "checkpoints_count": 5,
   "files_touched": [
+    "src/design/Card.tsx",
     "src/design/QtyStepper.tsx",
     "src/design/UnitAwareStepper.tsx",
     "src/design/index.ts",
+    "src/i18n/strings.ts",
     "src/modules/inventory/components/BatchEditor.tsx",
+    "src/modules/inventory/components/PackVisual.tsx",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
     "src/modules/inventory/screens/DispenseScreen.tsx",
     "src/modules/inventory/screens/EditStockScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
     "src/modules/inventory/screens/ReceivingScreen.tsx",
     "src/modules/inventory/screens/RegisterProductScreen.tsx",
     "src/modules/inventory/screens/StockScreen.tsx",
+    "src/navigation/types.ts",
     "src/sync/syncService.ts",
     "src/units/convert.ts",
-    "src/units/index.ts"
+    "src/units/index.ts",
+    "src/units/registry.ts"
   ],
   "sessions": [
     {
@@ -24,13 +31,19 @@
       "transcript": "/43/bb0db75fb5/0/full.jsonl",
       "content_hash": "/43/bb0db75fb5/0/content_hash.txt",
       "prompt": "/43/bb0db75fb5/0/prompt.txt"
+    },
+    {
+      "metadata": "/43/bb0db75fb5/1/metadata.json",
+      "transcript": "/43/bb0db75fb5/1/full.jsonl",
+      "content_hash": "/43/bb0db75fb5/1/content_hash.txt",
+      "prompt": "/43/bb0db75fb5/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 9950,
-    "cache_creation_tokens": 443041,
-    "cache_read_tokens": 8835927,
-    "output_tokens": 122328,
-    "api_call_count": 74
+    "input_tokens": 16932,
+    "cache_creation_tokens": 874942,
+    "cache_read_tokens": 14186578,
+    "output_tokens": 177563,
+    "api_call_count": 126
   }
 }

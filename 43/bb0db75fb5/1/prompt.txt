@@ -1,0 +1,2 @@
+few fixes, the increment and decrement in decimal phase of items would be of value of 1, not like 10 points, also the remaining amount amount indicator behaves weirdly
+  sometimes,like I am decreasing 10 grams from 1kg, and it shows, 568,99999999999 grams remaining,  is this a calculation issue?
