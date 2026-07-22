@@ -30,6 +30,7 @@ export type GeoFix = {
 export type GateOutcome =
   | 'checked_in'
   | 'checked_out'
+  | 'duplicate'
   | 'no_match'
   | 'low_confidence'
   | 'challenge_required'

@@ -14,41 +14,23 @@ import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
-import {
-  cosineSim,
-  StubFaceEmbedder,
-  type FaceEmbedder,
-} from '../core/embedder';
+import { type FaceEmbedder } from '../core/embedder';
+import { createEmbedder } from '../core/embedderFactory';
+import { getPunchGeo } from '../core/geo';
 import {
   gateReducer,
   INITIAL_GATE_STATE,
   RESULT_LINGER_MS,
 } from '../core/machine';
-import type { GalleryEntry, GateOutcome, PunchDirection } from '../core/types';
+import { bootAttendance, submitPunch } from '../core/runtime';
+import type { GateOutcome } from '../core/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AttendanceGate'>;
 
-// Phase 1: no backend / enrolled gallery yet, so every capture resolves
-// locally against an empty gallery → "not recognized". This exercises the
-// real flow (camera → capture → embed → match → result) honestly. Real
-// matches appear once the engine attendance plugin + enrollment land.
-const LOCAL_GALLERY: GalleryEntry[] = [];
-const MATCH_THRESHOLD = 0.85;
-
-// Single shared embedder for the screen's lifetime. Swap StubFaceEmbedder for
-// the ONNX implementation in Phase 2 — nothing else here changes.
-const embedder: FaceEmbedder = new StubFaceEmbedder();
-
-function localMatch(
-  embedding: number[],
-): { entry: GalleryEntry; similarity: number } | null {
-  let best: { entry: GalleryEntry; similarity: number } | null = null;
-  for (const entry of LOCAL_GALLERY) {
-    const similarity = cosineSim(embedding, entry.embedding);
-    if (!best || similarity > best.similarity) best = { entry, similarity };
-  }
-  return best;
-}
+// Single embedder for the screen's lifetime. The factory returns the real
+// ONNX embedder once a model asset is bundled, else the stub — nothing here
+// changes either way.
+const embedder: FaceEmbedder = createEmbedder();
 
 export function GateScreen({ navigation }: Props) {
   const { palette } = useTheme();
@@ -59,18 +41,23 @@ export function GateScreen({ navigation }: Props) {
 
   const [state, dispatch] = useReducer(gateReducer, INITIAL_GATE_STATE);
   const stateRef = useRef(state);
+  const gallerySizeRef = useRef(0);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // Boot: warm the embedder, then open the gate.
+  // Boot: warm the embedder + sync gallery/config/outbox, then open the gate.
   useEffect(() => {
     let cancelled = false;
-    void embedder.warmup().finally(() => {
-      if (!cancelled) {
-        dispatch({ type: 'boot_complete', gallerySize: LOCAL_GALLERY.length });
-      }
-    });
+    (async () => {
+      const [{ gallerySize }] = await Promise.all([
+        bootAttendance(),
+        embedder.warmup().catch(() => {}),
+      ]);
+      if (cancelled) return;
+      gallerySizeRef.current = gallerySize;
+      dispatch({ type: 'boot_complete', gallerySize });
+    })();
     return () => {
       cancelled = true;
     };
@@ -90,7 +77,6 @@ export function GateScreen({ navigation }: Props) {
         const photo = await cam.takePhoto({ flash: 'off' });
         if (cancelled) return;
 
-        dispatch({ type: 'frame_locked', mode: 'local' });
         const embedding = await embedder.embed({
           uri: photo.path,
           width: photo.width,
@@ -98,18 +84,27 @@ export function GateScreen({ navigation }: Props) {
         });
         if (cancelled) return;
 
-        const match = localMatch(embedding);
-        const recognized = match !== null && match.similarity >= MATCH_THRESHOLD;
-        const outcome: GateOutcome = recognized ? 'checked_in' : 'no_match';
-        const direction: PunchDirection | null = recognized ? 'in' : null;
+        // Capture location in parallel (soft signal), then route to server or
+        // offline outbox via the runtime.
+        dispatch({ type: 'frame_locked', mode: 'server' });
+        const geo = await getPunchGeo();
+        if (cancelled) return;
+        const result = await submitPunch(embedding, geo);
+        if (cancelled) return;
+
+        const recognized =
+          result.outcome === 'checked_in' ||
+          result.outcome === 'checked_out' ||
+          result.outcome === 'duplicate' ||
+          result.outcome === 'offline_pending';
         if (recognized) haptic.success();
         else haptic.warn();
         dispatch({
           type: 'result',
-          outcome,
-          staffName: recognized ? match!.entry.name : null,
-          direction,
-          offline: true,
+          outcome: result.outcome,
+          staffName: result.staffName,
+          direction: result.direction,
+          offline: result.offline,
         });
       } catch (err) {
         if (!cancelled) {
@@ -130,7 +125,7 @@ export function GateScreen({ navigation }: Props) {
   useEffect(() => {
     if (state.kind !== 'result' && state.kind !== 'error') return;
     const timer = setTimeout(() => {
-      dispatch({ type: 'back_to_idle', gallerySize: LOCAL_GALLERY.length });
+      dispatch({ type: 'back_to_idle', gallerySize: gallerySizeRef.current });
     }, RESULT_LINGER_MS);
     return () => clearTimeout(timer);
   }, [state.kind]);
@@ -205,6 +200,7 @@ export function GateScreen({ navigation }: Props) {
         {state.kind === 'result' && (
           <ResultCard
             outcome={state.outcome}
+            direction={state.direction}
             staffName={state.staffName}
             offline={state.offline}
             palette={palette}
@@ -253,32 +249,45 @@ export function GateScreen({ navigation }: Props) {
 
 function ResultCard({
   outcome,
+  direction,
   staffName,
   offline,
   palette,
   t,
 }: {
   outcome: GateOutcome;
+  direction: 'in' | 'out' | null;
   staffName: string | null;
   offline: boolean;
   palette: ReturnType<typeof useTheme>['palette'];
   t: ReturnType<typeof useT>;
 }) {
-  const recognized = outcome === 'checked_in' || outcome === 'checked_out';
+  const pending = outcome === 'offline_pending';
+  const recognized =
+    outcome === 'checked_in' ||
+    outcome === 'checked_out' ||
+    outcome === 'duplicate' ||
+    pending;
   const Icon = recognized ? UserCheck : UserX;
   const tint = recognized ? palette.primary : palette.error;
+  const label =
+    outcome === 'checked_out'
+      ? t('checkedOut')
+      : outcome === 'duplicate'
+        ? direction === 'out' ? t('checkedOut') : t('checkedIn')
+        : outcome === 'checked_in' || pending
+          ? t('checkedIn')
+          : t('faceNotMatched');
   return (
     <View style={[styles.resultCard, { backgroundColor: palette.surface }]}>
       <Icon size={56} color={tint} strokeWidth={1.8} />
       <Text variant="titleLarge" style={{ color: palette.onSurface }}>
-        {recognized
-          ? outcome === 'checked_out' ? t('checkedOut') : t('checkedIn')
-          : t('faceNotMatched')}
+        {label}
       </Text>
       {staffName ? (
         <Text variant="bodyLarge" style={{ color: palette.onSurfaceVariant }}>{staffName}</Text>
       ) : null}
-      {recognized && offline ? (
+      {pending || (recognized && offline) ? (
         <Text variant="bodyMedium" style={{ color: palette.onSurfaceVariant, textAlign: 'center' }}>
           {t('savedOffline')}
         </Text>
