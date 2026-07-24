@@ -23,6 +23,7 @@
 import { EMBEDDING_DIM, type FaceEmbedder, type FaceFrame } from './embedder';
 
 const ORT_MODULE = 'onnxruntime-react-native';
+const ASSET_MODULE = 'expo-asset';
 
 // Model input contract (MobileFaceNet): 1x3x112x112, pixels normalized to
 // roughly [-1, 1] as (v - 127.5) / 128.
@@ -43,6 +44,20 @@ async function loadOrt(): Promise<any | null> {
   }
 }
 
+/** Resolve a require()'d asset (number) to a local file uri via expo-asset;
+ *  pass a string through unchanged. */
+async function resolveModelPath(modelAsset: number | string): Promise<string> {
+  if (typeof modelAsset === 'string') return modelAsset;
+  const assetMod: any = await import(ASSET_MODULE);
+  const Asset = assetMod?.Asset ?? assetMod?.default?.Asset;
+  if (!Asset) throw new Error('expo-asset unavailable; cannot resolve model asset');
+  const asset = Asset.fromModule(modelAsset);
+  await asset.downloadAsync();
+  const uri = asset.localUri ?? asset.uri;
+  if (!uri) throw new Error('model asset has no local uri');
+  return uri;
+}
+
 export class OnnxFaceEmbedder implements FaceEmbedder {
   readonly backend = 'onnx-mobilefacenet';
   private session: any | null = null;
@@ -60,9 +75,7 @@ export class OnnxFaceEmbedder implements FaceEmbedder {
         'onnxruntime-react-native is not available. Install it and rebuild the dev-client.',
       );
     }
-    // Asset resolution differs by how the model is bundled; a require()'d asset
-    // resolves to a local uri via expo-asset before this call in practice.
-    const modelPath = typeof this.modelAsset === 'string' ? this.modelAsset : String(this.modelAsset);
+    const modelPath = await resolveModelPath(this.modelAsset);
     this.session = await ort.InferenceSession.create(modelPath);
   }
 

@@ -1,4 +1,5 @@
 import type { Module } from '../types';
+import { EnrollScreen } from './screens/EnrollScreen';
 import { GateScreen } from './screens/GateScreen';
 
 /**
@@ -16,5 +17,8 @@ export const attendanceModule: Module = {
   glyph: '🪪',
   entryRoute: 'AttendanceGate',
   requiredPermissions: ['attendance.view'],
-  screens: [{ name: 'AttendanceGate', component: GateScreen }],
+  screens: [
+    { name: 'AttendanceGate', component: GateScreen },
+    { name: 'AttendanceEnroll', component: EnrollScreen },
+  ],
 };

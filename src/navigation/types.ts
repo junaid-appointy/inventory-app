@@ -31,5 +31,6 @@ export type RootStackParamList = {
   DeliverySummary: DeliverySummaryParams;
   Settings: undefined;
   AttendanceGate: undefined;
+  AttendanceEnroll: undefined;
 };
 

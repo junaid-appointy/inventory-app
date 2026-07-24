@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Camera, ScanFace, UserCheck, UserX, RefreshCw } from 'lucide-react-native';
+import { Camera, ScanFace, UserCheck, UserPlus, UserX, RefreshCw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useReducer, useRef } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +9,8 @@ import {
   useCameraPermission,
 } from 'react-native-vision-camera';
 
-import { AppBar, Button, radius, spacing, Text } from '../../../design';
+import { AppBar, Button, IconButton, radius, spacing, Text } from '../../../design';
+import { useCan } from '../../../auth/AuthProvider';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme';
@@ -35,6 +36,8 @@ const embedder: FaceEmbedder = createEmbedder();
 export function GateScreen({ navigation }: Props) {
   const { palette } = useTheme();
   const t = useT();
+  const can = useCan();
+  const canEnroll = can('attendance.enroll');
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   const cameraRef = useRef<VisionCamera>(null);
@@ -167,7 +170,15 @@ export function GateScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: palette.background }]}>
-      <AppBar title={t('attendance')} onBack={() => navigation.goBack()} />
+      <AppBar
+        title={t('attendance')}
+        onBack={() => navigation.goBack()}
+        trailing={
+          canEnroll ? (
+            <IconButton Icon={UserPlus} onPress={() => navigation.navigate('AttendanceEnroll')} />
+          ) : undefined
+        }
+      />
 
       <View style={styles.stage}>
         {cameraActive ? (

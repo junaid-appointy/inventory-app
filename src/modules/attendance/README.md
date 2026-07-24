@@ -23,31 +23,37 @@ thresholds, dedupe, and geofence policy all live on the server.
 
 ## Current state
 
-Runs on the current dev-client with **no new native deps**. The embedder is the
-stub (`createEmbedder()` returns `StubFaceEmbedder`), so it exercises the full
-flow — camera → capture → embed → server/offline route → result → outbox — but
-does not recognise real faces. Geofence returns `null` until `expo-location` is
-installed (guarded dynamic import, degrades gracefully).
+Everything is wired **except the trained model weights**. Deps are installed
+(`expo-location`, `onnxruntime-react-native`, `expo-image-manipulator`,
+`jpeg-js`), `app.json` has the location + onnx plugins and permissions, the
+`FacePreprocessor` is implemented (`core/preprocess.ts`), asset resolution +
+inference are done (`core/onnxEmbedder.ts`), and enrollment works
+(`screens/EnrollScreen.tsx` → `POST /enroll`).
 
-## Going live (needs an EAS dev-client rebuild)
+The embedder factory still returns `StubFaceEmbedder` because there is no model
+binary yet — so the full flow (gate + enroll) runs and is walkable, but does
+not recognise real faces. The stub is deterministic per capture, so it will not
+match an enrolled face across two different photos; that is expected until the
+real model lands.
 
-These are native modules — Metro hot-reload will not add them.
+## Going live — remaining steps
 
-1. Install deps (lets `expo` pick SDK-compatible versions):
-   ```
-   npx expo install expo-location onnxruntime-react-native
-   ```
-2. `app.json` → add the `expo-location` config plugin with foreground-location
-   permission strings, and confirm camera permission is present.
-3. Ship a quantized **MobileFaceNet** model at
-   `assets/models/mobilefacenet.onnx` (input `1x3x112x112`, output 192-d).
-4. Provide a `FacePreprocessor` (decode the vision-camera still → crop face →
-   resize 112x112 → normalized NCHW `Float32Array`). This is the remaining
-   device-side work; see `core/onnxEmbedder.ts`.
-5. In `core/embedderFactory.ts` set `FACE_MODEL` to the `require()`'d model
-   asset and return `new OnnxFaceEmbedder(FACE_MODEL, preprocessor)`.
-6. Rebuild: `npx eas build --profile development --platform android`, install,
-   then `npm run start:dev-client`.
+1. Drop a quantized **MobileFaceNet** ONNX model at
+   `assets/models/mobilefacenet.onnx` (input `1x3x112x112`, output 192-d,
+   normalized `(v-127.5)/128`). Public conversions exist (InsightFace /
+   MobileFaceNet); pick one whose output dim matches `EMBEDDING_DIM` (192) or
+   adjust that constant.
+2. In `core/embedderFactory.ts` set `FACE_MODEL = require('../../../../assets/models/mobilefacenet.onnx')`.
+   That single line activates `OnnxFaceEmbedder` for both the gate and enroll.
+3. Rebuild the native client (deps + plugins changed):
+   `npx eas build --profile development --platform android`, install, then
+   `npm run start:dev-client`.
+4. Enroll each staff member (gate AppBar → enroll icon, requires
+   `attendance.enroll`), then validate recognition on-device.
+
+> Note: `preprocess.ts` resizes the whole frame to 112x112. If accuracy needs a
+> tighter crop, feed a face bounding box (ML Kit / MediaPipe) into the
+> preprocessor — the tensor contract is unchanged.
 
 ## Verify on real hardware (not simulator)
 

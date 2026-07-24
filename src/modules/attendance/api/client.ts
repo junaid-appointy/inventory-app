@@ -118,3 +118,37 @@ export function flushOfflineBatch(
     { method: 'POST', body: JSON.stringify({ events }) },
   );
 }
+
+// ── Enrollment + roster ────────────────────────────────────────────
+
+export type StaffDto = {
+  id: string;
+  name: string;
+  employee_code: string | null;
+  enrolled: number;
+};
+
+export type RosterEntryDto = {
+  staff_id: string;
+  name: string;
+  marked_in_at: string;
+};
+
+export function listStaff(): Promise<{ staff: StaffDto[] }> {
+  return request<{ staff: StaffDto[] }>('/api/attendance/staff', { method: 'GET' });
+}
+
+export function fetchRoster(): Promise<{ roster: RosterEntryDto[] }> {
+  return request<{ roster: RosterEntryDto[] }>('/api/attendance/roster', { method: 'GET' });
+}
+
+export function enrollFace(
+  staffId: string,
+  embedding: number[],
+  quality?: number,
+): Promise<{ ok: boolean; id: string; gallery_version: string }> {
+  return request('/api/attendance/enroll', {
+    method: 'POST',
+    body: JSON.stringify({ staff_id: staffId, embedding, quality }),
+  });
+}

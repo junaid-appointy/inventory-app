@@ -72,6 +72,17 @@ export const STR = {
   savedOffline:    ['Saved, will confirm when online', 'सेव, ऑनलाइन होने पर पक्का'],
   grantCamera:     ['Allow camera',       'कैमरा दें'],
 
+  // Attendance enrollment
+  enrollFaces:     ['Enroll faces',       'चेहरे जोड़ें'],
+  enrollSelectHint:['Tap a name to add their face', 'नाम दबाकर चेहरा जोड़ें'],
+  enrolledLabel:   ['Enrolled',           'जुड़ा'],
+  notEnrolled:     ['Not enrolled',       'नहीं जुड़ा'],
+  enrollLookHint:  ['Look straight at the camera', 'सीधे कैमरे को देखें'],
+  enrollSaved:     ['Face enrolled',      'चेहरा जुड़ा'],
+  enrollFailed:    ['Could not enroll',   'नहीं जुड़ा'],
+  noStaffFound:    ['No staff found',     'कोई स्टाफ़ नहीं'],
+  enrolling:       ['Enrolling…',         'जोड़ा जा रहा…'],
+
   // Generic actions
   next:            ['Next',               'आगे'],
   back:            ['Back',               'वापस'],

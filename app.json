@@ -21,7 +21,9 @@
         "ACCESS_NETWORK_STATE",
         "INTERNET",
         "VIBRATE",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
       ],
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
@@ -32,17 +34,25 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.officeops.fieldapp",
       "infoPlist": {
-        "NSCameraUsageDescription": "Field App uses the camera to scan barcodes at the gate."
+        "NSCameraUsageDescription": "Field App uses the camera to scan barcodes and for face check-in at the gate.",
+        "NSLocationWhenInUseUsageDescription": "Field App records your location at check-in to confirm you are on site."
       }
     },
     "plugins": [
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Field App uses the camera to scan barcodes at the gate.",
+          "cameraPermissionText": "Field App uses the camera to scan barcodes and for face check-in at the gate.",
           "enableCodeScanner": true
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Field App records your location at check-in to confirm you are on site."
+        }
+      ],
+      "onnxruntime-react-native"
     ],
     "extra": {
       "eas": {
