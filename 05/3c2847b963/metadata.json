@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "053c2847b963",
+  "strategy": "manual-commit",
+  "branch": "feature/attendance",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/i18n/strings.ts",
+    "src/modules/attendance/index.ts",
+    "src/navigation/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/05/3c2847b963/0/metadata.json",
+      "transcript": "/05/3c2847b963/0/full.jsonl",
+      "content_hash": "/05/3c2847b963/0/content_hash.txt",
+      "prompt": "/05/3c2847b963/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12881,
+    "cache_creation_tokens": 789034,
+    "cache_read_tokens": 24516097,
+    "output_tokens": 168953,
+    "api_call_count": 165
+  }
+}
