@@ -1,0 +1,9 @@
+I went to the edit stock screen when I saw this. no expiry date being shown.
+
+---
+
+what is this on the pick from batch dispense screen, 1=g , and it always stays like that, whether I am dispensing pack or granular amount.
+
+---
+
+lets start working on the sync issue, first thing is that I do not want to show the sync queue button, the sync should happen in background automatically, also the update conflict popup should not happen, like if an admin changes a value, and the app is out of sync, it should auto sync, like a queue, who applied the changes first will be applied first. we also have a doc related to it. ask me if  you have any question or issues.

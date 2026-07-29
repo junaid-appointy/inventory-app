@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "f7b8b4cd72bc",
+  "strategy": "manual-commit",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "src/db/database.ts",
+    "src/db/outbox.ts",
+    "src/db/stock.ts",
+    "src/design/tokens.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/components/BatchEditor.tsx",
+    "src/modules/inventory/components/LotPicker.tsx",
+    "src/modules/inventory/components/PackVisual.tsx",
+    "src/modules/inventory/screens/AlertsScreen.tsx",
+    "src/modules/inventory/screens/DispenseScreen.tsx",
+    "src/modules/inventory/screens/EditStockScreen.tsx",
+    "src/modules/inventory/screens/HomeScreen.tsx",
+    "src/modules/inventory/screens/OutboxScreen.tsx",
+    "src/modules/inventory/screens/ReceivingScreen.tsx",
+    "src/modules/inventory/screens/SettingsScreen.tsx",
+    "src/modules/inventory/screens/StockScreen.tsx",
+    "src/sync/api.ts",
+    "src/sync/stockPull.ts",
+    "src/sync/syncService.ts",
+    "src/sync/warmCache.ts",
+    "src/theme/themes.ts",
+    "src/units/convert.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f7/b8b4cd72bc/0/metadata.json",
+      "transcript": "/f7/b8b4cd72bc/0/full.jsonl",
+      "content_hash": "/f7/b8b4cd72bc/0/content_hash.txt",
+      "prompt": "/f7/b8b4cd72bc/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 901,
+    "cache_creation_tokens": 2544540,
+    "cache_read_tokens": 165897392,
+    "output_tokens": 279888,
+    "api_call_count": 474
+  }
+}
