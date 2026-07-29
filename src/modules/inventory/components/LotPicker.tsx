@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { CompactStepper, radius, spacing, Text } from '../../../design';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme';
+import { roundQty } from '../../../units';
 import {
   expiryUrgency,
   formatExpiry,
@@ -40,6 +41,48 @@ export function suggestFEFO(
 }
 
 /**
+ * Per-lot amount field. Shows and accepts the guard's denomination
+ * (`factor` = 1 for packs, pack_size for base units) while handing packs
+ * back to the caller. `draft` holds raw keystrokes while focused so a
+ * decimal point survives long enough to be typed.
+ */
+function LotAmountInput({
+  takePacks,
+  availablePacks,
+  factor,
+  onChange,
+  style,
+}: {
+  takePacks: number;
+  availablePacks: number;
+  factor: number;
+  onChange: (takePacks: number) => void;
+  style: React.ComponentProps<typeof TextInput>['style'];
+}) {
+  const { palette } = useTheme();
+  const [draft, setDraft] = useState<string | null>(null);
+  const committed = takePacks === 0 ? '' : String(roundQty(takePacks * factor));
+
+  return (
+    <TextInput
+      value={draft ?? committed}
+      onChangeText={(txt) => {
+        const cleaned = txt.replace(/[^0-9.]/g, '');
+        setDraft(cleaned);
+        const n = cleaned === '' || cleaned === '.' ? 0 : Number(cleaned);
+        const safe = Number.isFinite(n) ? n : 0;
+        onChange(Math.max(0, Math.min(availablePacks, safe / factor)));
+      }}
+      onBlur={() => setDraft(null)}
+      keyboardType="decimal-pad"
+      placeholder="0"
+      placeholderTextColor={palette.onSurfaceVariant}
+      style={style}
+    />
+  );
+}
+
+/**
  * Per-lot qty picker for dispense. Lots are listed in FEFO order with
  * the earliest highlighted as "suggested" — this is the **soft nudge**:
  * we record what the guard actually picked rather than enforcing FEFO,
@@ -58,6 +101,7 @@ export function LotPicker({
   unit,
   packSize,
   decimal = false,
+  mode = 'pack',
 }: {
   /** Allocation rows. Order = FEFO from caller. */
   lots: LotAllocation[];
@@ -65,24 +109,38 @@ export function LotPicker({
   /** What the guard initially asked for. Used for the "Taken N of M" badge. */
   desiredQty: number;
   unit?: string | null;
-  /** Pack size — needed to render "2 × 500 g" (pack mode) vs raw unit
-   *  (divisible). When omitted, falls back to bare qty + unit. */
+  /** Pack size — the conversion factor between the pack-denominated
+   *  allocation values and the base units the guard reads. */
   packSize?: number | null;
   /** When true, per-lot input accepts decimals (divisible products). */
   decimal?: boolean;
+  /**
+   * Which denomination the guard is working in — mirrors the pack/unit
+   * chip on the stepper above. `LotAllocation.take` / `.available` are
+   * ALWAYS packs; this only changes what gets shown and typed, so the
+   * picker never reads in a different currency to the stepper it sits
+   * under.
+   */
+  mode?: 'pack' | 'unit';
 }) {
   const t = useT();
   const { palette } = useTheme();
 
-  // Unit/pack hint shown ONCE at the picker header — never repeated on
-  // every row. Pack mode with pack_size > 1 expands as "× 500 g"; divisible
-  // mode uses the raw unit ("kg"); fallback omits when neither is known.
-  const usePackForm = !decimal && packSize != null && packSize !== 1;
-  const headerUnitHint = usePackForm
-    ? `× ${packSize}${unit ? ` ${unit}` : ''}`
-    : unit
+  const ps = packSize != null && packSize > 0 ? packSize : 1;
+  /** packs → what the guard sees. 1 in pack mode, pack_size in unit mode. */
+  const factor = mode === 'unit' ? ps : 1;
+
+  // Denomination hint, shown ONCE at the header rather than repeated on
+  // every row. It has to name what the numbers below actually count:
+  // "1 = g" was both meaningless and wrong, since the numbers were packs.
+  const headerUnitHint =
+    mode === 'unit'
       ? unit
-      : '';
+        ? t('countingInUnit', { unit })
+        : ''
+      : ps > 1 && unit
+        ? t('onePackEquals', { size: ps, unit })
+        : t('countingInPacks');
 
   // The maximum across all lots — surfaces the real ceiling so the user
   // doesn't think "Taken 1 of 1" means only 1 exists when really 4 do.
@@ -93,8 +151,8 @@ export function LotPicker({
 
   const total = useMemo(() => lots.reduce((s, l) => s + (l.take || 0), 0), [lots]);
   const complete = total > 0 && total === grandTotal;
-  const fmtNum = (n: number) =>
-    Number.isInteger(n) ? String(n) : (Math.round(n * 1000) / 1000).toString();
+  /** Render a pack-denominated value in the guard's active denomination. */
+  const fmtNum = (packs: number) => String(roundQty(packs * factor));
 
   // Auto-seed allocation with FEFO when the parent passes the freshly-
   // loaded availability without any takes set. Idempotent — caller
@@ -129,7 +187,7 @@ export function LotPicker({
           </Text>
           {headerUnitHint ? (
             <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: 2 }}>
-              1 = {headerUnitHint}
+              {headerUnitHint}
             </Text>
           ) : null}
         </View>
@@ -227,18 +285,16 @@ export function LotPicker({
               </View>
             </View>
             {decimal ? (
-              <TextInput
-                value={lot.take === 0 ? '' : String(lot.take)}
-                onChangeText={(txt) => {
-                  const cleaned = txt.replace(/[^0-9.]/g, '');
-                  const n = cleaned === '' || cleaned === '.' ? 0 : Number(cleaned);
-                  const safe = Number.isFinite(n) ? n : 0;
-                  const clamped = Math.max(0, Math.min(lot.available, safe));
-                  onChange(lots.map((l, idx) => (idx === i ? { ...l, take: clamped } : l)));
-                }}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={palette.onSurfaceVariant}
+              // Typed in the active denomination, stored in packs. Clamping
+              // happens on the pack value so it lines up exactly with
+              // `lot.available` and can't drift by a rounding step.
+              <LotAmountInput
+                takePacks={lot.take}
+                availablePacks={lot.available}
+                factor={factor}
+                onChange={(takePacks) =>
+                  onChange(lots.map((l, idx) => (idx === i ? { ...l, take: takePacks } : l)))
+                }
                 style={[
                   styles.decimalInput,
                   {
@@ -249,14 +305,17 @@ export function LotPicker({
                 ]}
               />
             ) : (
+              // Whole-count products. Also denomination-aware: a 12-pcs box
+              // switched to unit mode steps in pieces, not boxes, so the
+              // stepper never disagrees with the header hint above it.
               <CompactStepper
-                value={lot.take}
+                value={roundQty(lot.take * factor)}
                 onChange={(v) => {
-                  const clamped = Math.max(0, Math.min(lot.available, v));
+                  const clamped = Math.max(0, Math.min(lot.available, v / factor));
                   onChange(lots.map((l, idx) => (idx === i ? { ...l, take: clamped } : l)));
                 }}
                 min={0}
-                max={lot.available}
+                max={roundQty(lot.available * factor)}
               />
             )}
           </View>

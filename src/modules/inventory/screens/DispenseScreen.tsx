@@ -34,8 +34,9 @@ import {
   resolveUnit,
 } from '../../../units';
 import { enqueue } from '../../../db/outbox';
-import { adjustOnHand, findStock, getNearestExpiry, listStock, replaceStockFromRemote, StockRow, statusFor } from '../../../db/stock';
-import { decrementLotsLocal, listLots, pruneLotsToBarcodes, replaceLotsLocal } from '../../../db/lots';
+import { adjustOnHand, findStock, getNearestExpiry, listStock, StockRow, statusFor } from '../../../db/stock';
+import { decrementLotsLocal, listLots } from '../../../db/lots';
+import { pullStockIntoCache } from '../../../sync/stockPull';
 import { LotAllocation, LotPicker, suggestFEFO } from '../components/LotPicker';
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
@@ -173,26 +174,7 @@ export function DispenseScreen({ route, navigation }: Props) {
   // 'stock' refetch key with Stock/Alerts (same stock_levels table).
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
-    const remote = await api.fetch.stock();
-    await replaceStockFromRemote(
-      remote.map((r) => ({
-        barcode: r.barcode,
-        name: r.name,
-        category: r.category,
-        unit: r.unit,
-        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-        dispense_mode: r.dispense_mode ?? 'pack',
-        on_hand: Number(r.on_hand),
-        threshold: Number(r.threshold),
-      })),
-    );
-    for (const r of remote) {
-      await replaceLotsLocal(
-        r.barcode,
-        (r.lots ?? []).map((l) => ({ expiry_date: l.expiry_date, qty: Number(l.qty) })),
-      );
-    }
-    await pruneLotsToBarcodes(remote.map((r) => r.barcode));
+    await pullStockIntoCache();
   }, []);
 
   const readLocal = useCallback(async () => {
@@ -712,6 +694,9 @@ export function DispenseScreen({ route, navigation }: Props) {
                   unit={selected.unit ?? null}
                   packSize={selected.pack_size ?? null}
                   decimal={resolveUnit(selected.unit).nature === 'continuous'}
+                  // Follow the stepper's pack/unit chip so both surfaces
+                  // count in the same thing.
+                  mode={dispenseMode}
                 />
               )}
             </>

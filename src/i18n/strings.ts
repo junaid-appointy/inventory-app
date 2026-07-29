@@ -34,6 +34,12 @@ export const STR = {
   langSection:     ['LANGUAGE',           'भाषा'],
   appearanceSection:['APPEARANCE',        'दिखावट'],
   accountSection:  ['ACCOUNT',            'खाता'],
+  // Sync copy. Silence is the normal state; the second line only turns
+  // urgent when something genuinely needs a person.
+  syncAllClear:    ['Everything is saved', 'सब कुछ सेव है'],
+  syncNeedsAttention: ['{n} need your attention', '{n} पर ध्यान दें'],
+  statusAdjusted:  ['Adjusted',           'समायोजित'],
+  statusCounted:   ['In count',           'गिनती में'],
   themeLight:      ['Light',              'उजला'],
   themeDark:       ['Dark',               'अंधेरा'],
 
@@ -282,6 +288,14 @@ export const STR = {
   statusLow:          ['Low',                                'कम'],
   statusOut:          ['Out of Stock',                       'खत्म'],
   allCategories:      ['All Categories',                     'सभी श्रेणियाँ'],
+  // Stock list summary + sorting
+  totalItems:         ['Total items',                        'कुल सामान'],
+  leftOfStocked:      ['of {amount} stocked',                '{amount} में से'],
+  sortBy:             ['Sort',                               'क्रम'],
+  sortNameAsc:        ['Name A-Z',                           'नाम A-Z'],
+  sortLowestFirst:    ['Lowest stock first',                 'कम स्टॉक पहले'],
+  sortExpiringFirst:  ['Expiring soonest',                   'जल्दी एक्सपायर'],
+  sortRecentlyUpdated:['Recently updated',                   'हाल में अपडेट'],
 
   // Empty / list states
   noItemsMatch:       ['No items match.',                    'कोई सामान नहीं मिला।'],
@@ -362,6 +376,17 @@ export const STR = {
   divisibleMode:      ['Divisible (decimal {unit})',         'विभाज्य (दशमलव {unit})'],
   dispenseFractionalHint: ['Dispense will accept fractional {unit} (e.g. 1.5 {unit}).', 'वितरण में आंशिक {unit} चलेगा (जैसे 1.5 {unit})।'],
   dispenseWholeHint:  ['Dispense will be whole packs only (1, 2, 3…).', 'वितरण सिर्फ़ पूरे पैक में होगा (1, 2, 3…)।'],
+  // Batch picker / batch editor denomination hints. These tell the user
+  // what the numbers on screen are counting, so they follow whichever
+  // mode the dispense stepper is in.
+  // Stocktake framing. A count is recorded, never negotiated — there is
+  // no string here that asks the user to pick between two numbers.
+  recordCount:        ['Record count',                       'गिनती दर्ज करें'],
+  systemShows:        ['System shows {amount}. Your count is what gets recorded.',
+                       'सिस्टम में {amount} है। आपकी गिनती ही दर्ज होगी।'],
+  onePackEquals:      ['1 pack = {size} {unit}',             '1 पैक = {size} {unit}'],
+  countingInPacks:    ['Counting in packs',                  'पैक में गिनती'],
+  countingInUnit:     ['Counting in {unit}',                 '{unit} में गिनती'],
 
   // Relative expiry phrases (the date itself stays locale-neutral)
   expiresToday:       ['expires today',                      'आज एक्सपायर'],

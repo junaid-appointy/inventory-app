@@ -199,28 +199,33 @@ export function formatOnHand(
     return `${formatNum(rounded)} ${def.symbol}`;
   }
 
+  // ─── Pack size > 1 ───────────────────────────────────────────
+  // Convert to base units FIRST, then split. Rounding the pack count
+  // before multiplying loses real quantity: 0.694 packs of a 500 g
+  // product is 347 g, but smart-rounding to 0.69 first reports 345 g.
+  // Every surface (stock list, product subtitle, stepper max, pack
+  // visual) derives from packs × pack_size, so this one has to agree.
+  const totalBase = roundQty(onHand * ps);
+  const wholePacks = Math.floor(roundQty(totalBase / ps));
+  const remainderBase = roundQty(totalBase - wholePacks * ps);
+
   // ─── Whole packs ─────────────────────────────────────────────
-  if (Number.isInteger(rounded) || Math.abs(rounded - Math.round(rounded)) < 0.001) {
-    const wholePacks = Math.round(rounded);
+  if (remainderBase === 0) {
     if (wholePacks === 0) return `0 ${def.symbol}`;
     return `${wholePacks} × ${ps} ${def.symbol}`;
   }
 
   // ─── Fractional packs ────────────────────────────────────────
-  const wholePacks = Math.floor(rounded);
-  const fractionalPacks = smartRound(rounded - wholePacks);
-  const remainderBaseUnits = smartRound(fractionalPacks * ps);
-
   if (def.nature === 'continuous') {
     // "2 packs + 3 l" or "3 l" if 0 whole packs
     if (wholePacks === 0) {
-      return `${formatNum(remainderBaseUnits)} ${def.symbol}`;
+      return `${formatNum(remainderBase)} ${def.symbol}`;
     }
-    return `${wholePacks} × ${ps} ${def.symbol} + ${formatNum(remainderBaseUnits)} ${def.symbol}`;
+    return `${wholePacks} × ${ps} ${def.symbol} + ${formatNum(remainderBase)} ${def.symbol}`;
   }
 
   // Discrete: "3 packs + 1 bar"
-  const remainderInt = Math.round(remainderBaseUnits);
+  const remainderInt = Math.round(remainderBase);
   if (wholePacks === 0) {
     return `${remainderInt} ${def.symbol}`;
   }
@@ -251,8 +256,10 @@ export function formatOnHandShort(
   }
 
   if (def.nature === 'continuous') {
-    // Show total base units: 2.6 cans × 5 l = 13 l
-    const total = smartRound(onHand * ps);
+    // Show total base units: 2.6 cans × 5 l = 13 l. roundQty (3 dp) —
+    // not smartRound (2 dp) — so this matches formatOnHand exactly;
+    // the two are shown side by side on the stock and dispense screens.
+    const total = roundQty(onHand * ps);
     return `${formatNum(total)} ${def.symbol}`;
   }
 

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { CompactStepper, radius, spacing, Text } from '../../../design';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme';
+import { roundQty } from '../../../units';
 import { haptic } from '../../../utils/haptics';
 import {
   compareExpiryAsc,
@@ -30,6 +31,55 @@ function toISO(d: Date): string {
 }
 
 /**
+ * Decimal quantity field that shows BASE units while the caller keeps
+ * storing packs.
+ *
+ * `Batch.qty` is always pack-denominated (0.694 packs of a 500 g tub),
+ * but nobody counts butter in fractional tubs — the guard thinks in
+ * grams. `unitsPerPack` is the conversion factor for the display layer
+ * only; the value handed back through `onChange` is still packs. With
+ * `unitsPerPack = 1` this is a plain base-unit field.
+ *
+ * `draft` holds the raw keystrokes while the field has focus. Without it
+ * the value round-trips through Number() on every keystroke, so "0." and
+ * "347." collapse before the guard can finish typing the decimal.
+ */
+function BaseUnitInput({
+  packs,
+  unitsPerPack,
+  onChange,
+  style,
+}: {
+  packs: number;
+  unitsPerPack: number;
+  onChange: (packs: number) => void;
+  style: React.ComponentProps<typeof TextInput>['style'];
+}) {
+  const { palette } = useTheme();
+  const [draft, setDraft] = useState<string | null>(null);
+  const committed = packs === 0 ? '' : String(roundQty(packs * unitsPerPack));
+
+  return (
+    <TextInput
+      value={draft ?? committed}
+      onChangeText={(txt) => {
+        const cleaned = txt.replace(/[^0-9.]/g, '');
+        setDraft(cleaned);
+        const n = cleaned === '' || cleaned === '.' ? 0 : Number(cleaned);
+        // Keep the pack value at full precision — re-rounding here would
+        // drift the base-unit number the guard just typed.
+        onChange(Number.isFinite(n) ? n / unitsPerPack : 0);
+      }}
+      onBlur={() => setDraft(null)}
+      keyboardType="decimal-pad"
+      placeholder="0"
+      placeholderTextColor={palette.onSurfaceVariant}
+      style={style}
+    />
+  );
+}
+
+/**
  * Edits a list of per-expiry batches for receiving / corrections. Each
  * row carries `{qty, expiry}`. Expiry has one combined control:
  *   - Unset → two chips: "Pick date" (opens picker) and "No expiry".
@@ -46,6 +96,7 @@ export function BatchEditor({
   unit,
   packSize,
   decimal = false,
+  editInBaseUnits = false,
 }: {
   batches: Batch[];
   onChange: (next: Batch[]) => void;
@@ -56,11 +107,24 @@ export function BatchEditor({
    *  (divisible). When omitted, falls back to bare qty + unit. */
   packSize?: number | null;
   decimal?: boolean;
+  /**
+   * Show and accept quantities in BASE units (grams, litres) instead of
+   * raw packs, converting with `packSize`. `Batch.qty` stays in packs
+   * either way — this only changes what the guard reads and types.
+   *
+   * Receiving leaves this off: intake is counted in whole packs off the
+   * truck. Corrections turn it on, because "347 g of butter left" is
+   * something a guard can weigh, and "0.694 tubs" is not.
+   */
+  editInBaseUnits?: boolean;
 }) {
   const t = useT();
   const { palette } = useTheme();
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const divisible = decimal;
+  /** Display multiplier: packs → what the guard sees. 1 = show packs. */
+  const unitsPerPack =
+    editInBaseUnits && packSize != null && packSize > 0 ? packSize : 1;
 
   // Auto-sort by expiry (earliest first, null last). Caller still owns
   // the array; we just present it FEFO-ordered.
@@ -76,7 +140,7 @@ export function BatchEditor({
   const ps = packSize ?? null;
   const usePackForm = !divisible && ps != null && ps !== 1;
   const totalDisplay = divisible
-    ? (Math.round(total * 1000) / 1000).toString()
+    ? String(roundQty(total * unitsPerPack))
     : String(total);
   const totalSuffix = usePackForm
     ? ` × ${ps}${unit ? ` ${unit}` : ''}`
@@ -159,29 +223,34 @@ export function BatchEditor({
                   {t('howMany').toUpperCase()}
                 </Text>
                 {divisible ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                    <TextInput
-                      value={b.qty === 0 ? '' : String(b.qty)}
-                      onChangeText={(txt) => {
-                        const cleaned = txt.replace(/[^0-9.]/g, '');
-                        const n = cleaned === '' || cleaned === '.' ? 0 : Number(cleaned);
-                        updateByOriginal(originalIdx, { qty: Number.isFinite(n) ? n : 0 });
-                      }}
-                      keyboardType="decimal-pad"
-                      placeholder="0"
-                      placeholderTextColor={palette.onSurfaceVariant}
-                      style={[
-                        styles.decimalInput,
-                        {
-                          borderColor: palette.outline,
-                          color: palette.onSurface,
-                          backgroundColor: palette.surface,
-                        },
-                      ]}
-                    />
-                    {unit ? (
-                      <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-                        {unit}
+                  <View style={{ gap: spacing.xxs }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                      <BaseUnitInput
+                        packs={b.qty}
+                        unitsPerPack={unitsPerPack}
+                        onChange={(packs) => updateByOriginal(originalIdx, { qty: packs })}
+                        style={[
+                          styles.decimalInput,
+                          {
+                            borderColor: palette.outline,
+                            color: palette.onSurface,
+                            backgroundColor: palette.surface,
+                          },
+                        ]}
+                      />
+                      {unit ? (
+                        <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                          {unit}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {/* Reminder of the pack this batch came out of, so the
+                        guard can sanity-check "347 g" against "one 500 g
+                        tub, part used". Only meaningful when a pack has
+                        more than one base unit in it. */}
+                    {unitsPerPack > 1 && unit ? (
+                      <Text variant="labelMedium" color={palette.onSurfaceVariant}>
+                        1 {t('pack')} = {unitsPerPack} {unit}
                       </Text>
                     ) : null}
                   </View>

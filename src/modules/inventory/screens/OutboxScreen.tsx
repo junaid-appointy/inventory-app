@@ -20,13 +20,26 @@ const STATUS_LABEL_KEY: Record<string, StringKey> = {
   queued: 'statusWaiting',
   sending: 'statusSending',
   failed: 'statusFailed',
+  applied_with_adjustment: 'statusAdjusted',
+  superseded_by_count: 'statusCounted',
 };
 
 const TONE: Record<string, 'warn' | 'danger' | 'neutral'> = {
   sending: 'warn',
   failed: 'danger',
   queued: 'neutral',
+  // An adjustment is information, not a failure. The guard did nothing
+  // wrong: they recorded what happened and the system's number was off.
+  applied_with_adjustment: 'warn',
+  superseded_by_count: 'neutral',
 };
+
+/**
+ * Statuses that need no telling. A write that landed exactly as recorded
+ * is not news, so those rows are deleted on sight and the screen stays
+ * empty in the normal case.
+ */
+const SILENT_STATUSES = ['sent', 'applied'] as const;
 
 /** Parse payload JSON to produce a human-readable description */
 function describeItem(kind: string, payloadStr: string, t: TFn): string {
@@ -75,17 +88,23 @@ export function OutboxScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     const db = await getDb();
 
-    // Delete all sent items immediately — only show what's pending
-    await db.runAsync(`DELETE FROM outbox WHERE status = 'sent'`);
+    // Drop the rows with nothing to report. What survives is either
+    // still in flight, stuck, or landed with something the user should
+    // know — the adjusted ones stay until the queue is cleared.
+    const silent = SILENT_STATUSES.map(() => '?').join(',');
+    await db.runAsync(
+      `DELETE FROM outbox WHERE status IN (${silent})`,
+      SILENT_STATUSES as unknown as string[],
+    );
 
     const hiddenList = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
     setRows(
       await db.getAllAsync<OutboxRow>(
         `SELECT * FROM outbox
-         WHERE status != 'sent' AND kind NOT IN (${hiddenList})
+         WHERE status NOT IN (${silent}) AND kind NOT IN (${hiddenList})
          ORDER BY CASE status WHEN 'failed' THEN 0 WHEN 'sending' THEN 1 ELSE 2 END, created_at DESC
          LIMIT 200`,
-        INTERNAL_OUTBOX_KINDS as string[],
+        [...(SILENT_STATUSES as unknown as string[]), ...(INTERNAL_OUTBOX_KINDS as string[])],
       ),
     );
     setInitialLoading(false);
@@ -111,7 +130,11 @@ export function OutboxScreen({ navigation }: Props) {
           style: 'destructive',
           onPress: async () => {
             const db = await getDb();
-            await db.runAsync(`DELETE FROM outbox WHERE status != 'sent'`);
+            const silent = SILENT_STATUSES.map(() => '?').join(',');
+            await db.runAsync(
+              `DELETE FROM outbox WHERE status NOT IN (${silent})`,
+              SILENT_STATUSES as unknown as string[],
+            );
             await load();
             setSyncResult(t('queueCleared'));
           },
@@ -202,6 +225,14 @@ export function OutboxScreen({ navigation }: Props) {
               {timeAgo(item.created_at, t)}
               {item.attempts > 0 ? ` · ${t('nAttempts', { count: item.attempts })}` : ''}
             </Text>
+            {/* The server's own sentence about what became of this row.
+                One plain statement, never a question — if something needs
+                a human it arrives as a recount task, not a prompt here. */}
+            {item.server_note ? (
+              <Text variant="bodyMedium" color={palette.onSurface} style={{ marginTop: spacing.xs }}>
+                {item.server_note}
+              </Text>
+            ) : null}
             {item.last_error ? (
               <Text variant="bodyMedium" color={palette.error} style={{ marginTop: spacing.xs }} numberOfLines={2}>
                 {item.last_error}

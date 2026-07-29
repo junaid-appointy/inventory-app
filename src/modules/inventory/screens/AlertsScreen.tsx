@@ -12,10 +12,10 @@ import {
   Text,
 } from '../../../design';
 import { enqueue } from '../../../db/outbox';
-import { listLowOrOut, statusFor, StockRow, replaceStockFromRemote } from '../../../db/stock';
+import { listLowOrOut, statusFor, StockRow } from '../../../db/stock';
+import { pullStockIntoCache } from '../../../sync/stockPull';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
-import { api } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
@@ -44,18 +44,7 @@ export function AlertsScreen({ navigation }: Props) {
 
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
-    const remote = await api.fetch.stock();
-    await replaceStockFromRemote(
-      remote.map((r) => ({
-        barcode: r.barcode,
-        name: r.name,
-        category: r.category,
-        unit: r.unit,
-        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-        on_hand: Number(r.on_hand),
-        threshold: Number(r.threshold),
-      })),
-    );
+    await pullStockIntoCache();
   }, []);
 
   const readLocal = useCallback(async () => {

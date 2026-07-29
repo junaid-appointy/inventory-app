@@ -1,7 +1,9 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { AlertTriangle, Check, RefreshCw } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../../auth';
+import { adjustedCount, stuckCount } from '../../../db/outbox';
 import { AppBar, Button, Card, Chip, spacing, Text } from '../../../design';
 import { useI18n, useT } from '../../../i18n';
 import type { Lang } from '../../../i18n';
@@ -22,6 +24,22 @@ export function SettingsScreen({ navigation }: Props) {
   const { themeName, setTheme } = useThemeControls();
   const { lang, setLang } = useI18n();
   const { session, logout } = useAuth();
+
+  // Sync runs on its own and normally has nothing to say. We only count
+  // the two things a person might need to act on: writes that keep
+  // failing, and writes the server adjusted. A plain backlog is not a
+  // problem — it drains by itself — so it deliberately shows nothing.
+  const [needsAttention, setNeedsAttention] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      const [stuck, adjusted] = await Promise.all([stuckCount(), adjustedCount()]);
+      if (!cancelled) setNeedsAttention(stuck + adjusted);
+    };
+    void check();
+    const unsub = navigation.addListener('focus', () => { void check(); });
+    return () => { cancelled = true; unsub(); };
+  }, [navigation]);
 
   // Theme options use translated labels
   const themeOptions: Array<{ value: ThemeName; label: string }> = [
@@ -57,6 +75,33 @@ export function SettingsScreen({ navigation }: Props) {
               />
             ))}
           </View>
+        </Section>
+
+        <Section title={t('dataSection')}>
+          <Pressable
+            onPress={() => navigation.navigate('Outbox')}
+            style={styles.row}
+            android_ripple={{ color: palette.outlineVariant }}
+          >
+            <RefreshCw size={22} color={palette.onSurfaceVariant} strokeWidth={2.2} />
+            <View style={{ flex: 1 }}>
+              <Text variant="titleMedium">{t('syncQueue')}</Text>
+              <Text
+                variant="bodyMedium"
+                color={needsAttention > 0 ? palette.error : palette.onSurfaceVariant}
+                style={{ marginTop: 2 }}
+              >
+                {needsAttention > 0
+                  ? t('syncNeedsAttention', { n: needsAttention })
+                  : t('syncAllClear')}
+              </Text>
+            </View>
+            {needsAttention > 0 ? (
+              <AlertTriangle size={20} color={palette.error} strokeWidth={2.2} />
+            ) : (
+              <Check size={20} color={palette.primary} strokeWidth={2.4} />
+            )}
+          </Pressable>
         </Section>
 
         {session && (
@@ -107,5 +152,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, minHeight: 48 },
 });
 

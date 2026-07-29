@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Check } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -29,7 +29,6 @@ import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
 import { BatchEditor, Batch } from '../components/BatchEditor';
-import { formatExpiry } from '../../../utils/expiry';
 import { formatOnHand, resolveUnit } from '../../../units';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditStock'>;
@@ -44,26 +43,26 @@ function earliestExpiry(batches: Batch[]): string | null {
 }
 
 /**
- * verifying  — JIT fetch in flight; save disabled.
- * ok         — server agrees with what we opened the screen with.
- * absent     — server has no row for this barcode (treat as ok — local
- *              view is the only truth; the correction will create it).
- * conflict   — server's on_hand or nearest_expiry differs from local;
- *              show prompt before letting user save.
- * offline    — fetch failed because network down; save disabled.
- * error      — fetch failed otherwise; save disabled.
+ * This screen records a STOCKTAKE: "I counted the shelf and there is
+ * this much." A count is a fact about the physical world, so it always
+ * applies — there is no state in which we ask the user to choose between
+ * their count and a number the system remembers. If an admin's change
+ * and this count both land, they apply in server-arrival order and the
+ * later one wins, which is what a queue does.
+ *
+ * loading — first read still in flight; save disabled because there is
+ *           nothing to save yet.
+ * ready   — we have something on screen and the count can be recorded,
+ *           online or off. The outbox reconciles it either way.
+ *
+ * Deliberately absent: a `conflict` state. See
+ * Planning-docs/inventory_conflict_free_sync_design.md — a merge prompt
+ * asks a non-power user a question they cannot answer, and it only
+ * exists because someone wrote an absolute number. We keep the absolute
+ * write (a count IS absolute) but stop treating a stale local number as
+ * a competing opinion worth arbitrating.
  */
-type VerifyStatus = 'verifying' | 'ok' | 'absent' | 'conflict' | 'offline' | 'error';
-
-function isOfflineError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes('Network request failed') ||
-    msg.includes('TypeError: Network') ||
-    msg.includes('Unable to resolve host') ||
-    msg === 'JIT timeout'
-  );
-}
+type VerifyStatus = 'loading' | 'ready';
 
 export function EditStockScreen({ route, navigation }: Props) {
   const t = useT();
@@ -79,15 +78,36 @@ export function EditStockScreen({ route, navigation }: Props) {
 
   const [saving, setSaving] = useState(false);
 
-  // JIT verification — fetch the server's authoritative on_hand +
-  // nearest_expiry the moment the screen opens, in parallel with the
-  // local read. If the server differs, we surface a "Stock has changed"
-  // prompt before letting the user save. If the fetch fails (timeout /
-  // offline / 5xx), we block the save entirely — corrections must be
-  // committed against verified state per the cache-freshness plan.
-  const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('verifying');
+  // Freshness fetch. Not a gate — we pull the server's lot breakdown so
+  // the guard starts from the best numbers we have, then get out of the
+  // way. A failure here never blocks recording a count: the shelf does
+  // not stop being countable because the network is down.
+  const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('loading');
   const [serverQty, setServerQty] = useState<number | null>(null);
-  const [serverExpiry, setServerExpiry] = useState<string | null>(null);
+
+  /**
+   * Where the batch rows on screen came from. The local read and the JIT
+   * fetch race each other, so both consult this instead of assuming an
+   * order. 'remote' wins and is never downgraded — the server's lot
+   * breakdown is the real one.
+   */
+  const seedSource = useRef<'none' | 'local' | 'remote'>('none');
+  /** Set once the guard edits anything, so a late-arriving JIT response
+   *  can't wipe what they just typed. */
+  const userTouched = useRef(false);
+
+  const applySeed = (
+    seed: Batch[],
+    source: 'local' | 'remote',
+    qtyRef: number,
+    expiryRef: string | null,
+  ) => {
+    seedSource.current = source;
+    setOriginalBatches(seed);
+    setBatches(seed);
+    setOriginalQty(qtyRef);
+    setOriginalExpiry(expiryRef);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -98,16 +118,24 @@ export function EditStockScreen({ route, navigation }: Props) {
       if (cancelled) return;
       if (!r) return;
       setRow(r);
-      setOriginalQty(r.on_hand);
-      setOriginalExpiry(exp);
+      setVerifyStatus((s) => (s === 'loading' ? 'ready' : s));
+      if (seedSource.current === 'remote') return;
       // Seed batches from local lots. If lots are empty (legacy row from
-      // before the lots migration, or fresh barcode), synthesise one
-      // batch carrying the entire on_hand at the cached nearest_expiry.
+      // before the lots migration, or a cache that hasn't pulled batches
+      // yet), synthesise one batch carrying the entire on_hand at the
+      // cached nearest_expiry. That synthetic row is a placeholder to
+      // look at, NOT something to save — the JIT fetch below replaces it
+      // with the server's real breakdown, and Save stays disabled until
+      // the fetch settles.
       const seed: Batch[] = lots.length > 0
         ? lots.map((l) => ({ expiry: l.expiry_date, qty: Number(l.qty) }))
         : [{ expiry: exp, qty: r.on_hand || 1 }];
-      setOriginalBatches(seed);
-      setBatches(seed);
+      // Conflict reference = the earliest expiry actually present in what
+      // we opened with. Deriving it from the seed rather than reading the
+      // denormalised nearest_expiry column keeps the two in step even if
+      // the column lags the lots it summarises — a mismatch here shows up
+      // as a permanent, unresolvable "Stock has changed" banner.
+      applySeed(seed, 'local', r.on_hand, earliestExpiry(seed));
     })();
     return () => { cancelled = true; };
   }, [barcode]);
@@ -125,37 +153,34 @@ export function EditStockScreen({ route, navigation }: Props) {
         const remoteQty = Number(remote.on_hand);
         const remoteExpiry = remote.nearest_expiry ?? null;
         setServerQty(remoteQty);
-        setServerExpiry(remoteExpiry);
-        setVerifyStatus('ok'); // narrowed to 'conflict' below once we know local values
+
+        // Take the server's lot breakdown over anything we guessed
+        // locally. Correcting stock REPLACES the lots, so seeding from a
+        // cache that had no batches meant saving "one lot, no expiry"
+        // over the real dated ones — the correction silently wiped the
+        // expiry for everyone. Only skip this if the guard already
+        // started editing; their input outranks a late response.
+        const remoteLots = (remote.lots ?? []).map((l) => ({
+          expiry: l.expiry_date,
+          qty: Number(l.qty),
+        }));
+        if (remoteLots.length > 0 && !userTouched.current) {
+          applySeed(remoteLots, 'remote', remoteQty, remoteExpiry);
+        }
       } catch (err) {
         if (cancelled) return;
-        // 404 = no stock row on server; treat as authoritative "absent"
-        // — the correction will create it. Same UX as a clean ok.
-        if (err instanceof ApiError && err.status === 404) {
-          setVerifyStatus('absent');
-          return;
-        }
         // 401 is handled centrally; clear navigates to Login.
         if (err instanceof ApiError && err.status === 401) return;
-        setVerifyStatus(isOfflineError(err) ? 'offline' : 'error');
+        // Everything else — 404, offline, timeout, 5xx — is survivable.
+        // We fall back to the local view and still let the count through.
+        // Blocking here would punish the guard for our connectivity.
       } finally {
         clearTimeout(t);
+        if (!cancelled) setVerifyStatus('ready');
       }
     })();
     return () => { cancelled = true; clearTimeout(t); controller.abort(); };
   }, [barcode]);
-
-  // Once both local and server have settled, classify ok-vs-conflict.
-  // Conflict iff server differs from what the user is about to edit.
-  // We use originalQty/originalExpiry as the "what the user opened
-  // with" reference — those don't change unless the user explicitly
-  // accepts the new server values.
-  useEffect(() => {
-    if (verifyStatus !== 'ok' || row === null || serverQty === null) return;
-    const qtyDiffers = Math.abs(serverQty - originalQty) > 1e-9;
-    const expiryDiffers = (serverExpiry ?? null) !== (originalExpiry ?? null);
-    if (qtyDiffers || expiryDiffers) setVerifyStatus('conflict');
-  }, [verifyStatus, row, serverQty, serverExpiry, originalQty, originalExpiry]);
 
   /** Total qty across all batches — replaces the old single qty stepper. */
   const qty = useMemo(() => batches.reduce((s, b) => s + (b.qty || 0), 0), [batches]);
@@ -178,38 +203,13 @@ export function EditStockScreen({ route, navigation }: Props) {
     return a !== b;
   }, [row, batches, originalBatches]);
   /**
-   * User accepted the server's view. Rebase originalQty / originalExpiry
-   * and also replace what's in the steppers / date picker so the
-   * "current count" line and the inputs match. The audit record's
-   * old_qty / old_expiry will now reflect the actual transition.
+   * The system's number differs from what the guard is about to record.
+   * This is a note, not a question — it exists so the guard can catch
+   * their own typo, and it never blocks the save. If they counted 12 and
+   * we thought 20, they are standing at the shelf and we are not.
    */
-  const acceptServerView = () => {
-    if (serverQty === null) return;
-    haptic.tap();
-    setOriginalQty(serverQty);
-    setOriginalExpiry(serverExpiry ?? null);
-    // We don't have the server's per-batch breakdown in the conflict
-    // banner state — collapse into a single batch carrying the
-    // server's nearest expiry. The guard can split it again after.
-    const seed: Batch[] = [{ expiry: serverExpiry ?? null, qty: serverQty }];
-    setOriginalBatches(seed);
-    setBatches(seed);
-    setVerifyStatus('ok');
-  };
-
-  /**
-   * User chose to keep their edit. We still rebase originalQty /
-   * originalExpiry to the SERVER's truth so the audit record reflects
-   * "server was N, guard set it to M" — not "guard thought it was N
-   * (stale), set it to M". Steppers untouched.
-   */
-  const keepUserEdit = () => {
-    if (serverQty === null) return;
-    haptic.tap();
-    setOriginalQty(serverQty);
-    setOriginalExpiry(serverExpiry ?? null);
-    setVerifyStatus('ok');
-  };
+  const systemDiffers =
+    serverQty !== null && Math.abs(serverQty - qty) > 1e-6 && userTouched.current;
 
   const submit = async () => {
     if (!row || !changed) return;
@@ -244,6 +244,12 @@ export function EditStockScreen({ route, navigation }: Props) {
         performed_by: session?.guardId ?? null,
         performed_by_name: session?.guardName ?? null,
         corrected_at: Date.now(),
+        // When the shelf was actually counted. Today this equals
+        // corrected_at, but stamping it makes the count a dated
+        // observation rather than an edit — which is what lets the
+        // server later decide that an older in-flight movement was
+        // already included in this count.
+        counted_at: Date.now(),
       });
       // Await the flush so the StockScreen's focus refresh sees the
       // server-acknowledged value, not stale read-back data. Without
@@ -277,11 +283,11 @@ export function EditStockScreen({ route, navigation }: Props) {
           contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + kbHeight }]}
           keyboardShouldPersistTaps="handled"
         >
-          {/* JIT verification status banners.
-              - verifying: tiny inline indicator at top
-              - conflict: amber banner with "Use new count" / "Keep my edit"
-              - offline/error: red banner, save disabled, can retry */}
-          {verifyStatus === 'verifying' && (
+          {/* Two states only. While the freshest numbers are still
+              loading we say so; once loaded we may note that the system
+              expected a different total. There is deliberately no
+              banner that asks the guard to choose a number. */}
+          {verifyStatus === 'loading' && (
             <View style={[styles.statusBanner, { borderColor: palette.outlineVariant }]}>
               <ActivityIndicator color={palette.primary} size="small" />
               <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginLeft: spacing.sm }}>
@@ -289,46 +295,20 @@ export function EditStockScreen({ route, navigation }: Props) {
               </Text>
             </View>
           )}
-          {verifyStatus === 'conflict' && serverQty !== null && (
+          {systemDiffers && serverQty !== null && (
             <View
               style={[
                 styles.statusBanner,
                 {
-                  borderColor: '#F9A825',
-                  backgroundColor: 'rgba(249, 168, 37, 0.10)',
-                  flexDirection: 'column',
-                  alignItems: 'stretch',
-                  gap: spacing.sm,
+                  borderColor: palette.outlineVariant,
+                  backgroundColor: palette.surfaceContainerLow,
                 },
               ]}
             >
-              <Text variant="titleMedium" color={palette.onSurface}>
-                {t('stockUpdatedTitle')}
-              </Text>
-              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-                {t('stockUpdatedBody')}
-              </Text>
-              <Text variant="bodyMedium" color={palette.onSurface}>
-                {formatOnHand(originalQty, row?.pack_size, row?.unit)} → {formatOnHand(serverQty, row?.pack_size, row?.unit)}
-                {serverExpiry && serverExpiry !== originalExpiry
-                  ? ` · ${formatExpiry(serverExpiry)}`
-                  : ''}
-              </Text>
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                <Button label={t('useNewCount')} variant="filled" size="md" onPress={acceptServerView} />
-                <Button label={t('keepMyEdit')} variant="tonal" size="md" onPress={keepUserEdit} />
-              </View>
-            </View>
-          )}
-          {(verifyStatus === 'offline' || verifyStatus === 'error') && (
-            <View
-              style={[
-                styles.statusBanner,
-                { borderColor: palette.error, backgroundColor: palette.errorContainer ?? 'transparent' },
-              ]}
-            >
-              <Text variant="bodyMedium" color={palette.error} style={{ flex: 1 }}>
-                {t('couldntVerify')}
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ flex: 1 }}>
+                {t('systemShows', {
+                  amount: formatOnHand(serverQty, row?.pack_size, row?.unit),
+                })}
               </Text>
             </View>
           )}
@@ -347,30 +327,29 @@ export function EditStockScreen({ route, navigation }: Props) {
 
           <BatchEditor
             batches={batches}
-            onChange={setBatches}
+            onChange={(next) => {
+              userTouched.current = true;
+              setBatches(next);
+            }}
             unit={row.unit ?? null}
             packSize={row.pack_size ?? null}
             decimal={resolveUnit(row.unit).nature === 'continuous'}
+            // Corrections are counted in base units — the guard weighs
+            // "347 g left", they don't estimate "0.694 of a 500 g tub".
+            editInBaseUnits
           />
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
-          {/* Save is gated by verification: cannot commit a correction
-              while we're still verifying, in conflict (user must
-              resolve via the banner), or while verification failed
-              (offline / error — user retries by going back and re-
-              opening once network returns). */}
+          {/* The only reasons a count cannot be recorded are that we
+              have not loaded the item yet, or nothing was changed. Being
+              offline is NOT one of them — the count goes to the outbox
+              and reconciles when the network returns. */}
           <Button
-            label={changed ? t('saveChanges') : t('noChanges')}
+            label={changed ? t('recordCount') : t('noChanges')}
             onPress={submit}
             loading={saving}
-            disabled={
-              !changed ||
-              verifyStatus === 'verifying' ||
-              verifyStatus === 'conflict' ||
-              verifyStatus === 'offline' ||
-              verifyStatus === 'error'
-            }
+            disabled={!changed || verifyStatus === 'loading'}
             size="lg"
             fullWidth
             leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}

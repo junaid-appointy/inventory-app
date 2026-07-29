@@ -142,6 +142,10 @@ export type RemoteStockRow = {
    *  empty array — caller falls back to nearest_expiry only. */
   lots?: RemoteLot[];
   nearest_expiry?: string | null;
+  /** Free-text shelf label set by an admin in ops-dashboard. */
+  location?: string | null;
+  /** Level at the last receipt or stocktake. Null until either happens. */
+  opening_qty?: number | null;
 };
 
 export type RemoteProduct = {

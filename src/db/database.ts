@@ -15,7 +15,7 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
  * Current schema version. Bump this and add a migration block in
  * `runMigrations()` whenever you need additive schema changes.
  */
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 12;
 
 export function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
@@ -332,6 +332,49 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     }
     await db.execAsync(`PRAGMA user_version = 9;`);
     version = 9;
+  }
+
+  if (version < 10) {
+    // Conflict-free sync: the server now reports what became of each
+    // queued write (applied / applied_with_adjustment / superseded_by_
+    // count) with a plain-language sentence. Statuses are stored in the
+    // existing `status` column; this adds somewhere to keep the sentence.
+    const outboxCols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(outbox)',
+    );
+    if (!outboxCols.some((c) => c.name === 'server_note')) {
+      await db.execAsync(`ALTER TABLE outbox ADD COLUMN server_note TEXT;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 10;`);
+    version = 10;
+  }
+
+  if (version < 11) {
+    // Shelf label ("Shelf A3"), set by an admin in ops-dashboard and
+    // read-only here — it answers "where do I physically go?", which is
+    // the one thing the stock list could not tell anyone.
+    const stockCols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(stock_levels)',
+    );
+    if (!stockCols.some((c) => c.name === 'location')) {
+      await db.execAsync(`ALTER TABLE stock_levels ADD COLUMN location TEXT;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 11;`);
+    version = 11;
+  }
+
+  if (version < 12) {
+    // How much was here at the last receipt or stocktake. Lets the stock
+    // list show "347 g left of 500 g stocked" without pretending pack
+    // size is a capacity. Server-owned; read-only on the device.
+    const cols = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(stock_levels)',
+    );
+    if (!cols.some((c) => c.name === 'opening_qty')) {
+      await db.execAsync(`ALTER TABLE stock_levels ADD COLUMN opening_qty REAL;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 12;`);
+    version = 12;
   }
 }
 

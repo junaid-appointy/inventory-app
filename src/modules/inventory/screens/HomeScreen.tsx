@@ -1,6 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ArrowRight, Bell, type LucideIcon, HandCoins, Package, RefreshCw, ScanLine, Settings as SettingsIcon, Truck } from 'lucide-react-native';
-import { QueueBadge } from '../components/QueueBadge';
+import { ArrowRight, Bell, type LucideIcon, HandCoins, Package, ScanLine, Settings as SettingsIcon, Truck } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +7,8 @@ import { Card, IconButton, Skeleton, spacing, Text } from '../../../design';
 import { useTheme } from '../../../theme';
 import { getSession } from '../../../auth/session';
 import { listOpenOrders, upsertOrdersFromRemote } from '../../../db/orders';
-import { listLowOrOut, listStock, replaceStockFromRemote } from '../../../db/stock';
+import { listLowOrOut, listStock } from '../../../db/stock';
+import { pullStockIntoCache } from '../../../sync/stockPull';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { api } from '../../../sync/api';
@@ -45,18 +45,7 @@ export function HomeScreen({ navigation }: Props) {
   // its cache state. Throws on failure so the state machine sees it.
   const fetchStock = useCallback(async () => {
     await flushOnce().catch(() => {});
-    const remote = await api.fetch.stock();
-    await replaceStockFromRemote(
-      remote.map((r) => ({
-        barcode: r.barcode,
-        name: r.name,
-        category: r.category,
-        unit: r.unit,
-        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-        on_hand: Number(r.on_hand),
-        threshold: Number(r.threshold),
-      })),
-    );
+    await pullStockIntoCache();
   }, []);
 
   const fetchOrders = useCallback(async () => {
@@ -199,23 +188,12 @@ export function HomeScreen({ navigation }: Props) {
           />
         </View>
 
-        {/* Sync queue — full-width row card */}
-        <View style={styles.tilesRow}>
-          <Card tone="elevated" onPress={() => navigation.navigate('Outbox')} style={styles.tile}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
-              <RefreshCw size={26} color={palette.primary} strokeWidth={2} />
-              <View style={{ flex: 1 }}>
-                <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-                  {t('syncQueue').toUpperCase()}
-                </Text>
-                <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xxs }}>
-                  {t('syncQueueSub')}
-                </Text>
-              </View>
-              <QueueBadge />
-            </View>
-          </Card>
-        </View>
+        {/* No sync tile. Sync is not a task the user performs — it runs
+            on its own (30s push, 5min read pull, plus an immediate flush
+            when connectivity returns) and asking a guard to think about
+            a queue is asking them to do the system's job. The screen
+            still exists behind Settings for when something actually
+            fails; see SettingsScreen. */}
       </ScrollView>
     </SafeAreaView>
   );

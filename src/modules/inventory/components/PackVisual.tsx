@@ -15,14 +15,21 @@ type Props = {
   threshold: number;
 };
 
-/** Map remaining to a health status for the pill */
+/**
+ * Warning pill for the post-dispense level — or null when there is
+ * nothing to warn about.
+ *
+ * There is deliberately no "HEALTHY" state: a pill that fires on the
+ * happy path is noise, and it trains guards to stop reading the pill at
+ * all, which is exactly when we need them to notice LOW/OUT.
+ */
 function healthStatus(remaining: number, threshold: number): {
   label: string;
-  tone: 'success' | 'warn' | 'danger';
-} {
+  tone: 'warn' | 'danger';
+} | null {
   if (remaining <= 0) return { label: 'OUT', tone: 'danger' };
   if (remaining <= threshold) return { label: 'LOW', tone: 'warn' };
-  return { label: 'HEALTHY', tone: 'success' };
+  return null;
 }
 
 /**
@@ -40,18 +47,8 @@ export function PackVisual({ totalCapacity, remaining, unit, threshold }: Props)
   const pctDisplay = Math.round(pct * 100);
   const health = healthStatus(rem, threshold);
 
-  const pillBg =
-    health.tone === 'danger'
-      ? '#FFEBEE'
-      : health.tone === 'warn'
-      ? '#FFF8E1'
-      : '#E8F5E9';
-  const pillFg =
-    health.tone === 'danger'
-      ? '#E53935'
-      : health.tone === 'warn'
-      ? '#c98b00'
-      : '#2E7D32';
+  const pillBg = health?.tone === 'danger' ? '#FFEBEE' : '#FFF8E1';
+  const pillFg = health?.tone === 'danger' ? '#E53935' : '#c98b00';
 
   return (
     <View style={styles.container}>
@@ -89,20 +86,22 @@ export function PackVisual({ totalCapacity, remaining, unit, threshold }: Props)
         <Text variant="bodyMedium" color="rgba(30,26,29,0.55)" style={{ marginTop: spacing.xxs }}>
           will remain of {cap} {unit}
         </Text>
-        <View
-          style={[
-            styles.pill,
-            { backgroundColor: pillBg, marginTop: spacing.md },
-          ]}
-        >
-          <Text
-            variant="labelMedium"
-            color={pillFg}
-            style={{ fontWeight: '700' }}
+        {health ? (
+          <View
+            style={[
+              styles.pill,
+              { backgroundColor: pillBg, marginTop: spacing.md },
+            ]}
           >
-            {health.label}
-          </Text>
-        </View>
+            <Text
+              variant="labelMedium"
+              color={pillFg}
+              style={{ fontWeight: '700' }}
+            >
+              {health.label}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );

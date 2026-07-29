@@ -17,8 +17,12 @@ import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../../../db/or
 import { enqueue } from '../../../db/outbox';
 import { trackExpiry } from '../../../db/expiry';
 import { findProduct, Product } from '../../../db/products';
-import { learnBarcode, findOpenItemByProductId } from '../../../db/catalog';
-import { adjustOnHand, findStock, upsertStock } from '../../../db/stock';
+import {
+  findCanonicalProductByBarcode,
+  findOpenItemByProductId,
+  learnBarcode,
+} from '../../../db/catalog';
+import { adjustOnHand, findStock, snapshotOpeningLocal, upsertStock } from '../../../db/stock';
 import { addLotLocal } from '../../../db/lots';
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
@@ -51,6 +55,17 @@ export function ReceivingScreen({ route, navigation }: Props) {
   const { barcode, productId, productName: paramProductName, unit: paramUnit, packSize: paramPackSize } = route.params;
   const orderSession = useOrderSession();
   const [product, setProduct] = useState<Product | null>(null);
+  // Fallback identity for barcodes we were handed WITHOUT route params —
+  // e.g. the Stock screen's "Received" action, which only knows the
+  // barcode. Resolved from the canonical catalog, then the local stock
+  // row. Without this the screen printed the barcode next to the word
+  // "Unknown" for products the guard had already linked.
+  const [fallback, setFallback] = useState<{
+    name: string;
+    unit: string | null;
+    packSize: number | null;
+    category: string | null;
+  } | null>(null);
   const [item, setItem] = useState<OrderItem | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -65,27 +80,57 @@ export function ReceivingScreen({ route, navigation }: Props) {
   const [batches, setBatches] = useState<Batch[]>([{ qty: 1, expiry: undefined }]);
   const qty = useMemo(() => batches.reduce((s, b) => s + (b.qty || 0), 0), [batches]);
 
-  // Resolved product name: canonical name takes priority over legacy product name
-  const resolvedName = paramProductName ?? product?.name ?? 'Unknown';
-  const resolvedUnit = paramUnit ?? product?.unit ?? null;
-  const resolvedPackSize = paramPackSize ?? null;
+  // Identity resolution, most-specific first: route params (the scanner
+  // already resolved it) → legacy local products row → canonical catalog
+  // / stock cache. Only a barcode nothing on the device recognises falls
+  // through to "Unknown".
+  const resolvedName = paramProductName ?? product?.name ?? fallback?.name ?? 'Unknown';
+  const resolvedUnit = paramUnit ?? product?.unit ?? fallback?.unit ?? null;
+  const resolvedPackSize = paramPackSize ?? product?.pack_size ?? fallback?.packSize ?? null;
+  const resolvedCategory = product?.category ?? fallback?.category ?? null;
   const packDisplay =
     resolvedPackSize != null && resolvedUnit
       ? `${resolvedPackSize} ${resolvedUnit}`
       : resolvedUnit ?? null;
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      setProduct(await findProduct(barcode));
+      const local = await findProduct(barcode);
+      if (cancelled) return;
+      setProduct(local);
+
+      // Catalog first (canonical name + authoritative pack size), stock
+      // cache second (whatever the last sync knew this barcode as).
+      const canonical = await findCanonicalProductByBarcode(barcode).catch(() => null);
       const stockRow = await findStock(barcode);
-      // If we have a productId from catalog, look up order item by product_id
-      if (productId) {
-        const byProduct = await findOpenItemByProductId(productId);
-        setItem(byProduct as OrderItem | null);
+      if (cancelled) return;
+      if (canonical) {
+        setFallback({
+          name: canonical.canonical_name,
+          unit: canonical.unit ?? null,
+          packSize: canonical.pack_size ?? null,
+          category: canonical.category ?? null,
+        });
+      } else if (stockRow) {
+        setFallback({
+          name: stockRow.name,
+          unit: stockRow.unit ?? null,
+          packSize: stockRow.pack_size ?? null,
+          category: stockRow.category ?? null,
+        });
       } else {
-        setItem(await findOpenItemByBarcode(barcode));
+        setFallback(null);
       }
+
+      // If we have a productId from catalog, look up order item by product_id
+      const openItem = productId
+        ? ((await findOpenItemByProductId(productId)) as OrderItem | null)
+        : await findOpenItemByBarcode(barcode);
+      if (cancelled) return;
+      setItem(openItem);
     })();
+    return () => { cancelled = true; };
   }, [barcode, productId]);
 
   /** Convert a "packs received" integer into the units stored in lots:
@@ -180,7 +225,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
       await upsertStock({
         barcode,
         name: resolvedName,
-        category: product?.category ?? null,
+        category: resolvedCategory,
         unit: resolvedUnit,
         pack_size: resolvedPackSize,
         dispense_mode: 'pack',
@@ -188,6 +233,11 @@ export function ReceivingScreen({ route, navigation }: Props) {
         threshold: 0,
       });
     }
+
+    // Goods just arrived — this is the new "full" for the stock list's
+    // "left of stocked" bar. Server does the same in addLot; doing it
+    // locally too stops the bar flashing a stale baseline until sync.
+    await snapshotOpeningLocal(barcode);
 
     flushOnce().catch(() => {});
 
@@ -215,7 +265,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
       barcode,
       productId: productId ?? null,
       name: resolvedName,
-      category: product?.category ?? null,
+      category: resolvedCategory,
       unit: resolvedUnit,
       packSize: resolvedPackSize,
       qty: totalQty,
@@ -234,7 +284,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
       await persistStandalone(false);
       haptic.success();
       navigation.replace('DeliverySummary', {
-        items: [{ name: resolvedName, category: product?.category ?? null, qty }],
+        items: [{ name: resolvedName, category: resolvedCategory, qty }],
         totalItems: 1,
         totalQty: qty,
         productName: resolvedName,
@@ -253,7 +303,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
       await persistStandalone(true);
       haptic.warn();
       navigation.replace('DeliverySummary', {
-        items: [{ name: resolvedName, category: product?.category ?? null, qty }],
+        items: [{ name: resolvedName, category: resolvedCategory, qty }],
         totalItems: 1,
         totalQty: qty,
         productName: resolvedName,

@@ -12,6 +12,16 @@ export type StockRow = {
   dispense_mode?: 'pack' | 'divisible';
   on_hand: number;
   threshold: number;
+  /** Earliest expiry across this barcode's lots; null = no dated lot.
+   *  Denormalised cache column, kept in step with `stock_lots`. */
+  nearest_expiry?: string | null;
+  /** Free-text shelf label ("Shelf A3"), set by an admin in ops-dashboard.
+   *  Read-only here — a guard moving a tin is not a data entry task. */
+  location?: string | null;
+  /** Level at the last receipt or stocktake. Null until the item is next
+   *  received or counted; callers hide the "of N stocked" line rather
+   *  than falling back to pack size, which is not the same thing. */
+  opening_qty?: number | null;
   updated_at: number;
 };
 
@@ -78,12 +88,8 @@ export async function upsertStock(row: {
   );
 }
 
-/**
- * Replace the local cached stock row with the server's values. Used by
- * screens after a successful remote fetch so on-hand and threshold
- * reflect the source of truth.
- */
-export async function syncStockFromRemote(row: {
+/** The subset of a remote stock row we mirror locally. */
+export type RemoteStockMirror = {
   barcode: string;
   name: string;
   category: string | null;
@@ -92,11 +98,56 @@ export async function syncStockFromRemote(row: {
   dispense_mode?: 'pack' | 'divisible';
   on_hand: number;
   threshold: number;
-}): Promise<void> {
+  nearest_expiry?: string | null;
+  location?: string | null;
+  opening_qty?: number | null;
+};
+
+/**
+ * Normalise one row off `api.fetch.stock()` into the shape the local
+ * cache stores. Every screen that pulls stock goes through this so the
+ * field set can't drift per call site — `nearest_expiry` used to be
+ * dropped by four of the five callers, which left the local column
+ * permanently null and made EditStock think the server had changed.
+ */
+export function remoteStockToLocal(r: {
+  barcode: string;
+  name: string;
+  category: string | null;
+  unit: string | null;
+  pack_size: number | null;
+  dispense_mode?: 'pack' | 'divisible';
+  on_hand: number | string;
+  threshold: number | string;
+  nearest_expiry?: string | null;
+  location?: string | null;
+  opening_qty?: number | string | null;
+}): RemoteStockMirror {
+  return {
+    barcode: r.barcode,
+    name: r.name,
+    category: r.category,
+    unit: r.unit,
+    pack_size: r.pack_size != null ? Number(r.pack_size) : null,
+    dispense_mode: r.dispense_mode ?? 'pack',
+    on_hand: Number(r.on_hand),
+    threshold: Number(r.threshold),
+    nearest_expiry: r.nearest_expiry ?? null,
+    location: r.location ?? null,
+    opening_qty: r.opening_qty != null ? Number(r.opening_qty) : null,
+  };
+}
+
+/**
+ * Replace the local cached stock row with the server's values. Used by
+ * screens after a successful remote fetch so on-hand and threshold
+ * reflect the source of truth.
+ */
+export async function syncStockFromRemote(row: RemoteStockMirror): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, dispense_mode, on_hand, threshold, updated_at)
-     VALUES (?, ?, ?, ?, ?, COALESCE(?, 'pack'), ?, ?, ?)
+    `INSERT INTO stock_levels (barcode, name, category, unit, pack_size, dispense_mode, on_hand, threshold, nearest_expiry, location, opening_qty, updated_at)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, 'pack'), ?, ?, ?, ?, ?, ?)
      ON CONFLICT(barcode) DO UPDATE SET
        name=excluded.name,
        category=excluded.category,
@@ -105,8 +156,24 @@ export async function syncStockFromRemote(row: {
        dispense_mode=excluded.dispense_mode,
        on_hand=excluded.on_hand,
        threshold=excluded.threshold,
+       nearest_expiry=excluded.nearest_expiry,
+       location=excluded.location,
+       opening_qty=excluded.opening_qty,
        updated_at=excluded.updated_at`,
-    [row.barcode, row.name, row.category, row.unit, row.pack_size, row.dispense_mode ?? null, row.on_hand, row.threshold, now()]
+    [
+      row.barcode,
+      row.name,
+      row.category,
+      row.unit,
+      row.pack_size,
+      row.dispense_mode ?? null,
+      row.on_hand,
+      row.threshold,
+      row.nearest_expiry ?? null,
+      row.location ?? null,
+      row.opening_qty ?? null,
+      now(),
+    ]
   );
 }
 
@@ -117,16 +184,7 @@ export async function syncStockFromRemote(row: {
  * wipes inventory data on the server.
  */
 export async function replaceStockFromRemote(
-  rows: Array<{
-    barcode: string;
-    name: string;
-    category: string | null;
-    unit: string | null;
-    pack_size: number | null;
-    dispense_mode?: 'pack' | 'divisible';
-    on_hand: number;
-    threshold: number;
-  }>,
+  rows: RemoteStockMirror[],
 ): Promise<void> {
   const db = await getDb();
   for (const row of rows) {
@@ -139,6 +197,19 @@ export async function replaceStockFromRemote(
   }
   const ids = rows.map((r) => `'${String(r.barcode).replace(/'/g, "''")}'`).join(',');
   await db.runAsync(`DELETE FROM stock_levels WHERE barcode NOT IN (${ids})`);
+}
+
+/**
+ * Mark the current level as the new starting amount. Call after a
+ * receipt lands locally, mirroring the server's snapshotOpeningQty —
+ * never after a dispense, or the "left of stocked" bar would never move.
+ */
+export async function snapshotOpeningLocal(barcode: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE stock_levels SET opening_qty = on_hand WHERE barcode = ?`,
+    [barcode],
+  );
 }
 
 export async function adjustOnHand(barcode: string, delta: number): Promise<void> {
@@ -161,6 +232,13 @@ export async function correctStockLocal(
   expiry: string | null,
 ): Promise<void> {
   const db = await getDb();
+  // A count restates the truth, so it becomes the new baseline too —
+  // mirrors snapshotOpeningQty on the server so the optimistic view
+  // doesn't flash a stale "of N stocked" before the next sync.
+  await db.runAsync(
+    `UPDATE stock_levels SET opening_qty = ? WHERE barcode = ?`,
+    [Math.max(0, onHand), barcode],
+  );
   await db.runAsync(
     `UPDATE stock_levels SET on_hand = ?, nearest_expiry = ?, updated_at = ? WHERE barcode = ?`,
     [Math.max(0, onHand), expiry, now(), barcode],

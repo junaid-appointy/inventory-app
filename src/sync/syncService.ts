@@ -4,9 +4,8 @@ import { OutboxKind } from '../db/outbox';
 import { markFailed, markSending, markSent, nextBatch, pendingCount, recoverOrphanedSending } from '../db/outbox';
 import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
 import { upsertOrdersFromRemote } from '../db/orders';
-import { replaceStockFromRemote } from '../db/stock';
-import { pruneLotsToBarcodes, replaceLotsLocal } from '../db/lots';
 import { api } from './api';
+import { pullStockIntoCache } from './stockPull';
 import { getSession } from '../auth/session';
 import { cache, type CacheKey } from './cacheStatus';
 import { invalidateRefetchThrottle } from './refetch';
@@ -95,31 +94,7 @@ async function invalidateAffectedCaches(keys: Set<CacheKey>): Promise<void> {
 async function refreshStockCaches(keys: CacheKey[]): Promise<void> {
   keys.forEach((k) => cache.refreshing(k));
   try {
-    const remote = await api.fetch.stock();
-    await replaceStockFromRemote(
-      remote.map((r) => ({
-        barcode: r.barcode,
-        name: r.name,
-        category: r.category,
-        unit: r.unit,
-        pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-        dispense_mode: r.dispense_mode ?? 'pack',
-        on_hand: Number(r.on_hand),
-        threshold: Number(r.threshold),
-      })),
-    );
-    // Mirror per-barcode lots locally too. Empty array clears the
-    // local lots for that barcode (matches server having no batches).
-    for (const r of remote) {
-      await replaceLotsLocal(
-        r.barcode,
-        (r.lots ?? []).map((l) => ({
-          expiry_date: l.expiry_date,
-          qty: Number(l.qty),
-        })),
-      );
-    }
-    await pruneLotsToBarcodes(remote.map((r) => r.barcode));
+    await pullStockIntoCache();
     keys.forEach((k) => cache.warm(k));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -203,8 +178,17 @@ export async function flushOnce(opts?: { pullReads?: boolean }): Promise<{ sent:
       }
       try {
         await markSending(row.id);
-        await dispatch(JSON.parse(row.payload));
-        await markSent(row.id);
+        // The write endpoints report what became of the row — applied,
+        // or applied with an adjustment the user should know about.
+        // Older server builds return neither; markSent falls back to
+        // the plain 'sent' status in that case.
+        const ack = (await dispatch(JSON.parse(row.payload))) as
+          | { status?: string | null; note?: string | null }
+          | undefined;
+        await markSent(row.id, {
+          status: ack?.status ?? null,
+          note: ack?.note ?? null,
+        });
         sent++;
         for (const k of POST_WRITE_INVALIDATES[row.kind]) touched.add(k);
       } catch (err) {

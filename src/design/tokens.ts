@@ -40,6 +40,16 @@ export const palette = {
   warnContainer: '#FFDF9E',
   onWarnContainer: '#261A00',
 
+  // Extended Material 3 colour role for "healthy / in stock". Green is
+  // load-bearing in inventory — it is the difference between "fine" and
+  // "go buy more" — so it belongs in the token set rather than as a
+  // hardcoded #43A047 scattered across screens, which is what it was.
+  // Tonal values follow the same M3 recipe as error/warn above.
+  success: '#276A2B',
+  onSuccess: '#FFFFFF',
+  successContainer: '#ACF3A5',
+  onSuccessContainer: '#002204',
+
   background: '#FBF7FA',
   onBackground: '#1E1A1D',
 

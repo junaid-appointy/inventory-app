@@ -15,8 +15,7 @@
  */
 
 import { cache, type CacheKey } from './cacheStatus';
-import { api } from './api';
-import { replaceStockFromRemote } from '../db/stock';
+import { pullStockIntoCache } from './stockPull';
 import { syncCanonicalProducts, syncOrders } from './syncService';
 import { getSession } from '../auth/session';
 
@@ -47,18 +46,7 @@ async function warmOne(key: CacheKey, fn: () => Promise<void>): Promise<void> {
 }
 
 async function warmStock(): Promise<void> {
-  const remote = await api.fetch.stock();
-  await replaceStockFromRemote(
-    remote.map((r) => ({
-      barcode: r.barcode,
-      name: r.name,
-      category: r.category,
-      unit: r.unit,
-      pack_size: r.pack_size != null ? Number(r.pack_size) : null,
-      on_hand: Number(r.on_hand),
-      threshold: Number(r.threshold),
-    })),
-  );
+  await pullStockIntoCache();
 }
 
 /**
