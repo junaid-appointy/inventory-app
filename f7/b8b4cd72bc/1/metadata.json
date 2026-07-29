@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "f7b8b4cd72bc",
+  "session_id": "b4404dc2-690c-4c0a-beea-1638fb61a5e9",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-29T10:26:51.530236Z",
+  "branch": "feature/bill-mapping",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "src/modules/inventory/screens/HomeScreen.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "4b9918bec955",
+  "token_usage": {
+    "input_tokens": 12887,
+    "cache_creation_tokens": 792338,
+    "cache_read_tokens": 25294072,
+    "output_tokens": 172364,
+    "api_call_count": 168
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-29T10:26:51.501909Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 1398,
+    "human_modified": 65,
+    "human_removed": 0,
+    "total_committed": 1398,
+    "total_lines_changed": 2068,
+    "agent_percentage": 0,
+    "metric_version": 2
+  }
+}
