@@ -24,4 +24,4 @@ export { toneColors, type Tone } from './tone';
 // Reactive palette hook — use this in screens instead of the static `palette`
 // import so colors update when the user switches theme.
 export { useTheme as usePalette } from '../theme';
-export { animateNextLayout, Appear, PressScale, ProgressBar, usePop } from './motion';
+export { Appear, fadeAway, Glide, glide, liftIn, PressScale, ProgressBar, usePop } from './motion';

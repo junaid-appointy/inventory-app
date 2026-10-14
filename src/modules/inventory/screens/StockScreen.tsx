@@ -6,7 +6,9 @@ import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput,
 import { useCan } from '../../../auth';
 import {
   AppBar,
+  Appear,
   BottomSheet,
+  PressScale,
   Button,
   Chip,
   IconBadge,
@@ -149,7 +151,18 @@ export function StockScreen({ route, navigation }: Props) {
   }, [rows, query, filter]);
 
   const open = useCallback((barcode: string) => setOpenBarcode(barcode), []);
-  const renderItem = useCallback(({ item }: { item: StockRow }) => <ItemRow row={item} onOpen={open} />, [open]);
+  // The first screenful eases in when the list opens.
+  const renderItem = useCallback(
+    ({ item, index }: { item: StockRow; index: number }) =>
+      index < 8 ? (
+        <Appear delay={index * 30}>
+          <ItemRow row={item} onOpen={open} />
+        </Appear>
+      ) : (
+        <ItemRow row={item} onOpen={open} />
+      ),
+    [open],
+  );
   const selected = openBarcode ? rows.find((r) => r.barcode === openBarcode) ?? null : null;
 
   const goFromSheet = (to: 'Dispense' | 'Receiving' | 'EditStock') => {
@@ -268,7 +281,7 @@ const ItemRow = React.memo(function ItemRow({ row, onOpen }: { row: StockRow; on
   const detail = [formatOnHandShort(row.on_hand, row.pack_size, row.unit), row.location].filter(Boolean).join(' · ');
   const handlePress = useCallback(() => onOpen(row.barcode), [onOpen, row.barcode]);
   return (
-    <Pressable onPress={handlePress} android_ripple={{ color: palette.surfaceContainerHigh }} style={styles.row}>
+    <PressScale to={0.98} onPress={handlePress} android_ripple={{ color: palette.surfaceContainerHigh }} style={styles.row}>
       <IconBadge Icon={categoryIcon(row.category)} size={48} />
       <View style={{ flex: 1 }}>
         <Text variant="titleMedium" numberOfLines={1} style={{ fontWeight: '600' }}>
@@ -286,7 +299,7 @@ const ItemRow = React.memo(function ItemRow({ row, onOpen }: { row: StockRow; on
       {status !== 'ok' ? (
         <StatusChip label={status === 'out' ? t('outOfStock') : t('lowChip')} tone={status === 'out' ? 'danger' : 'warn'} />
       ) : null}
-    </Pressable>
+    </PressScale>
   );
 });
 

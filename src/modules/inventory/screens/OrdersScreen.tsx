@@ -1,8 +1,9 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, ScanLine } from 'lucide-react-native';
-import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { animateNextLayout, AppBar, Button, Card, PressScale, ProgressBar, Skeleton, spacing, StatusPill, Text } from '../../../design';
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import Reanimated, { FadeIn } from 'react-native-reanimated';
+import { AppBar, Appear, Button, Card, ProgressBar, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { findBarcodeForProduct, findCanonicalProductById } from '../../../db/catalog';
 import { getOrderItems, listOpenOrders, Order, OrderItem, upsertOrdersFromRemote } from '../../../db/orders';
 import { haptic } from '../../../utils/haptics';
@@ -28,6 +29,11 @@ function bucketOf(o: Enriched): Bucket {
 }
 
 const SECTION_ORDER: Bucket[] = ['arrived', 'awaited', 'done'];
+
+/** One list entry: a section heading or an order card. */
+type ListRow =
+  | { kind: 'header'; key: string; title: string; count: number; first: boolean }
+  | { kind: 'order'; key: string; order: Enriched; bucket: Bucket };
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** "26 May 2026": the same in every language, like the rest of the app's dates. */
 function dayText(ms: number): string {
@@ -79,7 +85,6 @@ export function OrdersScreen({ navigation }: Props) {
     [navigation],
   );
   const toggle = useCallback((id: string) => {
-    animateNextLayout();
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -138,7 +143,7 @@ export function OrdersScreen({ navigation }: Props) {
     }
   }, [refresh]);
 
-  const sections = useMemo(() => {
+  const listRows = useMemo(() => {
     const groups: Record<Bucket, Enriched[]> = { arrived: [], awaited: [], done: [] };
     for (const o of orders) groups[bucketOf(o)].push(o);
     // Newest bill first: today's delivery is the one being looked for.
@@ -148,11 +153,13 @@ export function OrdersScreen({ navigation }: Props) {
       awaited: t('awaited'),
       done: t('doneToday'),
     };
-    return SECTION_ORDER.filter((b) => groups[b].length > 0).map((b) => ({
-      title: titleFor[b],
-      bucket: b,
-      data: groups[b],
-    }));
+    const rows: ListRow[] = [];
+    for (const b of SECTION_ORDER) {
+      if (groups[b].length === 0) continue;
+      rows.push({ kind: 'header', key: `h:${b}`, title: titleFor[b], count: groups[b].length, first: rows.length === 0 });
+      for (const o of groups[b]) rows.push({ kind: 'order', key: o.id, order: o, bucket: b });
+    }
+    return rows;
   }, [orders, t]);
 
   return (
@@ -182,122 +189,33 @@ export function OrdersScreen({ navigation }: Props) {
           ))}
         </View>
       ) : (
-      <SectionList
-        sections={sections}
-        keyExtractor={(o) => o.id}
+      <FlatList
+        data={listRows}
+        keyExtractor={(r) => r.key}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
         }
-        stickySectionHeadersEnabled={false}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-              {section.title} · {section.data.length}
-            </Text>
-          </View>
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-        SectionSeparatorComponent={() => <View style={{ height: spacing.lg }} />}
-        renderItem={({ item, section }) => {
-          const bucket = (section as unknown as { bucket: Bucket }).bucket;
-          const total = item.items.length;
-          const doneCount = item.items.filter((i) => i.received_qty >= i.expected_qty).length;
-          // Still to come first: that is what the guard is looking for.
-          const rows = [...item.items].sort(
-            (a, b) => Number(a.received_qty >= a.expected_qty) - Number(b.received_qty >= b.expected_qty),
-          );
-          const open = expanded.has(item.id);
-          const shown = open ? rows : rows.slice(0, PREVIEW_ROWS);
-          const hidden = rows.length - shown.length;
+        extraData={expanded}
+        renderItem={({ item: entry, index }) => {
+          if (entry.kind === 'header') {
+            return (
+              <View style={[styles.sectionHeader, !entry.first && { marginTop: spacing.lg }]}>
+                <Text variant="labelLarge" color={palette.onSurfaceVariant}>
+                  {entry.title} · {entry.count}
+                </Text>
+              </View>
+            );
+          }
           return (
-            <Card tone="filled" padding="lg">
-              <Pressable
-                onPress={rows.length > PREVIEW_ROWS ? () => toggle(item.id) : undefined}
-                disabled={rows.length <= PREVIEW_ROWS}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: open }}
-                style={styles.head}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text variant="titleLarge" numberOfLines={2}>{item.vendor ?? 'Order'}</Text>
-                  {item.expected_at ? (
-                    <View style={styles.dateRow}>
-                      <CalendarDays size={16} color={palette.onSurfaceVariant} />
-                      <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-                        {t('billDated', { date: dayText(item.expected_at) })}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                {bucket === 'done' ? <StatusPill label={t('done')} tone="success" /> : null}
-                {rows.length > PREVIEW_ROWS ? (
-                  open ? <ChevronUp size={24} color={palette.onSurfaceVariant} /> : <ChevronDown size={24} color={palette.onSurfaceVariant} />
-                ) : null}
-              </Pressable>
-
-              {total > 0 && bucket !== 'done' ? (
-                <View style={styles.progress}>
-                  <ProgressBar fill={doneCount / total} color={palette.primary} track={palette.surfaceContainerHighest} />
-                  <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-                    {t('receivedOfTotal', { done: String(doneCount), total: String(total) })}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={{ height: spacing.sm }} />
-              {shown.map((i, idx) => {
-                const itemDone = i.received_qty >= i.expected_qty;
-                return (
-                  <PressScale
-                    key={i.id}
-                    to={0.98}
-                    onPress={() => void receiveLine(i)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${i.product_name}, ${i.received_qty} / ${i.expected_qty}`}
-                    style={({ pressed }) => [
-                      styles.itemRow,
-                      (idx < shown.length - 1 || hidden > 0 || open) && {
-                        borderBottomWidth: 1,
-                        borderBottomColor: palette.outlineVariant,
-                      },
-                      pressed && { backgroundColor: palette.surfaceContainerHigh },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        variant="bodyLarge"
-                        numberOfLines={2}
-                        color={itemDone ? palette.onSurfaceVariant : palette.onSurface}
-                      >
-                        {i.product_name}
-                      </Text>
-                    </View>
-                    <Text variant="titleMedium" color={itemDone ? palette.primary : palette.onSurface}>
-                      {i.received_qty} / {i.expected_qty}
-                    </Text>
-                    {itemDone ? (
-                      <CheckCircle2 size={20} color={palette.primary} />
-                    ) : (
-                      <ChevronRight size={20} color={palette.onSurfaceVariant} />
-                    )}
-                  </PressScale>
-                );
-              })}
-              {rows.length > PREVIEW_ROWS ? (
-                <Pressable
-                  onPress={() => toggle(item.id)}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}
-                  hitSlop={8}
-                >
-                  <Text variant="labelLarge" color={palette.primary} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 0 }}>
-                    {open ? t('showFewerItems') : t('showMoreItems', { n: String(hidden) })}
-                  </Text>
-                  {open ? <ChevronUp size={18} color={palette.primary} /> : <ChevronDown size={18} color={palette.primary} />}
-                </Pressable>
-              ) : null}
-            </Card>
+            <OrderCard
+              order={entry.order}
+              bucket={entry.bucket}
+              open={expanded.has(entry.order.id)}
+              index={index}
+              onToggle={toggle}
+              onReceive={receiveLine}
+            />
           );
         }}
         ListEmptyComponent={
@@ -330,10 +248,143 @@ export function OrdersScreen({ navigation }: Props) {
   );
 }
 
+/**
+ * One order. Memoised: opening or closing an order redraws only that card.
+ * Kept light for cheap phones: the extra lines fade in as one block (no
+ * per-line animation), and lines use a plain pressed colour.
+ */
+const OrderCard = React.memo(function OrderCard({
+  order: item,
+  bucket,
+  open,
+  index,
+  onToggle,
+  onReceive,
+}: {
+  order: Enriched;
+  bucket: Bucket;
+  open: boolean;
+  index: number;
+  onToggle: (id: string) => void;
+  onReceive: (line: OrderItem) => void;
+}) {
+  const t = useT();
+  const { palette } = useTheme();
+  const total = item.items.length;
+  const doneCount = item.items.filter((i) => i.received_qty >= i.expected_qty).length;
+  // Still to come first: that is what the guard is looking for.
+  const rows = useMemo(
+    () => [...item.items].sort((a, b) => Number(a.received_qty >= a.expected_qty) - Number(b.received_qty >= b.expected_qty)),
+    [item.items],
+  );
+  const canOpen = rows.length > PREVIEW_ROWS;
+  const hidden = rows.length - PREVIEW_ROWS;
+
+  const line = (i: OrderItem, last: boolean) => {
+    const itemDone = i.received_qty >= i.expected_qty;
+    return (
+      <Pressable
+        key={i.id}
+        onPress={() => onReceive(i)}
+        accessibilityRole="button"
+        accessibilityLabel={`${i.product_name}, ${i.received_qty} / ${i.expected_qty}`}
+        style={({ pressed }) => [
+          styles.itemRow,
+          !last && { borderBottomWidth: 1, borderBottomColor: palette.outlineVariant },
+          pressed && { backgroundColor: palette.surfaceContainerHigh },
+        ]}
+      >
+        <View style={{ flex: 1 }}>
+          <Text variant="bodyLarge" numberOfLines={2} color={itemDone ? palette.onSurfaceVariant : palette.onSurface}>
+            {i.product_name}
+          </Text>
+        </View>
+        <Text variant="titleMedium" color={itemDone ? palette.primary : palette.onSurface}>
+          {i.received_qty} / {i.expected_qty}
+        </Text>
+        {itemDone ? (
+          <CheckCircle2 size={20} color={palette.primary} />
+        ) : (
+          <ChevronRight size={20} color={palette.onSurfaceVariant} />
+        )}
+      </Pressable>
+    );
+  };
+
+  const card = (
+    <Card tone="filled" padding="lg">
+      <Pressable
+        onPress={canOpen ? () => onToggle(item.id) : undefined}
+        disabled={!canOpen}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={styles.head}
+      >
+        <View style={{ flex: 1 }}>
+          <Text variant="titleLarge" numberOfLines={2}>{item.vendor ?? 'Order'}</Text>
+          {item.expected_at ? (
+            <View style={styles.dateRow}>
+              <CalendarDays size={16} color={palette.onSurfaceVariant} />
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                {t('billDated', { date: dayText(item.expected_at) })}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        {bucket === 'done' ? <StatusPill label={t('done')} tone="success" /> : null}
+        {canOpen ? (
+          open ? <ChevronUp size={24} color={palette.onSurfaceVariant} /> : <ChevronDown size={24} color={palette.onSurfaceVariant} />
+        ) : null}
+      </Pressable>
+
+      {total > 0 && bucket !== 'done' ? (
+        <View style={styles.progress}>
+          <ProgressBar fill={doneCount / total} color={palette.primary} track={palette.surfaceContainerHighest} />
+          <Text variant="labelLarge" color={palette.onSurfaceVariant}>
+            {t('receivedOfTotal', { done: String(doneCount), total: String(total) })}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={{ height: spacing.sm }} />
+      {rows.slice(0, PREVIEW_ROWS).map((i, idx) => line(i, idx === Math.min(rows.length, PREVIEW_ROWS) - 1 && !canOpen))}
+      {open ? (
+        // The rest fade in together: one animated view, however many lines.
+        <Reanimated.View entering={FadeIn.duration(140)}>
+          {rows.slice(PREVIEW_ROWS).map((i) => line(i, false))}
+        </Reanimated.View>
+      ) : null}
+      {canOpen ? (
+        <Pressable
+          onPress={() => onToggle(item.id)}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}
+          hitSlop={8}
+        >
+          <Text variant="labelLarge" color={palette.primary} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 0 }}>
+            {open ? t('showFewerItems') : t('showMoreItems', { n: String(hidden) })}
+          </Text>
+          {open ? <ChevronUp size={18} color={palette.primary} /> : <ChevronDown size={18} color={palette.primary} />}
+        </Pressable>
+      ) : null}
+    </Card>
+  );
+
+  // The first cards lift in once when the screen opens.
+  return index < 8 ? (
+    <Appear delay={Math.min(index, 6) * 40} style={styles.cardWrap}>
+      {card}
+    </Appear>
+  ) : (
+    <View style={styles.cardWrap}>{card}</View>
+  );
+});
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   sectionHeader: { paddingBottom: spacing.sm },
+  cardWrap: { marginBottom: spacing.md },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },

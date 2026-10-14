@@ -19,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Reanimated from 'react-native-reanimated';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,12 +33,15 @@ import {
   View,
 } from 'react-native';
 import {
-  animateNextLayout,
   AppBar,
   Button,
   Chip,
   IconBadge,
-  motion,
+  Appear,
+  fadeAway,
+  Glide,
+  glide,
+  liftIn,
   PressScale,
   RowDivider,
   Skeleton,
@@ -339,12 +343,10 @@ export function DispenseScreen({ route, navigation }: Props) {
   );
 
   const setClosed = useCallback((n: number) => {
-    animateNextLayout(motion.fast);
     setManualAlloc(null);
     setClosedTake(n);
   }, []);
   const setLoose = useCallback((n: number) => {
-    animateNextLayout(motion.fast);
     setManualAlloc(null);
     setLooseTake(n);
   }, []);
@@ -468,11 +470,12 @@ export function DispenseScreen({ route, navigation }: Props) {
             keyboardShouldPersistTaps="handled"
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}
             ItemSeparatorComponent={() => <RowDivider />}
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const status = statusFor(item);
               const out = item.on_hand <= 0;
-              return (
-                <Pressable
+              const row = (
+                <PressScale
+                  to={0.98}
                   onPress={() => {
                     if (out) {
                       haptic.warn();
@@ -496,8 +499,10 @@ export function DispenseScreen({ route, navigation }: Props) {
                   {status !== 'ok' ? (
                     <StatusChip label={out ? t('outOfStock') : t('lowChip')} tone={out ? 'danger' : 'warn'} />
                   ) : null}
-                </Pressable>
+                </PressScale>
               );
+              // The first screenful eases in when the list opens.
+              return index < 8 ? <Appear delay={index * 30}>{row}</Appear> : row;
             }}
             ListEmptyComponent={
               <View style={styles.empty}>
@@ -637,8 +642,9 @@ export function DispenseScreen({ route, navigation }: Props) {
               </View>
 
               {/* One counter for each thing you can hold, then what to do and
-                  what stays: read together, so they sit close together. */}
-              <View style={{ gap: spacing.md }}>
+                  what stays: read together, so they sit close together.
+                  Each block glides when the one above it changes size. */}
+              <Glide style={{ gap: spacing.md }}>
                 <View style={{ gap: spacing.sm }}>
                   <Text variant="labelLarge" color={palette.onSurfaceVariant} style={styles.label}>
                     {t('inYourHand')}
@@ -694,14 +700,16 @@ export function DispenseScreen({ route, navigation }: Props) {
                 </View>
 
                 {!isSingle ? (
-                  <View style={[styles.steps, { backgroundColor: palette.primaryContainer }]}>
+                  <Glide style={[styles.steps, { backgroundColor: palette.primaryContainer }]}>
                     {steps.length === 0 ? (
-                      <Text variant="bodyLarge" color={palette.onPrimaryContainer}>
-                        {t('tapPlusHint')}
-                      </Text>
+                      <Reanimated.View key="hint" entering={liftIn()} exiting={fadeAway}>
+                        <Text variant="bodyLarge" color={palette.onPrimaryContainer}>
+                          {t('tapPlusHint')}
+                        </Text>
+                      </Reanimated.View>
                     ) : (
                       steps.map((line, i) => (
-                        <View key={i} style={styles.stepRow}>
+                        <Reanimated.View key={i} entering={liftIn(i * 40)} exiting={fadeAway} layout={glide} style={styles.stepRow}>
                           <View style={[styles.stepNum, { backgroundColor: palette.primary }]}>
                             <Text variant="labelMedium" color={palette.onPrimary} style={{ fontWeight: '800', letterSpacing: 0 }}>
                               {i + 1}
@@ -710,38 +718,38 @@ export function DispenseScreen({ route, navigation }: Props) {
                           <Text variant="bodyLarge" color={palette.onPrimaryContainer} style={{ flex: 1, fontWeight: '600' }}>
                             {line}
                           </Text>
-                        </View>
+                        </Reanimated.View>
                       ))
                     )}
-                  </View>
+                  </Glide>
                 ) : null}
 
-                <View style={styles.afterRow}>
+                <Glide style={styles.afterRow}>
                   {afterStatus !== 'ok' ? <AlertTriangle size={18} color={afterColor} /> : null}
                   <Text variant="bodyLarge" color={afterColor} style={{ flex: 1, fontWeight: afterStatus === 'ok' ? '400' : '700' }}>
                     {t('leftOnShelf', { amount: leftText })}
                   </Text>
-                </View>
-              </View>
+                </Glide>
+              </Glide>
 
               {availability.length > 1 && !showUseFirst && totalTaken > 0 ? (
-                <View style={styles.note}>
+                <Glide appear style={styles.note}>
                   <CalendarDays size={20} color={palette.onSurfaceVariant} />
                   <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
                     {t('takenFromOldest')}
                   </Text>
-                </View>
+                </Glide>
               ) : null}
               {showUseFirst && totalTaken > 0 ? (
-                <View>
+                <Glide appear>
                   <Question Icon={CalendarDays} text={t('useOldestFirst')} />
                   <UseFirstRows lots={allocation} onChange={onAllocationChange} />
-                </View>
+                </Glide>
               ) : null}
             </>
           )}
 
-          <View>
+          <Glide>
             <Question Icon={Tag} text={t('whatIsItFor')} />
             <View style={styles.reasonGrid}>
               {REASONS.map((r) => {
@@ -773,15 +781,15 @@ export function DispenseScreen({ route, navigation }: Props) {
                 );
               })}
             </View>
-          </View>
+          </Glide>
 
           {/* Always the signed-in person: no field to fill, just shown. */}
-          <View style={styles.note}>
+          <Glide style={styles.note}>
             <UserRound size={20} color={palette.onSurfaceVariant} />
             <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
               {t('takenByName', { name: getSession()?.guardName ?? '' })}
             </Text>
-          </View>
+          </Glide>
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.outlineVariant }]}>

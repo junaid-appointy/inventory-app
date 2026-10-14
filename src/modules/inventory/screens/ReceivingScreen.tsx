@@ -7,7 +7,7 @@ import { AmountStepper } from '../../../components/AmountStepper';
 import { DateTile } from '../../../components/DateTile';
 import { PackIcons } from '../../../components/PackIcons';
 import { PackTile } from '../../../components/PackTile';
-import { animateNextLayout, AppBar, Button, IconBadge, PressScale, ProgressBar, spacing, Text } from '../../../design';
+import { AppBar, Button, Glide, IconBadge, PressScale, ProgressBar, spacing, Text } from '../../../design';
 import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../../../db/orders';
 import { enqueue } from '../../../db/outbox';
 import { trackExpiry } from '../../../db/expiry';
@@ -397,7 +397,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
           )}
 
           {multiExpiry ? (
-            <>
+            <Glide appear key="multi" style={{ gap: spacing.xxl }}>
               <Question Icon={CalendarDays} text={t('differentDatesTitle')} />
               <ExpiryGroups batches={batches} onChange={setBatches} Icon={ItemIcon} single={shape === 'single'} />
               <Button
@@ -406,15 +406,14 @@ export function ReceivingScreen({ route, navigation }: Props) {
                 size="md"
                 onPress={() => {
                   setBatches([{ qty, expiry: sortedFirstExpiry(batches) }]);
-                  animateNextLayout();
                   setMultiExpiry(false);
                 }}
               />
-            </>
+            </Glide>
           ) : (
-            <>
+            <Glide key="single" style={{ gap: spacing.xxl }}>
               {looseSmall === null ? (
-                <View>
+                <Glide appear key="packs">
                   <Question pic={<PackTile kind={shape === 'single' ? 'single' : 'closed'} Icon={ItemIcon} size="sm" />} text={t('howManyPacks')} />
                   <AmountStepper value={single.qty} onChange={(n) => setSingle({ qty: n })} min={1} unitLabel={t('packsWord')} />
                   <View style={{ marginTop: spacing.md }}>
@@ -424,7 +423,6 @@ export function ReceivingScreen({ route, navigation }: Props) {
                     <Pressable
                       onPress={() => {
                         const start = smallStep(resolvedPackSize, resolvedUnit) * 10;
-                        animateNextLayout();
                         setLooseSmall(start);
                         setSingle({ qty: smallToPacks(start, resolvedPackSize, resolvedUnit) });
                       }}
@@ -437,9 +435,9 @@ export function ReceivingScreen({ route, navigation }: Props) {
                       </Text>
                     </Pressable>
                   ) : null}
-                </View>
+                </Glide>
               ) : (
-                <View>
+                <Glide appear key="loose">
                   <Question pic={<PackTile kind="open" Icon={ItemIcon} size="sm" fill={0.5} />} text={t('howMuchArrived')} />
                   <AmountStepper
                     value={looseSmall}
@@ -455,7 +453,6 @@ export function ReceivingScreen({ route, navigation }: Props) {
                   />
                   <Pressable
                     onPress={() => {
-                      animateNextLayout();
                       setLooseSmall(null);
                       setSingle({ qty: 1 });
                     }}
@@ -467,18 +464,18 @@ export function ReceivingScreen({ route, navigation }: Props) {
                       {t('countFullPacks')}
                     </Text>
                   </Pressable>
-                </View>
+                </Glide>
               )}
 
-              <View>
+              <Glide>
                 <Question Icon={CalendarDays} text={t('expiryDateTitle')} />
                 {single.expiry === undefined ? (
-                  <View style={styles.choiceRow}>
+                  <Glide appear key="choose" style={styles.choiceRow}>
                     <Choice Icon={CalendarDays} label={t('pickExpiry')} onPress={() => setPickingDate(true)} primary />
-                    <Choice Icon={CalendarOff} label={t('noExpiry')} onPress={() => { animateNextLayout(); setSingle({ expiry: null }); }} />
-                  </View>
+                    <Choice Icon={CalendarOff} label={t('noExpiry')} onPress={() => setSingle({ expiry: null })} />
+                  </Glide>
                 ) : (
-                  <View style={[styles.chosen, { borderColor: palette.outlineVariant }]}>
+                  <Glide appear key="chosen" style={[styles.chosen, { borderColor: palette.outlineVariant }]}>
                     <DateTile iso={single.expiry} size="md" />
                     <View style={{ flex: 1 }}>
                       <Text variant="titleMedium" color={single.expiry ? expiryColor : palette.onSurface} style={{ fontWeight: '600' }}>
@@ -495,15 +492,14 @@ export function ReceivingScreen({ route, navigation }: Props) {
                         {t('changeAction')}
                       </Text>
                     </Pressable>
-                    <Pressable onPress={() => { animateNextLayout(); setSingle({ expiry: undefined }); }} hitSlop={10} accessibilityLabel="Clear">
+                    <Pressable onPress={() => setSingle({ expiry: undefined })} hitSlop={10} accessibilityLabel="Clear">
                       <X size={20} color={palette.onSurfaceVariant} />
                     </Pressable>
-                  </View>
+                  </Glide>
                 )}
                 {looseSmall === null ? (
                   <Pressable
                     onPress={() => {
-                      animateNextLayout();
                       setMultiExpiry(true);
                     }}
                     style={[styles.softBtn, { backgroundColor: palette.surfaceContainerLow }]}
@@ -515,11 +511,12 @@ export function ReceivingScreen({ route, navigation }: Props) {
                     </Text>
                   </Pressable>
                 ) : null}
-              </View>
-            </>
+              </Glide>
+            </Glide>
           )}
 
           {/* The proof: all of this item's packs together in one photo. */}
+          <Glide>
           <ItemPhoto
             uri={photoUri}
             onChange={setPhotoUri}
@@ -533,6 +530,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
             cameraOpen={cameraOpen}
             onCameraOpenChange={setCameraOpen}
           />
+          </Glide>
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.outlineVariant }]}>
@@ -583,7 +581,6 @@ export function ReceivingScreen({ route, navigation }: Props) {
           value={single.expiry ? new Date(single.expiry) : null}
           minimumDate={new Date()}
           onSelect={(d) => {
-            animateNextLayout();
             setSingle({ expiry: toISO(d) });
             setPickingDate(false);
           }}
