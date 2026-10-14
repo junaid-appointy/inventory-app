@@ -1,0 +1,74 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "780462583ae3",
+  "session_id": "8106e3a6-5646-4a4e-8acc-0f2662bf21fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-14T16:28:11.565991Z",
+  "branch": "feature/field-rbac",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "src/modules/inventory/barcodeRoute.ts",
+    "src/sync/api.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "54d9f1a52afa",
+  "checkpoint_transcript_start": 8853,
+  "transcript_lines_at_start": 8853,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PGYQmHp6DyDTPEaZbPQm8Z",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "implementation-planning"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "54d9f1a52afa",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 94,
+        "end": 95,
+        "entry_ids": [
+          "b984b315-dcf3-4c2b-b781-51d95615d7a8"
+        ],
+        "tool_use_id": "toolu_01PGYQmHp6DyDTPEaZbPQm8Z"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PGYQmHp6DyDTPEaZbPQm8Z"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: implementation-planning",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 26
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-14T16:28:10.920767Z",
+    "agent_lines": 18,
+    "agent_removed": 1,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 18,
+    "total_lines_changed": 19,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
