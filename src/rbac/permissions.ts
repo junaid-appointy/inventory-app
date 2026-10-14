@@ -11,7 +11,9 @@
 // policy engine later.
 export type Permission = string;
 
-export type Role = 'guard' | 'supervisor' | 'manager' | 'admin';
+// Server role keys (e.g. 'field_operator'). Strings, because roles are
+// defined in the dashboard, not in the app.
+export type Role = string;
 
 export type Principal = {
   userId: string;

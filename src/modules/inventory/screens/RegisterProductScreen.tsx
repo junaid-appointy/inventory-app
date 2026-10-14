@@ -26,6 +26,7 @@ import { learnBarcode, type CanonicalProduct } from '../../../db/catalog';
 import { enqueue } from '../../../db/outbox';
 import { upsertProduct } from '../../../db/products';
 import { useT } from '../../../i18n';
+import { useCan } from '../../../auth';
 import { StringKey } from '../../../i18n/strings';
 import { useTheme } from '../../../theme';
 import { RootStackParamList } from '../../../navigation/types';
@@ -60,6 +61,10 @@ const UNIT_LABEL: Record<string, StringKey> = {
 
 export function RegisterProductScreen({ route, navigation }: Props) {
   const t = useT();
+  const can = useCan();
+  // Linking a barcode to an existing product is part of receiving; only a
+  // brand new product needs a supervisor.
+  const canRegister = can('inventory.register');
   const { palette } = useTheme();
   const { barcode } = route.params;
   const kbHeight = useKeyboardHeight();
@@ -131,7 +136,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
   const visibleCategories = CATEGORIES.includes(category) ? CATEGORIES : [...CATEGORIES, category];
   const visibleUnits = UNITS.includes(unit) ? UNITS : [...UNITS, unit];
 
-  const canSave = name.trim().length > 0 && !saving;
+  const canSave = name.trim().length > 0 && !saving && (canRegister || pickedProductId != null);
 
   const onSave = async () => {
     if (!canSave) {
@@ -156,6 +161,10 @@ export function RegisterProductScreen({ route, navigation }: Props) {
           packSize: parsedPackSize ?? undefined,
         });
       } else {
+        if (!canRegister) {
+          haptic.warn();
+          return;
+        }
         // No catalog match — record a new local product. (Admin can
         // promote it to a canonical product later from the dashboard.)
         await upsertProduct({
@@ -400,6 +409,11 @@ export function RegisterProductScreen({ route, navigation }: Props) {
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
+          {!canRegister && pickedProductId == null ? (
+            <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginBottom: spacing.sm }}>
+              {t('needSupervisorNewItem')}
+            </Text>
+          ) : null}
           <Button
             label={pickedProductId ? t('linkAndContinue') : t('saveAndContinue')}
             onPress={onSave}
@@ -411,7 +425,7 @@ export function RegisterProductScreen({ route, navigation }: Props) {
           <Button
             label={t('cancel')}
             variant="text"
-            onPress={() => navigation.popToTop()}
+            onPress={() => navigation.navigate('Home')}
             style={{ marginTop: spacing.sm }}
           />
         </View>

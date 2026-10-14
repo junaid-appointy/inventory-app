@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react-native';
 import React, { useRef } from 'react';
 import {
   Animated,
@@ -21,6 +22,12 @@ type Props = {
   onPress: () => void;
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /**
+   * Preferred over `leadingIcon`: drawn in the button's own text colour, so
+   * it greys out with the label when disabled and turns white with it when
+   * enabled. A `leadingIcon` node keeps whatever colour the caller baked in.
+   */
+  Icon?: LucideIcon;
   leadingIcon?: React.ReactNode;
   trailingIcon?: React.ReactNode;
   disabled?: boolean;
@@ -36,10 +43,12 @@ const SIZES: Record<
   ButtonSize,
   { h: number; px: number; gap: number; variant: 'labelLarge' | 'titleMedium' | 'titleLarge' | 'headlineSmall' }
 > = {
+  // Slimmer than before (was 40/52/64/88): 56 is still an easy thumb target
+  // and reads as a button, not a block.
   sm: { h: 40, px: spacing.lg, gap: spacing.sm, variant: 'labelLarge' },
-  md: { h: 52, px: spacing.xl, gap: spacing.sm, variant: 'titleMedium' },
-  lg: { h: 64, px: spacing.xl, gap: spacing.md, variant: 'titleLarge' },
-  xl: { h: 88, px: spacing.xl, gap: spacing.md, variant: 'headlineSmall' },
+  md: { h: 48, px: spacing.xl, gap: spacing.sm, variant: 'titleMedium' },
+  lg: { h: 56, px: spacing.xl, gap: spacing.sm, variant: 'titleMedium' },
+  xl: { h: 64, px: spacing.xl, gap: spacing.md, variant: 'titleLarge' },
 };
 
 /**
@@ -62,6 +71,7 @@ export function Button({
   onPress,
   variant = 'filled',
   size = 'md',
+  Icon,
   leadingIcon,
   trailingIcon,
   disabled,
@@ -142,7 +152,11 @@ export function Button({
           haptic.tap();
           onPress();
         }}
-        android_ripple={{ color: t.pressedBg, borderless: false }}
+        // No android_ripple on purpose. On Android (new architecture) the
+        // native RippleDrawable caches this view's background, so a button
+        // that turned from disabled grey to enabled purple kept showing grey
+        // until it was touched. Same root cause the Chip comment describes.
+        // The pressed colour below is pure React and always repaints.
         style={({ pressed }) => [
           styles.base,
           {
@@ -156,7 +170,11 @@ export function Button({
         ]}
       >
         <View style={[styles.row, { gap: s.gap }]}>
-          {leadingIcon ? <View>{leadingIcon}</View> : null}
+          {Icon ? (
+            <Icon size={s.h >= 56 ? 22 : 18} color={t.fg} strokeWidth={2.2} />
+          ) : leadingIcon ? (
+            <View style={{ opacity: isDisabled ? 0.5 : 1 }}>{leadingIcon}</View>
+          ) : null}
           {/* flexShrink gives adjustsFontSizeToFit a width bound to shrink
               against — without it, a long label (e.g. Hindi, which runs
               wider than English) wraps to a second line inside the button

@@ -1,14 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Check } from 'lucide-react-native';
+import { Camera, Check } from 'lucide-react-native';
 import React from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import {
-  AppBar,
-  Button,
-  Card,
-  spacing,
-  Text,
-} from '../../../design';
+import { Button, IconBadge, RowDivider, spacing, Text } from '../../../design';
+import { categoryIcon } from '../categoryIcon';
+import { PhotoTick, TickLegend, usePhotoTicks, worstTick } from '../components/PhotoTicks';
 import { useT } from '../../../i18n';
 import { RootStackParamList, DeliverySummaryItem } from '../../../navigation/types';
 import { useTheme } from '../../../theme';
@@ -18,11 +14,13 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DeliverySummary'>;
 export function DeliverySummaryScreen({ navigation, route }: Props) {
   const t = useT();
   const { palette } = useTheme();
-  const { items, totalItems, totalQty } = route.params;
+  const { items, totalItems, totalQty, withPhoto } = route.params;
+  // Each item's photo, travelling like a WhatsApp message: clock, tick, two ticks.
+  const allPhotoIds = items.flatMap((i) => i.photoIds ?? []);
+  const ticks = usePhotoTicks(allPhotoIds);
 
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
-      <AppBar title={t('deliveryDone')} />
 
       <FlatList
         data={items}
@@ -30,18 +28,18 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={styles.hero}>
-            <View style={[styles.tick, { backgroundColor: palette.primary }]}>
-              <Check size={48} color={palette.onPrimary} strokeWidth={3} />
+            <View style={[styles.tick, { backgroundColor: palette.successContainer }]}>
+              <Check size={44} color={palette.onSuccessContainer} strokeWidth={3} />
             </View>
-            <Text variant="headlineMedium" style={{ marginTop: spacing.lg, textAlign: 'center' }}>
-              {t('deliveryDone')}
+            <Text variant="headlineMedium" style={{ marginTop: spacing.lg, textAlign: 'center', fontWeight: '800' }}>
+              {t('deliverySaved')}
             </Text>
             <Text
               variant="bodyLarge"
               color={palette.onSurfaceVariant}
               style={{ marginTop: spacing.sm, textAlign: 'center' }}
             >
-              {totalItems} item{totalItems === 1 ? '' : 's'} · {totalQty} total units
+              {t('deliveryCount', { items: totalItems, packs: totalQty })}
             </Text>
             <Text
               variant="bodyMedium"
@@ -50,29 +48,34 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
             >
               {t('willSyncLater')}
             </Text>
+            {withPhoto ? (
+              <View style={[styles.photoNote, { backgroundColor: palette.surfaceContainerLow }]}>
+                <View style={styles.photoNoteHead}>
+                  <Camera size={20} color={palette.onSurfaceVariant} />
+                  <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ flex: 1 }}>
+                    {t('photoGoesToGroup')}
+                  </Text>
+                </View>
+                {allPhotoIds.length > 0 ? <TickLegend /> : null}
+              </View>
+            ) : null}
           </View>
         }
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+        ItemSeparatorComponent={() => <RowDivider />}
         renderItem={({ item }: { item: DeliverySummaryItem }) => (
-          <Card tone="filled" padding="lg">
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text variant="titleMedium">{item.name}</Text>
-                {item.category && (
-                  <Text
-                    variant="bodyMedium"
-                    color={palette.onSurfaceVariant}
-                    style={{ marginTop: 2 }}
-                  >
-                    {item.category}
-                  </Text>
-                )}
-              </View>
-              <Text variant="titleLarge" color={palette.primary}>
-                {item.qty}
-              </Text>
-            </View>
-          </Card>
+          <View style={styles.row}>
+            <IconBadge Icon={categoryIcon(item.category)} size={44} />
+            <Text variant="titleMedium" style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text variant="titleLarge" style={{ fontWeight: '800' }}>
+              {item.label ?? item.qty}
+            </Text>
+            {(() => {
+              const state = worstTick((item.photoIds ?? []).map((id) => ticks[id] ?? 'phone'));
+              return state ? <PhotoTick state={state} /> : null;
+            })()}
+          </View>
         )}
       />
 
@@ -81,7 +84,7 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
           label={t('backHome')}
           size="lg"
           fullWidth
-          onPress={() => navigation.popToTop()}
+          onPress={() => navigation.navigate('Home')}
         />
       </View>
     </View>
@@ -90,24 +93,11 @@ export function DeliverySummaryScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  hero: { alignItems: 'center', paddingVertical: spacing.lg, marginBottom: spacing.lg },
-  tick: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  footer: {
-    padding: spacing.xl,
-    borderTopWidth: 1,
-  },
+  list: { paddingBottom: spacing.xxxl },
+  hero: { alignItems: 'center', paddingTop: spacing.xxxl + spacing.xl, paddingBottom: spacing.xl, paddingHorizontal: spacing.xl },
+  tick: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  photoNote: { gap: spacing.sm, marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 14, alignSelf: 'stretch' },
+  photoNoteHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, minHeight: 64, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });
-

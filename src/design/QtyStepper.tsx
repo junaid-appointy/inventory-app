@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useTheme } from '../theme';
 import { haptic } from '../utils/haptics';
 import { Text } from './Text';
-import { spacing, type as typo } from './tokens';
+import { spacing } from './tokens';
 
 type Props = {
   value: number;
@@ -116,7 +116,7 @@ export function QtyStepper({ value, onChange, min = 1, max, decimal = true, step
 
   return (
     <View style={styles.row}>
-      <StepperButton Icon={Minus} onPress={() => bump(-1)} bg={palette.primary} fg={palette.onPrimary} ripple={palette.outlineVariant} />
+      <StepperButton Icon={Minus} onPress={() => bump(-1)} bg={palette.surfaceContainerHigh} fg={palette.onSurface} ripple={palette.primaryContainer} />
       {editing ? (
         <TextInput
           ref={inputRef}
@@ -128,8 +128,8 @@ export function QtyStepper({ value, onChange, min = 1, max, decimal = true, step
           selectTextOnFocus
           returnKeyType="done"
           style={[
-            typo.displayLarge,
             styles.qtyText,
+            styles.bigNumber,
             { color: palette.onSurface, borderBottomColor: palette.primary },
           ]}
         />
@@ -139,12 +139,12 @@ export function QtyStepper({ value, onChange, min = 1, max, decimal = true, step
           android_ripple={{ color: palette.outlineVariant, borderless: true }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Text variant="displayLarge" style={styles.qtyText}>
+          <Text style={[styles.qtyText, styles.bigNumber, { color: palette.onSurface }]}>
             {clean(value)}
           </Text>
         </Pressable>
       )}
-      <StepperButton Icon={Plus} onPress={() => bump(1)} bg={palette.primary} fg={palette.onPrimary} ripple={palette.outlineVariant} />
+      <StepperButton Icon={Plus} onPress={() => bump(1)} bg={palette.surfaceContainerHigh} fg={palette.onSurface} ripple={palette.primaryContainer} />
     </View>
   );
 }
@@ -165,10 +165,10 @@ function StepperButton({
   return (
     <Pressable
       onPress={onPress}
-      android_ripple={{ color: ripple, borderless: true, radius: 44 }}
+      android_ripple={{ color: ripple, borderless: true, radius: 28 }}
       style={[styles.btn, { backgroundColor: bg }]}
     >
-      <Icon size={40} color={fg} strokeWidth={2.4} />
+      <Icon size={26} color={fg} strokeWidth={2.4} />
     </Pressable>
   );
 }
@@ -178,16 +178,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
+  // Same look as components/AmountStepper: quiet round buttons, the
+  // number is the hero. (Was 88px solid purple circles.)
   btn: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  bigNumber: { fontSize: 48, lineHeight: 56, fontWeight: '800' },
   qtyText: {
     minWidth: 120,
     textAlign: 'center',

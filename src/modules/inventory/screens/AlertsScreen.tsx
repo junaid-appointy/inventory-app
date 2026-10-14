@@ -15,6 +15,7 @@ import { enqueue } from '../../../db/outbox';
 import { listLowOrOut, statusFor, StockRow } from '../../../db/stock';
 import { pullStockIntoCache } from '../../../sync/stockPull';
 import { useT } from '../../../i18n';
+import { useCan } from '../../../auth';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
@@ -26,6 +27,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Alerts'>;
 
 export function AlertsScreen({ navigation }: Props) {
   const t = useT();
+  const can = useCan();
   const { palette } = useTheme();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
@@ -172,7 +174,7 @@ export function AlertsScreen({ navigation }: Props) {
                   disabled
                   onPress={() => {}}
                 />
-              ) : (
+              ) : can('inventory.reorder') ? (
                 <Button
                   label={t('requestReorder')}
                   variant={isOut ? 'outlined' : 'tonal'}
@@ -180,7 +182,7 @@ export function AlertsScreen({ navigation }: Props) {
                   onPress={() => reorder(item)}
                   style={isOut ? { borderColor: '#E53935' } : undefined}
                 />
-              )}
+              ) : null}
             </Card>
           );
         }}

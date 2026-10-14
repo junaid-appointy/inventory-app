@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { AppBar, Button, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { getDb } from '../../../db/database';
-import { INTERNAL_OUTBOX_KINDS, OutboxRow } from '../../../db/outbox';
+import { INTERNAL_OUTBOX_KINDS, OutboxRow, requeueRejected } from '../../../db/outbox';
 import { useT } from '../../../i18n';
 import { StringKey, TParams } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
@@ -22,11 +22,14 @@ const STATUS_LABEL_KEY: Record<string, StringKey> = {
   failed: 'statusFailed',
   applied_with_adjustment: 'statusAdjusted',
   superseded_by_count: 'statusCounted',
+  rejected: 'statusNotAllowed',
 };
 
 const TONE: Record<string, 'warn' | 'danger' | 'neutral'> = {
   sending: 'warn',
   failed: 'danger',
+  // The server refused it for lack of permission: the person must act.
+  rejected: 'danger',
   queued: 'neutral',
   // An adjustment is information, not a failure. The guard did nothing
   // wrong: they recorded what happened and the system's number was off.
@@ -59,6 +62,14 @@ function describeItem(kind: string, payloadStr: string, t: TFn): string {
         return t('descReorder', { name }).trim();
       case 'mismatch_flag':
         return t('descMismatch', { received: p.received_total ?? '?', expected: p.expected ?? '?' });
+      case 'item_photo':
+        return t('descItemPhoto');
+      case 'visitor_event': {
+        const who = p.visitorName ?? '';
+        if (p.eventType === 'checkout') return t('descVisitorExit', { name: who }).trim();
+        if (p.eventType === 'manual_checkin') return t('descVisitorWalkIn', { name: who }).trim();
+        return t('descVisitorCheckIn', { name: who || p.qrToken || '' }).trim();
+      }
       default:
         return t('descInventoryUpdate');
     }
@@ -102,7 +113,7 @@ export function OutboxScreen({ navigation }: Props) {
       await db.getAllAsync<OutboxRow>(
         `SELECT * FROM outbox
          WHERE status NOT IN (${silent}) AND kind NOT IN (${hiddenList})
-         ORDER BY CASE status WHEN 'failed' THEN 0 WHEN 'sending' THEN 1 ELSE 2 END, created_at DESC
+         ORDER BY CASE status WHEN 'rejected' THEN 0 WHEN 'failed' THEN 1 WHEN 'sending' THEN 2 ELSE 3 END, created_at DESC
          LIMIT 200`,
         [...(SILENT_STATUSES as unknown as string[]), ...(INTERNAL_OUTBOX_KINDS as string[])],
       ),
@@ -147,6 +158,9 @@ export function OutboxScreen({ navigation }: Props) {
     setBusy(true);
     setSyncResult(null);
     try {
+      // A tap here is the person saying "try again", e.g. after a
+      // supervisor gave them access. Background ticks never retry these.
+      await requeueRejected();
       const result = await flushOnce();
       await load();
       if (result.sent > 0 || result.failed > 0) {
@@ -225,6 +239,11 @@ export function OutboxScreen({ navigation }: Props) {
               {timeAgo(item.created_at, t)}
               {item.attempts > 0 ? ` · ${t('nAttempts', { count: item.attempts })}` : ''}
             </Text>
+            {item.status === 'rejected' ? (
+              <Text variant="bodyMedium" color={palette.error} style={{ marginTop: spacing.xs }}>
+                {t('rejectedHelp')}
+              </Text>
+            ) : null}
             {/* The server's own sentence about what became of this row.
                 One plain statement, never a question — if something needs
                 a human it arrives as a recount task, not a prompt here. */}

@@ -1,18 +1,13 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AlertTriangle, Check, ScanLine } from 'lucide-react-native';
+import { AlertTriangle, Camera, CalendarDays, CalendarOff, CalendarPlus, Check, X, type LucideIcon } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View, KeyboardAvoidingView } from 'react-native';
-import {
-  AppBar,
-  Button,
-  Card,
-  IconButton,
-  radius,
-  spacing,
-  StatusPill,
-  Text,
-} from '../../../design';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AmountStepper } from '../../../components/AmountStepper';
+import { DateTile } from '../../../components/DateTile';
+import { PackIcons } from '../../../components/PackIcons';
+import { PackTile } from '../../../components/PackTile';
+import { AppBar, Button, IconBadge, spacing, Text } from '../../../design';
 import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../../../db/orders';
 import { enqueue } from '../../../db/outbox';
 import { trackExpiry } from '../../../db/expiry';
@@ -26,30 +21,33 @@ import { adjustOnHand, findStock, snapshotOpeningLocal, upsertStock } from '../.
 import { addLotLocal } from '../../../db/lots';
 import { getSession } from '../../../auth/session';
 import { useT } from '../../../i18n';
+import { useCan } from '../../../auth';
+import { NoPermission } from '../../../components/NoPermission';
 import { useTheme } from '../../../theme';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
+import { expiryUrgency, formatExpiry, relativeExpiry } from '../../../utils/expiry';
 import { useOrderSession } from '../components/OrderSessionContext';
+import { CameraSheet, ItemPhoto } from '../components/ItemPhoto';
+import { discardPhoto, newDeliveryId, queueItemPhoto } from '../itemPhoto';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
-import { BatchEditor, Batch } from '../components/BatchEditor';
+import type { Batch } from '../components/BatchEditor';
+import { ExpiryGroups } from '../components/ExpiryGroups';
+import { DatePickerModal } from '../components/DatePickerModal';
+import { categoryIcon } from '../categoryIcon';
+import { formatAmount, formatSmall, productShape, smallStep, smallToPacks, smallUnit } from '../../../units';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Receiving'>;
 
-/** Convert Date object to ISO date string */
+/** Date → ISO YYYY-MM-DD (the format lots and expiry use). */
 function toISO(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-const QUICK_MONTHS = [
-  { label: '3 mo', months: 3 },
-  { label: '6 mo', months: 6 },
-  { label: '1 yr', months: 12 },
-  { label: '2 yr', months: 24 },
-];
-
 export function ReceivingScreen({ route, navigation }: Props) {
   const t = useT();
+  const can = useCan();
   const { palette } = useTheme();
   const kbHeight = useKeyboardHeight();
   const { barcode, productId, productName: paramProductName, unit: paramUnit, packSize: paramPackSize } = route.params;
@@ -79,6 +77,28 @@ export function ReceivingScreen({ route, navigation }: Props) {
   // pick "Pick expiry" or "No expiry" rather than silently defaulting.
   const [batches, setBatches] = useState<Batch[]>([{ qty: 1, expiry: undefined }]);
   const qty = useMemo(() => batches.reduce((s, b) => s + (b.qty || 0), 0), [batches]);
+  // Most deliveries are one amount with one expiry. The per-batch editor
+  // only appears when someone says the packs carry different dates.
+  const [multiExpiry, setMultiExpiry] = useState(false);
+  const [pickingDate, setPickingDate] = useState(false);
+  const single = batches[0] ?? { qty: 1, expiry: undefined };
+  const setSingle = (next: Partial<Batch>) => setBatches([{ ...single, ...next }]);
+  // "Not a full pack?": a loose amount in grams/ml/pieces (e.g. 2 kg 500 g
+  // from the market). null = counting whole packs, the usual delivery.
+  const [looseSmall, setLooseSmall] = useState<number | null>(null);
+  const [flagCamera, setFlagCamera] = useState(false);
+  // This item's proof photo: all its packs together, required before it is added.
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  // Leaving without adding throws the photo away; once added, the delivery owns it.
+  const photoRef = useRef<string | null>(null);
+  const handedOff = useRef(false);
+  useEffect(() => {
+    photoRef.current = photoUri;
+  }, [photoUri]);
+  useEffect(() => () => {
+    if (!handedOff.current) discardPhoto(photoRef.current);
+  }, []);
 
   // Identity resolution, most-specific first: route params (the scanner
   // already resolved it) → legacy local products row → canonical catalog
@@ -150,8 +170,10 @@ export function ReceivingScreen({ route, navigation }: Props) {
   }, [orderSession.lastExpiry]);
 
   /** Standalone receipt path — when no order session is active */
-  const persistStandalone = async (flagged: boolean) => {
+  const persistStandalone = async (flagged: boolean, photoUri: string) => {
     const session = getSession();
+    // A standalone save is a delivery of its own, with its own proof photo.
+    const deliveryId = newDeliveryId();
     // One receipt per distinct expiry batch. Each batch carries its
     // total qty (no exploding into N qty=1 rows).
     // Coerce the editor's tri-state (undefined = unset) into the binary
@@ -186,6 +208,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
         scanned_at: Date.now(),
         performed_by: session?.guardId ?? null,
         performed_by_name: session?.guardName ?? null,
+        delivery_id: deliveryId,
       });
       // Mirror the lot locally so EditStock / Dispense see the new
       // batch before the next sync round-trip.
@@ -213,6 +236,9 @@ export function ReceivingScreen({ route, navigation }: Props) {
         flagged_at: Date.now(),
       });
     }
+    // After its receipts, so the server posts them together.
+    const photoId = await queueItemPhoto({ deliveryId, receiptIds: receipts.map((r) => r.id), photoUri });
+
     // Order item received_qty and stock on_hand track the same lot units —
     // packs for pack-mode, base units for divisible. Mirror toLotQty.
     const totalLotQty = toLotQty(qty);
@@ -254,10 +280,15 @@ export function ReceivingScreen({ route, navigation }: Props) {
         performedByName: session?.guardName ?? null,
       });
     }
+    return photoId;
   };
 
   /** Add to order session */
   const addToSession = () => {
+    if (!photoUri) {
+      setCameraOpen(true);
+      return;
+    }
     const cleanBatches = batches.filter((b) => b.qty > 0);
     const totalQty = cleanBatches.reduce((s, b) => s + b.qty, 0);
 
@@ -271,45 +302,28 @@ export function ReceivingScreen({ route, navigation }: Props) {
       qty: totalQty,
       // Coerce tri-state expiry into the binary string|null the session
       // expects — submit shouldn't carry an indecision past this point.
-      batches: cleanBatches.map((b) => ({ qty: b.qty, expiry: b.expiry ?? null })),
+      batches: cleanBatches.map((b) => ({ qty: b.qty, expiry: b.expiry ?? null, photoUri })),
     });
+    handedOff.current = true;
     haptic.success();
     navigation.navigate('OrderSession');
   };
 
-  /** Standalone confirm (no active order session) */
-  const confirmStandalone = async () => {
+  /** Flag: photo first (the camera opens), then it saves on "Use this photo". */
+  const flagAndContinueStandalone = async (photoUri: string) => {
     setSaving(true);
     try {
-      await persistStandalone(false);
-      haptic.success();
-      navigation.replace('DeliverySummary', {
-        items: [{ name: resolvedName, category: resolvedCategory, qty }],
-        totalItems: 1,
-        totalQty: qty,
-        productName: resolvedName,
-        qty,
-        expected: item?.expected_qty ?? null,
-        flagged: false,
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const flagAndContinueStandalone = async () => {
-    setSaving(true);
-    try {
-      await persistStandalone(true);
+      const photoId = await persistStandalone(true, photoUri);
       haptic.warn();
       navigation.replace('DeliverySummary', {
-        items: [{ name: resolvedName, category: resolvedCategory, qty }],
+        items: [{ name: resolvedName, category: resolvedCategory, qty, photoIds: [photoId] }],
         totalItems: 1,
         totalQty: qty,
         productName: resolvedName,
         qty,
         expected: item?.expected_qty ?? null,
         flagged: true,
+        withPhoto: true,
       });
     } finally {
       setSaving(false);
@@ -321,166 +335,328 @@ export function ReceivingScreen({ route, navigation }: Props) {
   const projected = alreadyIn + qty;
   const mismatch = expected !== null && projected > expected;
 
+  // Reached without the right role (old deep link, role changed meanwhile).
+  // After every hook on purpose: hooks must run in the same order each render.
+  if (!can('inventory.receive')) {
+    return <NoPermission title={t('receiveItem')} onBack={() => navigation.goBack()} />;
+  }
+
+  const shape = productShape(resolvedPackSize, resolvedUnit);
+  const ItemIcon = categoryIcon(resolvedCategory);
+  const urgency = expiryUrgency(single.expiry ?? null);
+  const expiryColor = urgency === 'expired' ? palette.error : urgency === 'soon' ? palette.amber : palette.onSurface;
+  const orderFill = expected ? Math.min(1, projected / expected) : 0;
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'height' : undefined}
-      style={{ flex: 1 }}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'height' : undefined} style={{ flex: 1 }}>
       <View style={[styles.safe, { backgroundColor: palette.background }]}>
-        <AppBar
-          title={t('receiveItem')}
-          onBack={() => navigation.goBack()}
-          trailing={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-              {expected !== null ? (
-                <StatusPill
-                  label={`${projected} / ${expected}`}
-                  tone={mismatch ? 'danger' : projected === expected ? 'success' : 'neutral'}
-                />
-              ) : null}
-              <IconButton Icon={ScanLine} onPress={() => navigation.replace('Scanner')} />
-            </View>
-          }
-        />
+        <AppBar title={t('receiveItem')} onBack={() => navigation.goBack()} />
 
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + kbHeight }]}
           keyboardShouldPersistTaps="handled"
         >
-        <Card tone="elevated" padding="xl">
-          <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-            {t('product').toUpperCase()}
-          </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: spacing.xs, gap: spacing.md }}>
-            <Text variant="headlineSmall" style={{ flex: 1 }}>
-              {resolvedName}
-            </Text>
-            {packDisplay ? (
-              <Text variant="titleMedium" color={palette.onSurfaceVariant}>
-                {packDisplay}
+          {/* What arrived: the product, not its barcode. */}
+          <View style={styles.product}>
+            <IconBadge Icon={ItemIcon} size={56} />
+            <View style={{ flex: 1 }}>
+              <Text variant="titleLarge" style={{ fontWeight: '700' }} numberOfLines={2}>
+                {resolvedName}
               </Text>
-            ) : null}
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                {[packDisplay, barcode.startsWith('catalog_') ? t('noBarcodeYet') : barcode].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
           </View>
-          {/* Barcode chip. For real (scanned or already-learned) barcodes
-              we surface the code so guards can confirm at a glance. For
-              an unmapped catalog pick we don't dump the synthetic
-              `catalog_<product_id>` id — it's meaningless to the user.
-              We just label the row "No barcode yet" so it's obvious why
-              there's nothing to read. */}
-          {barcode.startsWith('catalog_') ? (
-            <View
-              style={{
-                marginTop: spacing.sm,
-                alignSelf: 'flex-start',
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.xs,
-                borderRadius: radius.sm,
-                borderWidth: 1,
-                borderStyle: 'dashed',
-                borderColor: palette.outlineVariant,
-                backgroundColor: palette.surfaceContainerLowest,
-              }}
-            >
-              <Text variant="labelMedium" color={palette.onSurfaceVariant}>
-                {t('noBarcodeYet')}
-              </Text>
-            </View>
-          ) : (
-            <View
-              style={{
-                marginTop: spacing.sm,
-                alignSelf: 'flex-start',
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.xs,
-                borderRadius: radius.sm,
-                borderWidth: 1,
-                borderColor: palette.outlineVariant,
-                backgroundColor: palette.surfaceContainerLowest,
-              }}
-            >
-              <Text
-                variant="titleMedium"
-                color={palette.onSurface}
-                style={{
-                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                  letterSpacing: 1.5,
-                }}
-              >
-                {barcode}
-              </Text>
-            </View>
-          )}
+
+          {/* Against the open order, when there is one. */}
           {expected !== null ? (
-            <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              {t('expectedShort')} {expected} · {alreadyIn} {t('alreadyReceived')}
-            </Text>
+            <View style={[styles.card, { borderColor: mismatch ? palette.error : palette.outlineVariant }]}>
+              <View style={styles.cardHead}>
+                <Text variant="titleMedium" style={{ fontWeight: '600' }}>
+                  {t('onOrderTitle')}
+                </Text>
+                <Text variant="bodyLarge" color={mismatch ? palette.error : palette.onSurfaceVariant}>
+                  {t('receivedOfExpected', { received: projected, expected })}
+                </Text>
+              </View>
+              <View style={[styles.track, { backgroundColor: palette.surfaceContainerHigh }]}>
+                <View style={{ width: `${Math.round(orderFill * 100)}%`, height: '100%', borderRadius: 4, backgroundColor: mismatch ? palette.error : palette.success }} />
+              </View>
+              {mismatch ? (
+                <View style={styles.warnRow}>
+                  <AlertTriangle size={18} color={palette.error} />
+                  <Text variant="bodyMedium" color={palette.error}>
+                    {t('overOrderedBy', { n: projected - expected })}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           ) : (
-            <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              {t('noMatchingOrder')}
+            <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+              {t('notOnOrder')}
             </Text>
           )}
-        </Card>
 
-        <BatchEditor
-          batches={batches}
-          onChange={setBatches}
-          minDate={new Date()}
-          unit={resolvedUnit ?? null}
-          packSize={resolvedPackSize ?? null}
+          {multiExpiry ? (
+            <>
+              <Question Icon={CalendarDays} text={t('differentDatesTitle')} />
+              <ExpiryGroups batches={batches} onChange={setBatches} Icon={ItemIcon} single={shape === 'single'} />
+              <Button
+                label={t('sameExpiry')}
+                variant="text"
+                size="md"
+                onPress={() => {
+                  setBatches([{ qty, expiry: sortedFirstExpiry(batches) }]);
+                  setMultiExpiry(false);
+                }}
+              />
+            </>
+          ) : (
+            <>
+              {looseSmall === null ? (
+                <View>
+                  <Question pic={<PackTile kind={shape === 'single' ? 'single' : 'closed'} Icon={ItemIcon} size="sm" />} text={t('howManyPacks')} />
+                  <AmountStepper value={single.qty} onChange={(n) => setSingle({ qty: n })} min={1} unitLabel={t('packsWord')} />
+                  <View style={{ marginTop: spacing.md }}>
+                    <PackIcons count={single.qty} Icon={ItemIcon} single={shape === 'single'} />
+                  </View>
+                  {shape !== 'single' ? (
+                    <Pressable
+                      onPress={() => {
+                        const start = smallStep(resolvedPackSize, resolvedUnit) * 10;
+                        setLooseSmall(start);
+                        setSingle({ qty: smallToPacks(start, resolvedPackSize, resolvedUnit) });
+                      }}
+                      style={[styles.softBtn, { backgroundColor: palette.surfaceContainerLow }]}
+                      accessibilityRole="button"
+                    >
+                      <PackTile kind="open" Icon={ItemIcon} size="sm" fill={0.5} />
+                      <Text variant="bodyLarge" color={palette.primary} style={{ fontWeight: '600', flex: 1 }}>
+                        {t('notAFullPack')}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <View>
+                  <Question pic={<PackTile kind="open" Icon={ItemIcon} size="sm" fill={0.5} />} text={t('howMuchArrived')} />
+                  <AmountStepper
+                    value={looseSmall}
+                    onChange={(n) => {
+                      setLooseSmall(n);
+                      setSingle({ qty: smallToPacks(n, resolvedPackSize, resolvedUnit) });
+                    }}
+                    min={1}
+                    step={smallStep(resolvedPackSize, resolvedUnit)}
+                    unitLabel={looseSmall >= smallUnit(resolvedUnit).perBase && smallUnit(resolvedUnit).perBase > 1
+                      ? formatSmall(looseSmall, resolvedUnit)
+                      : smallUnit(resolvedUnit).symbol}
+                  />
+                  <Pressable
+                    onPress={() => {
+                      setLooseSmall(null);
+                      setSingle({ qty: 1 });
+                    }}
+                    style={[styles.softBtn, { backgroundColor: palette.surfaceContainerLow }]}
+                    accessibilityRole="button"
+                  >
+                    <PackTile kind="closed" Icon={ItemIcon} size="sm" />
+                    <Text variant="bodyLarge" color={palette.primary} style={{ fontWeight: '600', flex: 1 }}>
+                      {t('countFullPacks')}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
 
-        />
+              <View>
+                <Question Icon={CalendarDays} text={t('expiryDateTitle')} />
+                {single.expiry === undefined ? (
+                  <View style={styles.choiceRow}>
+                    <Choice Icon={CalendarDays} label={t('pickExpiry')} onPress={() => setPickingDate(true)} primary />
+                    <Choice Icon={CalendarOff} label={t('noExpiry')} onPress={() => setSingle({ expiry: null })} />
+                  </View>
+                ) : (
+                  <View style={[styles.chosen, { borderColor: palette.outlineVariant }]}>
+                    <DateTile iso={single.expiry} size="md" />
+                    <View style={{ flex: 1 }}>
+                      <Text variant="titleMedium" color={single.expiry ? expiryColor : palette.onSurface} style={{ fontWeight: '600' }}>
+                        {single.expiry ? formatExpiry(single.expiry) : t('noExpiry')}
+                      </Text>
+                      {single.expiry ? (
+                        <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                          {relativeExpiry(single.expiry, t)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Pressable onPress={() => setPickingDate(true)} hitSlop={8}>
+                      <Text variant="labelLarge" color={palette.primary} style={{ fontWeight: '700' }}>
+                        {t('changeAction')}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => setSingle({ expiry: undefined })} hitSlop={10} accessibilityLabel="Clear">
+                      <X size={20} color={palette.onSurfaceVariant} />
+                    </Pressable>
+                  </View>
+                )}
+                {looseSmall === null ? (
+                  <Pressable
+                    onPress={() => setMultiExpiry(true)}
+                    style={[styles.softBtn, { backgroundColor: palette.surfaceContainerLow }]}
+                    accessibilityRole="button"
+                  >
+                    <CalendarPlus size={20} color={palette.primary} />
+                    <Text variant="bodyLarge" color={palette.primary} style={{ fontWeight: '600', flex: 1 }}>
+                      {t('differentExpiries')}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          )}
 
-        {mismatch ? (
-          <View style={{ alignItems: 'center' }}>
-            <StatusPill
-              label={`Over by ${projected - expected!}`}
-              tone="danger"
-              Icon={AlertTriangle}
-            />
-          </View>
-        ) : null}
-      </ScrollView>
+          {/* The proof: all of this item's packs together in one photo. */}
+          <ItemPhoto
+            uri={photoUri}
+            onChange={setPhotoUri}
+            amount={looseSmall !== null ? formatSmall(looseSmall, resolvedUnit) : formatAmount(qty, resolvedPackSize, resolvedUnit)}
+            cameraOpen={cameraOpen}
+            onCameraOpenChange={setCameraOpen}
+          />
+        </ScrollView>
 
-        <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
-          {/* Primary action: add to order session */}
+        <View style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.outlineVariant }]}>
+          {/* The photo is required: until it exists, the main button takes it. */}
           <Button
-            label={t('addToOrder')}
+            label={photoUri ? t('addToOrder') : t('takeItemPhoto')}
             onPress={addToSession}
             loading={saving}
             size="lg"
             fullWidth
-            leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}
+            Icon={photoUri ? Check : Camera}
           />
-          {/* Secondary: standalone receipt (when not in a multi-scan flow) */}
-          {!orderSession.isActive && mismatch && (
+          {!orderSession.isActive && mismatch ? (
             <Button
               label={t('flagAndContinue')}
-              onPress={flagAndContinueStandalone}
+              onPress={() => {
+                if (photoUri) {
+                  handedOff.current = true;
+                  void flagAndContinueStandalone(photoUri);
+                } else {
+                  setFlagCamera(true);
+                }
+              }}
               variant="danger"
               loading={saving}
               size="md"
               fullWidth
               style={{ marginTop: spacing.sm }}
             />
-          )}
-          <Button
-            label={t('cancel')}
-            variant="text"
-            onPress={() => navigation.popToTop()}
-            style={{ marginTop: spacing.sm }}
-          />
+          ) : null}
+          <Button label={t('cancel')} variant="text" size="md" onPress={() => navigation.navigate('Home')} style={{ marginTop: spacing.xs }} />
         </View>
+
+        {/* Flagging saves straight away, so its proof photo is taken here. */}
+        <CameraSheet
+          visible={flagCamera}
+          onClose={() => setFlagCamera(false)}
+          onPhoto={(uri) => {
+            setFlagCamera(false);
+            setPhotoUri(uri);
+            handedOff.current = true;
+            void flagAndContinueStandalone(uri);
+          }}
+        />
+
+        <DatePickerModal
+          visible={pickingDate}
+          value={single.expiry ? new Date(single.expiry) : null}
+          minimumDate={new Date()}
+          onSelect={(d) => {
+            setSingle({ expiry: toISO(d) });
+            setPickingDate(false);
+          }}
+          onDismiss={() => setPickingDate(false)}
+        />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+/** Earliest picked expiry across batches (used when collapsing back to one). */
+function sortedFirstExpiry(batches: Batch[]): string | null | undefined {
+  const dated = batches.map((b) => b.expiry).filter((e): e is string => !!e).sort();
+  if (dated.length > 0) return dated[0];
+  return batches.some((b) => b.expiry === null) ? null : undefined;
+}
+
+/**
+ * A question with its picture, so the icon carries it even before the
+ * words. Amount questions pass the shelf's own pack picture as `pic`.
+ */
+function Question({ Icon, pic, text }: { Icon?: LucideIcon; pic?: React.ReactNode; text: string }) {
+  const { palette } = useTheme();
+  return (
+    <View style={styles.questionRow}>
+      {pic ? (
+        <View style={[styles.questionIcon, { width: 40 }]}>{pic}</View>
+      ) : Icon ? (
+        <View style={[styles.questionIcon, { backgroundColor: palette.primaryContainer }]}>
+          <Icon size={22} color={palette.onPrimaryContainer} />
+        </View>
+      ) : null}
+      <Text variant="titleMedium" style={{ fontWeight: '700', flex: 1 }}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/** A big tappable choice: icon + words, outlined (or tinted when primary). */
+function Choice({ Icon, label, onPress, primary }: { Icon: typeof CalendarDays; label: string; onPress: () => void; primary?: boolean }) {
+  const { palette } = useTheme();
+  return (
+    <Pressable
+      onPress={() => {
+        haptic.tap();
+        onPress();
+      }}
+      style={[
+        styles.choice,
+        { borderColor: primary ? palette.primary : palette.outlineVariant, backgroundColor: primary ? palette.primaryContainer : palette.surfaceContainerLowest },
+      ]}
+    >
+      <Icon size={20} color={primary ? palette.onPrimaryContainer : palette.onSurfaceVariant} />
+      <Text variant="titleMedium" color={primary ? palette.onPrimaryContainer : palette.onSurface} style={{ fontWeight: '600' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: spacing.xl, gap: spacing.xl, paddingBottom: spacing.xxxl },
-  footer: {
-    padding: spacing.xl,
-    borderTopWidth: 1,
+  content: { padding: spacing.xl, gap: spacing.xxl },
+  product: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  card: { borderWidth: 1, borderRadius: 18, padding: spacing.lg, gap: spacing.sm },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.md },
+  track: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  warnRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  questionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  questionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  choiceRow: { flexDirection: 'row', gap: spacing.md },
+  choice: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 1,
   },
+  softBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md, paddingHorizontal: spacing.lg, minHeight: 52, borderRadius: 14 },
+  chosen: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderRadius: 16, padding: spacing.md },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });
 

@@ -9,6 +9,7 @@
  */
 
 import { resolveUnit, type UnitDef } from './registry';
+import { formatAmount } from './amount';
 
 // ─── Rounding ────────────────────────────────────────────────────
 
@@ -165,18 +166,9 @@ function formatNum(n: number): string {
 }
 
 /**
- * Format on_hand for human-readable display.
- *
- * Handles four cases:
- *  1. packSize ≤ 1 → just `"15 kg"` or `"3 pcs"`
- *  2. Whole packs → `"3 packs"` (with unit hint: `"3 × 5 kg"`)
- *  3. Fractional continuous → `"2 packs + 3 l"` or `"13 l"`
- *  4. Fractional discrete → `"3 packs + 1 bar"`
- *
- * @param onHand   - Current stock in pack-denomination (may be fractional)
- * @param packSize - Units per pack (e.g. 5 for 5kg bags)
- * @param unit     - Unit symbol (e.g. 'kg', 'pcs')
- * @param style    - 'friendly' for app (2 packs + 3 l), 'compact' for dashboard (2.6)
+ * Human-readable on-hand amount. 'friendly' (the default, every field-app
+ * screen) is the spoken form from amount.ts: "9 kg 800 g", "2 packs +
+ * 3 pcs", "6 bottles". 'compact' is a bare number for the dashboard.
  */
 export function formatOnHand(
   onHand: number,
@@ -184,87 +176,25 @@ export function formatOnHand(
   unit: string | null | undefined,
   style: 'friendly' | 'compact' = 'friendly',
 ): string {
+  // Field-app wording: amounts as people say them (see amount.ts). The
+  // compact form is kept for the dashboard's numeric columns.
+  if (style === 'friendly') return formatAmount(onHand, packSize, unit);
   const ps = (packSize ?? 1) > 0 ? (packSize ?? 1) : 1;
-  const def = resolveUnit(unit);
   const rounded = smartRound(onHand);
-
-  // ─── Compact mode (dashboard) ────────────────────────────────
-  if (style === 'compact') {
-    if (ps <= 1) return `${formatNum(rounded)} ${def.symbol}`;
-    return `${formatNum(rounded)}`;
-  }
-
-  // ─── Pack size = 1: no pack/sub-unit split ───────────────────
-  if (ps <= 1) {
-    return `${formatNum(rounded)} ${def.symbol}`;
-  }
-
-  // ─── Pack size > 1 ───────────────────────────────────────────
-  // Convert to base units FIRST, then split. Rounding the pack count
-  // before multiplying loses real quantity: 0.694 packs of a 500 g
-  // product is 347 g, but smart-rounding to 0.69 first reports 345 g.
-  // Every surface (stock list, product subtitle, stepper max, pack
-  // visual) derives from packs × pack_size, so this one has to agree.
-  const totalBase = roundQty(onHand * ps);
-  const wholePacks = Math.floor(roundQty(totalBase / ps));
-  const remainderBase = roundQty(totalBase - wholePacks * ps);
-
-  // ─── Whole packs ─────────────────────────────────────────────
-  if (remainderBase === 0) {
-    if (wholePacks === 0) return `0 ${def.symbol}`;
-    return `${wholePacks} × ${ps} ${def.symbol}`;
-  }
-
-  // ─── Fractional packs ────────────────────────────────────────
-  if (def.nature === 'continuous') {
-    // "2 packs + 3 l" or "3 l" if 0 whole packs
-    if (wholePacks === 0) {
-      return `${formatNum(remainderBase)} ${def.symbol}`;
-    }
-    return `${wholePacks} × ${ps} ${def.symbol} + ${formatNum(remainderBase)} ${def.symbol}`;
-  }
-
-  // Discrete: "3 packs + 1 bar"
-  const remainderInt = Math.round(remainderBase);
-  if (wholePacks === 0) {
-    return `${remainderInt} ${def.symbol}`;
-  }
-  if (remainderInt === 0) {
-    return `${wholePacks} × ${ps} ${def.symbol}`;
-  }
-  return `${wholePacks} × ${ps} ${def.symbol} + ${remainderInt} ${def.symbol}`;
+  if (ps <= 1) return `${formatNum(rounded)} ${resolveUnit(unit).symbol}`;
+  return `${formatNum(rounded)}`;
 }
 
 /**
- * Short on-hand label for list items (stock picker, alerts).
- * Returns just the number + unit, e.g. "15 l" or "3".
- *
- * For pack_size > 1, shows the total in base units when the unit is
- * continuous, or the pack count otherwise.
+ * Short on-hand label for lists. Same spoken form as formatOnHand: no
+ * decimals and never a bare number without its unit.
  */
 export function formatOnHandShort(
   onHand: number,
   packSize: number | null | undefined,
   unit: string | null | undefined,
 ): string {
-  const ps = (packSize ?? 1) > 0 ? (packSize ?? 1) : 1;
-  const def = resolveUnit(unit);
-
-  if (ps <= 1) {
-    const u = def.symbol;
-    return `${formatNum(smartRound(onHand))}${u ? ` ${u}` : ''}`;
-  }
-
-  if (def.nature === 'continuous') {
-    // Show total base units: 2.6 cans × 5 l = 13 l. roundQty (3 dp) —
-    // not smartRound (2 dp) — so this matches formatOnHand exactly;
-    // the two are shown side by side on the stock and dispense screens.
-    const total = roundQty(onHand * ps);
-    return `${formatNum(total)} ${def.symbol}`;
-  }
-
-  // Discrete with pack_size > 1: show pack count
-  return `${formatNum(smartRound(onHand))}`;
+  return formatAmount(onHand, packSize, unit);
 }
 
 /**

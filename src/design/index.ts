@@ -14,6 +14,12 @@ export { UnitAwareStepper } from './UnitAwareStepper';
 export type { DispenseMode } from './UnitAwareStepper';
 export { CompactStepper } from './CompactStepper';
 export { Skeleton } from './Skeleton';
+export { IconBadge } from './IconBadge';
+export { StatusChip } from './StatusChip';
+export { ListRow, RowDivider } from './ListRow';
+export { SectionHeader } from './SectionHeader';
+export { BottomSheet } from './BottomSheet';
+export { toneColors, type Tone } from './tone';
 
 // Reactive palette hook — use this in screens instead of the static `palette`
 // import so colors update when the user switches theme.

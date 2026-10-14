@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react-native';
 import type { StringKey } from '../i18n';
 import type { Permission } from '../rbac';
 
@@ -10,7 +11,7 @@ import type { Permission } from '../rbac';
  * Modules live under `src/modules/<id>/` with a single `index.ts` exporting
  * the Module object. Add a new module by importing it into the registry.
  */
-export type ModuleId = 'inventory' | 'attendance' | 'dailyTasks' | 'maintenance';
+export type ModuleId = 'inventory' | 'visitor' | 'attendance' | 'dailyTasks' | 'maintenance';
 
 export type ModuleScreen = {
   /** Route name as it appears in the navigator. */
@@ -20,6 +21,12 @@ export type ModuleScreen = {
   component: React.ComponentType<any>;
   /** Override default screen options for this route. */
   options?: Record<string, unknown>;
+  /**
+   * Who may open this screen: any one of these permissions. Omitted = anyone
+   * who can see the module. Screens a person may not use are not registered
+   * at all, so nothing (a stale button, a deep link) can open them.
+   */
+  requires?: Permission[];
 };
 
 export type Module = {
@@ -28,11 +35,11 @@ export type Module = {
   titleKey: StringKey;
   /** i18n key for the home-tile subtitle. */
   subtitleKey?: StringKey;
-  /** Short emoji/glyph used by the launcher tile until proper icons land. */
-  glyph: string;
+  /** Lucide icon for the launcher tile (house rule: no emoji in chrome). */
+  icon: LucideIcon;
   /** Route the home tile navigates to. */
   entryRoute: string;
-  /** Permissions a user must hold to see this module on the home screen. */
+  /** Holding any one of these shows the module (its tab, its home). */
   requiredPermissions: Permission[];
   /** Screens this module contributes to the root navigator. */
   screens: ModuleScreen[];

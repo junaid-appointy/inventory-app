@@ -1,85 +1,46 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import {
-  CalendarDays,
-  Clock,
-  HandCoins,
-  MapPin,
-  PackagePlus,
-  Pencil,
-  Search,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { AlertTriangle, Clock, HandCoins, Layers, MapPin, PackagePlus, Pencil, Search, X, type LucideIcon } from 'lucide-react-native';
+import { DateTile } from '../../../components/DateTile';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  FlatList,
-  LayoutAnimation,
-  Platform,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  TextInput,
-  View,
-  KeyboardAvoidingView,
-} from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useCan } from '../../../auth';
 import {
   AppBar,
-  Card,
-  radius,
+  BottomSheet,
+  Button,
+  Chip,
+  IconBadge,
+  RowDivider,
   Skeleton,
   spacing,
+  StatusChip,
   Text,
 } from '../../../design';
-import { listStock, statusFor, StockRow, StockStatus } from '../../../db/stock';
-import { pullStockIntoCache } from '../../../sync/stockPull';
+import { listStock, statusFor, type StockRow } from '../../../db/stock';
 import { useT } from '../../../i18n';
-import { StringKey } from '../../../i18n/strings';
-import { RootStackParamList } from '../../../navigation/types';
-import { flushOnce } from '../../../sync/syncService';
-import { FilterDropdown, FilterOption } from '../components/FilterDropdown';
-import { useTheme } from '../../../theme';
-import type { Palette } from '../../../design/tokens';
+import type { RootStackParamList } from '../../../navigation/types';
 import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
 import { invalidateRefetchThrottle, refetchThrottled } from '../../../sync/refetch';
-import { formatOnHandShort } from '../../../units';
-import {
-  compareExpiryAsc,
-  expiryUrgency,
-  formatExpiry,
-  relativeExpiry,
-  urgencyColors,
-} from '../../../utils/expiry';
+import { pullStockIntoCache } from '../../../sync/stockPull';
+import { flushOnce } from '../../../sync/syncService';
+import { useTheme } from '../../../theme';
+import { formatOnHandShort, productShape, smallPerPack } from '../../../units';
+import { compareExpiryAsc, expiryUrgency, formatExpiry, relativeExpiry } from '../../../utils/expiry';
+import { categoryIcon } from '../categoryIcon';
+import { PackShelf, shelfText } from '../components/Shelf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
-// ─── Status → colour ─────────────────────────────────────────────
-// All of these read from the theme so the screen works in dark mode.
-// They used to be hardcoded hex, which meant white cards on a dark
-// background. `success` is an extended Material 3 role we added to the
-// token set — green is load-bearing here, so it belongs in the tokens.
+/** One choice at a time: a status view, or one category. */
+type Filter = 'all' | 'attention' | 'expiring' | `cat:${string}`;
 
-function statusColors(status: StockStatus, palette: Palette) {
-  if (status === 'out') return { fg: palette.error, bg: palette.errorContainer, on: palette.onErrorContainer };
-  if (status === 'low') return { fg: palette.warn, bg: palette.warnContainer, on: palette.onWarnContainer };
-  return { fg: palette.success, bg: palette.successContainer, on: palette.onSuccessContainer };
-}
-
-const STATUS_LABEL: Record<StockStatus, StringKey> = {
-  ok: 'statusInStock',
-  low: 'statusLow',
-  out: 'statusOut',
-};
+const URGENCY = { out: 0, low: 1, ok: 2 } as const;
 
 /**
- * How much of the last restock is left, 0..1.
- *
- * The denominator is `opening_qty` — the level recorded the last time
- * the item was received or counted — NOT pack size. Pack size is the
- * size of one pack, so an item holding three 500 g packs would report
- * more left than it started with and a bar past 100%.
- *
- * Returns null when the item has not been received or counted since the
- * column existed. The bar is then hidden rather than drawn against a
- * denominator we would have had to invent.
+ * How much of the last restock is left, 0..1. The denominator is
+ * `opening_qty` (level at the last receipt or count), not pack size; null
+ * until the item has been received or counted, and the bar is then hidden
+ * rather than drawn against an invented number.
  */
 function usageFill(row: StockRow): number | null {
   const opening = row.opening_qty ?? null;
@@ -87,80 +48,33 @@ function usageFill(row: StockRow): number | null {
   return Math.max(0, Math.min(1, row.on_hand / opening));
 }
 
-const MONTHS_SHORT = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * "28 Jul 14:32" — the actual moment, not "2 hours ago".
- *
- * Left locale-neutral on purpose, matching how expiry dates are rendered
- * everywhere else in the app: the month abbreviation is readable in both
- * languages and a translated date format would make two screens showing
- * the same timestamp disagree.
- */
+/** "28 Jul 14:32". Locale-neutral on purpose, like expiry dates elsewhere. */
 function formatWhen(ts: number): string {
-  if (!ts) return '—';
+  if (!ts) return '';
   const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${hh}:${mm}`;
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-type SortKey = 'name' | 'lowest' | 'expiring' | 'updated';
-
-const SORT_OPTIONS: { key: SortKey; labelKey: StringKey }[] = [
-  { key: 'name', labelKey: 'sortNameAsc' },
-  { key: 'lowest', labelKey: 'sortLowestFirst' },
-  { key: 'expiring', labelKey: 'sortExpiringFirst' },
-  { key: 'updated', labelKey: 'sortRecentlyUpdated' },
-];
-
-const STATUS_OPTIONS: { key: string; labelKey: StringKey }[] = [
-  { key: 'All', labelKey: 'statusAll' },
-  { key: 'In Stock', labelKey: 'statusInStock' },
-  { key: 'Low', labelKey: 'statusLow' },
-  { key: 'Out', labelKey: 'statusOut' },
-];
-
+/**
+ * All items: search, one row of filter chips, plain rows. A row says only
+ * what needs saying (low, out, expiring soon); tapping it opens a sheet
+ * with the details and the actions this person's role allows.
+ */
 export function StockScreen({ route, navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
+  const can = useCan();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [sort, setSort] = useState<SortKey>('name');
+  const [filter, setFilter] = useState<Filter>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [loadedLocal, setLoadedLocal] = useState(false);
-  const [expandedBarcode, setExpandedBarcode] = useState<string | null>(
-    route.params?.expandBarcode ?? null,
-  );
+  const [openBarcode, setOpenBarcode] = useState<string | null>(route.params?.expandBarcode ?? null);
   const stockStatus = useCacheStatus('stock');
-  const showInitialSkeleton =
-    !loadedLocal ||
-    (!stockStatus.hasEverBeenWarm &&
-      stockStatus.state !== 'error' &&
-      stockStatus.state !== 'offline');
-
-  const categoryOptions = useMemo<FilterOption[]>(() => {
-    const cats = new Set(rows.map((r) => r.category).filter(Boolean) as string[]);
-    return [{ key: 'All', label: t('allCategories') }, ...Array.from(cats).sort().map((c) => ({ key: c, label: c }))];
-  }, [rows, t]);
-  const statusOptions = useMemo<FilterOption[]>(
-    () => STATUS_OPTIONS.map((o) => ({ key: o.key, label: t(o.labelKey) })),
-    [t],
-  );
-  const sortOptions = useMemo<FilterOption[]>(
-    () => SORT_OPTIONS.map((o) => ({ key: o.key, label: t(o.labelKey) })),
-    [t],
-  );
-
-  const fetchRemote = useCallback(async () => {
-    await flushOnce().catch(() => {});
-    await pullStockIntoCache();
-  }, []);
+  const showSkeleton =
+    !loadedLocal || (!stockStatus.hasEverBeenWarm && stockStatus.state !== 'error' && stockStatus.state !== 'offline');
 
   const readLocal = useCallback(async () => {
     setRows(await listStock());
@@ -168,17 +82,18 @@ export function StockScreen({ route, navigation }: Props) {
   }, []);
 
   const refresh = useCallback(async () => {
-    await refetchThrottled('stock', fetchRemote);
+    await refetchThrottled('stock', async () => {
+      await flushOnce().catch(() => {});
+      await pullStockIntoCache();
+    });
     await readLocal();
-  }, [fetchRemote, readLocal]);
+  }, [readLocal]);
 
   useEffect(() => {
     void readLocal();
     void refresh();
     const unsub = navigation.addListener('focus', () => { void refresh(); });
-    const unsubCache = onCacheStateChange('stock', (s) => {
-      if (s.state === 'warm') void readLocal();
-    });
+    const unsubCache = onCacheStateChange('stock', (s) => { if (s.state === 'warm') void readLocal(); });
     return () => { unsub(); unsubCache(); };
   }, [navigation, refresh, readLocal]);
 
@@ -192,30 +107,28 @@ export function StockScreen({ route, navigation }: Props) {
     }
   }, [refresh]);
 
-  /** Counts across the WHOLE catalogue, never the filtered view — the
-   *  tiles are a fixed picture of the site, not a description of the
-   *  list below them. */
-  const summary = useMemo(() => {
-    let ok = 0, low = 0, out = 0;
+  // Chip counts describe the whole catalogue, not the filtered view.
+  const counts = useMemo(() => {
+    let attention = 0, expiring = 0;
+    const cats = new Set<string>();
     for (const r of rows) {
-      const s = statusFor(r);
-      if (s === 'ok') ok++;
-      else if (s === 'low') low++;
-      else out++;
+      if (statusFor(r) !== 'ok') attention++;
+      const u = expiryUrgency(r.nearest_expiry);
+      if (u === 'soon' || u === 'expired') expiring++;
+      if (r.category) cats.add(r.category);
     }
-    return { total: rows.length, ok, low, out };
+    return { attention, expiring, categories: [...cats].sort() };
   }, [rows]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = rows.filter((r) => {
-      if (category !== 'All' && r.category !== category) return false;
-      if (statusFilter !== 'All') {
-        const s = statusFor(r);
-        if (statusFilter === 'In Stock' && s !== 'ok') return false;
-        if (statusFilter === 'Low' && s !== 'low') return false;
-        if (statusFilter === 'Out' && s !== 'out') return false;
+      if (filter === 'attention' && statusFor(r) === 'ok') return false;
+      if (filter === 'expiring') {
+        const u = expiryUrgency(r.nearest_expiry);
+        if (u !== 'soon' && u !== 'expired') return false;
       }
+      if (filter.startsWith('cat:') && r.category !== filter.slice(4)) return false;
       if (!q) return true;
       return (
         r.name.toLowerCase().includes(q) ||
@@ -224,512 +137,337 @@ export function StockScreen({ route, navigation }: Props) {
         (r.location ?? '').toLowerCase().includes(q)
       );
     });
-
-    const sorted = [...list];
-    if (sort === 'name') {
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sort === 'lowest') {
-      // Proportion of the reorder point, so a 2-of-5 item outranks a
-      // 200-of-1000 one. Items with no threshold sort last: without a
-      // reorder point there is no such thing as "running low".
-      const ratio = (r: StockRow) => (r.threshold > 0 ? r.on_hand / r.threshold : Number.POSITIVE_INFINITY);
-      sorted.sort((a, b) => ratio(a) - ratio(b));
-    } else if (sort === 'expiring') {
-      sorted.sort((a, b) => compareExpiryAsc(a.nearest_expiry ?? null, b.nearest_expiry ?? null));
+    // The sort follows the question being asked, so there is no sort menu.
+    if (filter === 'attention') {
+      list.sort((a, b) => URGENCY[statusFor(a)] - URGENCY[statusFor(b)] || a.name.localeCompare(b.name));
+    } else if (filter === 'expiring') {
+      list.sort((a, b) => compareExpiryAsc(a.nearest_expiry ?? null, b.nearest_expiry ?? null));
     } else {
-      sorted.sort((a, b) => b.updated_at - a.updated_at);
+      list.sort((a, b) => a.name.localeCompare(b.name));
     }
-    return sorted;
-  }, [rows, query, category, statusFilter, sort]);
+    return list;
+  }, [rows, query, filter]);
 
-  /** Tapping a summary tile filters to it; tapping the active one clears. */
-  const toggleStatus = (key: string) =>
-    setStatusFilter((prev) => (prev === key ? 'All' : key));
+  const open = useCallback((barcode: string) => setOpenBarcode(barcode), []);
+  const renderItem = useCallback(({ item }: { item: StockRow }) => <ItemRow row={item} onOpen={open} />, [open]);
+  const selected = openBarcode ? rows.find((r) => r.barcode === openBarcode) ?? null : null;
 
-  // Row callbacks take the barcode rather than closing over the row, so
-  // they stay referentially stable forever. Without this every render
-  // handed each card four brand-new functions, React.memo could never
-  // bail out, and typing one character in the search box re-rendered
-  // every mounted row — which is exactly what VirtualizedList was
-  // complaining about (12s to update a 284-item list).
-  const handleToggle = useCallback((barcode: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedBarcode((prev) => (prev === barcode ? null : barcode));
-  }, []);
-  const handleDispense = useCallback(
-    (barcode: string) => navigation.navigate('Dispense', { barcode }),
-    [navigation],
-  );
-  const handleReceive = useCallback(
-    (barcode: string) => navigation.navigate('Receiving', { barcode }),
-    [navigation],
-  );
-  const handleEdit = useCallback(
-    (barcode: string) => navigation.navigate('EditStock', { barcode }),
-    [navigation],
-  );
+  const goFromSheet = (to: 'Dispense' | 'Receiving' | 'EditStock') => {
+    if (!selected) return;
+    const barcode = selected.barcode;
+    setOpenBarcode(null);
+    navigation.navigate(to, { barcode });
+  };
 
-  const renderItem = useCallback(
-    ({ item }: { item: StockRow }) => (
-      <StockCard
-        row={item}
-        expanded={expandedBarcode === item.barcode}
-        onToggle={handleToggle}
-        onDispense={handleDispense}
-        onReceive={handleReceive}
-        onEdit={handleEdit}
-      />
-    ),
-    [expandedBarcode, handleToggle, handleDispense, handleReceive, handleEdit],
-  );
+  // Every chip carries a picture, so the filters read without the words.
+  const chips: Array<{ key: Filter; label: string; Icon: LucideIcon }> = [
+    { key: 'all', label: `${t('filterAll')} ${rows.length}`, Icon: Layers },
+    { key: 'attention', label: `${t('needsAttention')} ${counts.attention}`, Icon: AlertTriangle },
+    ...(counts.expiring > 0 ? [{ key: 'expiring' as Filter, label: `${t('filterExpiring')} ${counts.expiring}`, Icon: Clock }] : []),
+    ...counts.categories.map((c) => ({ key: `cat:${c}` as Filter, label: c, Icon: categoryIcon(c) })),
+  ];
 
   return (
-    <View style={[styles.safe, { backgroundColor: palette.background }]}>
-      <AppBar title={t('stock')} subtitle={t('stockSub')} onBack={() => navigation.goBack()} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
-        <View style={styles.search}>
-          <View
-            style={[
-              styles.searchBox,
-              {
-                backgroundColor: palette.surfaceContainerLowest,
-                borderColor: palette.outlineVariant,
-              },
-            ]}
-          >
-            <Search size={20} color={palette.onSurfaceVariant} strokeWidth={2} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder={t('search')}
-              placeholderTextColor={palette.onSurfaceVariant}
-              style={[styles.searchInput, { color: palette.onSurface }]}
-            />
-          </View>
-        </View>
+    <View style={[styles.root, { backgroundColor: palette.background }]}>
+      <AppBar title={t('allItemsTitle')} onBack={() => navigation.goBack()} />
 
-        {/* Summary tiles double as the status filter. One tap to see
-            everything that needs buying is the most common reason to
-            open this screen at all. */}
-        <View style={styles.summaryRow}>
-          <SummaryTile
-            value={summary.total}
-            label={t('totalItems')}
-            active={statusFilter === 'All'}
-            onPress={() => setStatusFilter('All')}
-          />
-          <SummaryTile
-            value={summary.ok}
-            label={t('statusInStock')}
-            tone={palette.success}
-            active={statusFilter === 'In Stock'}
-            onPress={() => toggleStatus('In Stock')}
-          />
-          <SummaryTile
-            value={summary.low}
-            label={t('statusLow')}
-            tone={palette.warn}
-            active={statusFilter === 'Low'}
-            onPress={() => toggleStatus('Low')}
-          />
-          <SummaryTile
-            value={summary.out}
-            label={t('statusOut')}
-            tone={palette.error}
-            active={statusFilter === 'Out'}
-            onPress={() => toggleStatus('Out')}
-          />
-        </View>
+      <View style={[styles.search, { backgroundColor: palette.surfaceContainerLow, borderColor: palette.outlineVariant }]}>
+        <Search size={20} color={palette.onSurfaceVariant} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t('searchItem')}
+          placeholderTextColor={palette.onSurfaceVariant}
+          style={[styles.searchInput, { color: palette.onSurface }]}
+          returnKeyType="search"
+          autoFocus={!!route.params?.focusSearch}
+        />
+        {query ? (
+          <Pressable onPress={() => setQuery('')} hitSlop={12} accessibilityLabel="Clear">
+            <X size={20} color={palette.onSurfaceVariant} />
+          </Pressable>
+        ) : null}
+      </View>
 
-        <View style={styles.filterRow}>
-          <FilterDropdown
-            label={t('filterCategory')}
-            options={categoryOptions}
-            selected={category}
-            onSelect={setCategory}
-          />
-          <FilterDropdown
-            label={t('sortBy')}
-            options={sortOptions}
-            selected={sort}
-            onSelect={(k) => setSort(k as SortKey)}
-          />
-        </View>
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {chips.map((c) => (
+            <Chip key={c.key} label={c.label} Icon={c.Icon} selected={filter === c.key} onPress={() => setFilter(c.key)} />
+          ))}
+        </ScrollView>
+      </View>
 
-        {showInitialSkeleton && rows.length === 0 ? (
-          <View style={styles.list}>
-            {[0, 1, 2].map((i) => (
-              <View key={i} style={{ marginBottom: spacing.sm }}>
-                <Card tone="elevated" padding="lg">
-                  <View style={{ gap: 8 }}>
-                    <Skeleton width="60%" height={18} />
-                    <Skeleton width="40%" height={14} />
-                    <Skeleton width="100%" height={8} rounded="pill" />
-                  </View>
-                </Card>
+      {showSkeleton && rows.length === 0 ? (
+        <View style={{ paddingTop: spacing.sm }}>
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton width={48} height={48} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="60%" height={16} />
+                <Skeleton width="35%" height={12} />
               </View>
-            ))}
-          </View>
-        ) : (
-          <FlatList
-            data={filtered}
-            keyExtractor={(r) => r.barcode}
-            contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
-            }
-            ItemSeparatorComponent={Separator}
-            renderItem={renderItem}
-            // Windowing tuned for tall rows on cheap hardware. The
-            // defaults (windowSize 21) kept ~60 of these mounted, which
-            // is where the 12s update came from. Ten screens of buffer
-            // buys nothing when a row is this tall.
-            removeClippedSubviews
-            initialNumToRender={8}
-            maxToRenderPerBatch={8}
-            updateCellsBatchingPeriod={50}
-            windowSize={7}
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-                  {t('nothingMatches')}
-                </Text>
-                <Text
-                  variant="bodyLarge"
-                  color={palette.onSurfaceVariant}
-                  style={{ textAlign: 'center', marginTop: spacing.sm }}
-                >
-                  {t('tryDifferentFilter')}
-                </Text>
-              </View>
-            }
+            </View>
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(r) => r.barcode}
+          renderItem={renderItem}
+          ItemSeparatorComponent={Divider}
+          contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}
+          // Rows are short now; keep windowing modest for cheap phones.
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text variant="titleLarge" style={{ textAlign: 'center' }}>
+                {t('nothingMatches')}
+              </Text>
+              <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center', marginTop: spacing.sm }}>
+                {t('tryDifferentFilter')}
+              </Text>
+            </View>
+          }
+        />
+      )}
+
+      <BottomSheet visible={!!selected} onClose={() => setOpenBarcode(null)}>
+        {selected ? (
+          <ItemSheet
+            row={selected}
+            canIssue={can('inventory.issue')}
+            canReceive={can('inventory.receive')}
+            canAdjust={can('inventory.adjust')}
+            onTakeOut={() => goFromSheet('Dispense')}
+            onReceive={() => goFromSheet('Receiving')}
+            onCorrect={() => goFromSheet('EditStock')}
           />
-        )}
-      </KeyboardAvoidingView>
+        ) : null}
+      </BottomSheet>
     </View>
   );
 }
 
-/** Hoisted so FlatList doesn't get a new component type every render —
- *  an inline separator remounts every row's divider on each pass. */
-function Separator() {
-  return <View style={{ height: spacing.sm }} />;
+/** Hoisted so FlatList gets a stable separator type. */
+function Divider() {
+  return <RowDivider />;
 }
 
-// ── Summary tile ─────────────────────────────────────────────────────
-
-function SummaryTile({
-  value,
-  label,
-  tone,
-  active,
-  onPress,
-}: {
-  value: number;
-  label: string;
-  tone?: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const { palette } = useTheme();
-  const accent = tone ?? palette.primary;
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.summaryTile,
-        {
-          backgroundColor: active ? `${accent}1A` : palette.surfaceContainerLowest,
-          borderColor: active ? accent : palette.outlineVariant,
-          borderWidth: active ? 2 : 1,
-          opacity: pressed ? 0.7 : 1,
-        },
-      ]}
-    >
-      <Text style={[styles.summaryValue, { color: accent }]}>{value}</Text>
-      <Text variant="labelMedium" color={palette.onSurfaceVariant} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-// ── Stock card ───────────────────────────────────────────────────────
-
-type StockCardProps = {
-  row: StockRow;
-  expanded: boolean;
-  onToggle: (barcode: string) => void;
-  onDispense: (barcode: string) => void;
-  onReceive: (barcode: string) => void;
-  onEdit: (barcode: string) => void;
-};
-
-/**
- * Memoised: with 284 items this is the difference between re-rendering
- * every mounted row on each keystroke and re-rendering none of them.
- * The default shallow compare is enough — `row` objects keep their
- * identity across filter/sort passes (those only build a new array), and
- * the four callbacks are stable by construction.
- */
-const StockCard = React.memo(function StockCard({
-  row,
-  expanded,
-  onToggle,
-  onDispense,
-  onReceive,
-  onEdit,
-}: StockCardProps) {
+/** One item, one line of detail. Memoised for long lists on cheap phones. */
+const ItemRow = React.memo(function ItemRow({ row, onOpen }: { row: StockRow; onOpen: (barcode: string) => void }) {
   const t = useT();
   const { palette } = useTheme();
   const status = statusFor(row);
-  const colors = statusColors(status, palette);
-  const fill = usageFill(row);
-  const expiry = row.nearest_expiry ?? null;
-  const urgency = expiryUrgency(expiry);
-  const expiryTone = urgencyColors(urgency, palette);
-
-  // Bind the barcode here rather than in the parent's renderItem, so the
-  // props this component receives stay stable and the memo can bail out.
-  const barcode = row.barcode;
-  const handlePress = useCallback(() => onToggle(barcode), [onToggle, barcode]);
-  const handleDispense = useCallback(() => onDispense(barcode), [onDispense, barcode]);
-  const handleReceive = useCallback(() => onReceive(barcode), [onReceive, barcode]);
-  const handleEdit = useCallback(() => onEdit(barcode), [onEdit, barcode]);
-
-  // Derived display values. Cheap individually, but they run for every
-  // mounted row, so keep them out of the JSX where they'd be recomputed
-  // on each of the conditional branches below.
-  const countLabel = formatOnHandShort(row.on_hand, row.pack_size, row.unit);
-  const openingLabel =
-    fill !== null
-      ? formatOnHandShort(row.opening_qty ?? 0, row.pack_size, row.unit)
-      : null;
-  const expiryRelative = expiry ? relativeExpiry(expiry, t) : null;
-
+  const urgency = expiryUrgency(row.nearest_expiry);
+  const expiryNote = urgency === 'soon' || urgency === 'expired' ? relativeExpiry(row.nearest_expiry, t) : null;
+  const detail = [formatOnHandShort(row.on_hand, row.pack_size, row.unit), row.location].filter(Boolean).join(' · ');
+  const handlePress = useCallback(() => onOpen(row.barcode), [onOpen, row.barcode]);
   return (
-    <Card
-      tone="elevated"
-      padding="lg"
-      style={{ backgroundColor: palette.surfaceContainerLowest }}
-      onPress={handlePress}
-    >
-      {/* Row 1 — identity and the number, the two things scanned first */}
-      <View style={styles.headRow}>
-        <View style={[styles.dot, { backgroundColor: colors.fg }]} />
-        <View style={{ flex: 1 }}>
-          <Text variant="titleMedium" style={{ fontWeight: '700' }} numberOfLines={2}>
-            {row.name}
-          </Text>
-        </View>
-        <Text style={[styles.count, { color: colors.fg }]} numberOfLines={1}>
-          {countLabel}
+    <Pressable onPress={handlePress} android_ripple={{ color: palette.surfaceContainerHigh }} style={styles.row}>
+      <IconBadge Icon={categoryIcon(row.category)} size={48} />
+      <View style={{ flex: 1 }}>
+        <Text variant="titleMedium" numberOfLines={1} style={{ fontWeight: '600' }}>
+          {row.name}
         </Text>
-      </View>
-
-      {/* Row 2 — what's left of what was stocked, plus the status pill.
-          Hidden entirely until the item has been received or counted at
-          least once; there is no honest denominator before that. */}
-      <View style={styles.metaRow}>
-        <Text
-          variant="bodyMedium"
-          color={palette.onSurfaceVariant}
-          numberOfLines={1}
-          style={{ flex: 1 }}
-        >
-          {openingLabel ? t('leftOfStocked', { amount: openingLabel }) : ' '}
+        <Text variant="bodyMedium" color={palette.onSurfaceVariant} numberOfLines={1} style={{ marginTop: 2 }}>
+          {detail}
         </Text>
-        <View style={[styles.pill, { backgroundColor: colors.bg }]}>
-          <Text variant="labelMedium" color={colors.on} style={{ fontWeight: '700' }}>
-            {t(STATUS_LABEL[status])}
+        {expiryNote ? (
+          <Text variant="labelMedium" color={urgency === 'expired' ? palette.error : palette.amber} style={{ marginTop: 2 }}>
+            {expiryNote}
           </Text>
-        </View>
+        ) : null}
       </View>
-
-      {/* Row 3 — how much of that restock is left. */}
-      {fill !== null ? (
-        <View style={styles.barRow}>
-          <View style={[styles.barTrack, { backgroundColor: palette.surfaceContainerHigh }]}>
-            <View
-              style={[
-                styles.barFill,
-                { width: `${Math.round(fill * 100)}%`, backgroundColor: colors.fg },
-              ]}
-            />
-          </View>
-        </View>
+      {status !== 'ok' ? (
+        <StatusChip label={status === 'out' ? t('outOfStock') : t('lowChip')} tone={status === 'out' ? 'danger' : 'warn'} />
       ) : null}
-
-      {/* Row 4 — where it lives, when the number was last touched, and
-          the nearest expiry. Each part disappears when it has nothing to
-          say, so items with no shelf and no expiry stay two lines tall. */}
-      <View style={styles.subRow}>
-        {row.location ? (
-          <View style={styles.subItem}>
-            <MapPin size={13} color={palette.onSurfaceVariant} strokeWidth={2.2} />
-            <Text variant="labelMedium" color={palette.onSurfaceVariant} numberOfLines={1}>
-              {row.location}
-            </Text>
-          </View>
-        ) : null}
-        <View style={styles.subItem}>
-          <Clock size={13} color={palette.onSurfaceVariant} strokeWidth={2.2} />
-          <Text variant="labelMedium" color={palette.onSurfaceVariant}>
-            {formatWhen(row.updated_at)}
-          </Text>
-        </View>
-        {expiry ? (
-          <View style={styles.subItem}>
-            <CalendarDays size={13} color={expiryTone.fg} strokeWidth={2.2} />
-            <Text variant="labelMedium" color={expiryTone.fg} numberOfLines={1}>
-              {formatExpiry(expiry)}{expiryRelative ? ` · ${expiryRelative}` : ''}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {expanded && (
-        <View style={[styles.actionRow, { borderTopColor: palette.outlineVariant }]}>
-          <ActionButton
-            icon={HandCoins}
-            label={t('used')}
-            color={palette.primary}
-            onPress={handleDispense}
-            disabled={row.on_hand <= 0}
-          />
-          <ActionButton
-            icon={PackagePlus}
-            label={t('received')}
-            color={palette.tertiary ?? palette.primary}
-            onPress={handleReceive}
-          />
-          <ActionButton
-            icon={Pencil}
-            label={t('editStock')}
-            color={palette.onSurfaceVariant}
-            onPress={handleEdit}
-          />
-        </View>
-      )}
-    </Card>
+    </Pressable>
   );
 });
 
-type ActionButtonProps = {
-  icon: LucideIcon;
-  label: string;
-  color: string;
-  onPress: () => void;
-  disabled?: boolean;
-};
+/** The item sheet (design 02): what it is, how much is left, what to do. */
+function ItemSheet({
+  row,
+  canIssue,
+  canReceive,
+  canAdjust,
+  onTakeOut,
+  onReceive,
+  onCorrect,
+}: {
+  row: StockRow;
+  canIssue: boolean;
+  canReceive: boolean;
+  canAdjust: boolean;
+  onTakeOut: () => void;
+  onReceive: () => void;
+  onCorrect: () => void;
+}) {
+  const t = useT();
+  const { palette } = useTheme();
+  const status = statusFor(row);
+  const fill = usageFill(row);
+  const urgency = expiryUrgency(row.nearest_expiry);
+  const expiryColor = urgency === 'expired' ? palette.error : urgency === 'soon' ? palette.amber : palette.onSurface;
+  const barColor = status === 'out' ? palette.error : status === 'low' ? palette.amber : palette.success;
+  // Pack items get the shelf picture: closed packs and the open one.
+  const packed = productShape(row.pack_size, row.unit) !== 'single' && row.on_hand > 0;
+  const perPack = smallPerPack(row.pack_size, row.unit);
 
-function ActionButton({ icon: Icon, label, color, onPress, disabled }: ActionButtonProps) {
+  return (
+    <View>
+      <View style={styles.sheetHead}>
+        <IconBadge Icon={categoryIcon(row.category)} size={56} />
+        <View style={{ flex: 1 }}>
+          <Text variant="titleLarge" style={{ fontWeight: '700' }} numberOfLines={2}>
+            {row.name}
+          </Text>
+          {row.category ? (
+            <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+              {row.category}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.countRow}>
+        <Text variant="displayMedium" style={{ fontWeight: '800' }}>
+          {formatOnHandShort(row.on_hand, row.pack_size, row.unit)}
+        </Text>
+        {status !== 'ok' ? (
+          <StatusChip label={status === 'out' ? t('outOfStock') : t('lowChip')} tone={status === 'out' ? 'danger' : 'warn'} />
+        ) : (
+          <StatusChip label={t('inStockChip')} tone="success" />
+        )}
+      </View>
+
+      {packed ? (
+        <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+          <PackShelf Icon={categoryIcon(row.category)} perPack={perPack} totalSmall={Math.round(row.on_hand * perPack)} unit={row.unit} />
+          <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
+            {shelfText(t, Math.round(row.on_hand * perPack), perPack, row.unit)}
+          </Text>
+        </View>
+      ) : null}
+
+      {fill !== null ? (
+        <>
+          <View style={[styles.track, { backgroundColor: palette.surfaceContainerHigh }]}>
+            <View style={{ width: `${Math.round(fill * 100)}%`, height: '100%', borderRadius: 4, backgroundColor: barColor }} />
+          </View>
+          <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
+            {t('ofLastRestock', {
+              left: formatOnHandShort(row.on_hand, row.pack_size, row.unit),
+              stocked: formatOnHandShort(row.opening_qty ?? 0, row.pack_size, row.unit),
+            })}
+          </Text>
+        </>
+      ) : null}
+
+      <View style={[styles.facts, { borderColor: palette.outlineVariant }]}>
+        {row.location ? <Fact Icon={MapPin} label={t('shelfLabel')} value={row.location} /> : null}
+        {row.nearest_expiry ? (
+          <Fact
+            leading={<DateTile iso={row.nearest_expiry} size="sm" />}
+            label={t('expiryLabel')}
+            value={[formatExpiry(row.nearest_expiry), relativeExpiry(row.nearest_expiry, t)].filter(Boolean).join(' · ')}
+            color={expiryColor}
+          />
+        ) : null}
+        <Fact Icon={Clock} label={t('updatedLabel')} value={formatWhen(row.updated_at)} />
+      </View>
+
+      <View style={styles.actions}>
+        {canIssue ? (
+          <View style={{ flex: 1 }}>
+            <Button
+              label={t('takeOutAction')}
+              onPress={onTakeOut}
+              size="lg"
+              fullWidth
+              disabled={row.on_hand <= 0}
+              Icon={HandCoins}
+            />
+          </View>
+        ) : null}
+        {canReceive ? (
+          <View style={{ flex: 1 }}>
+            <Button
+              label={t('receiveShort')}
+              onPress={onReceive}
+              variant="outlined"
+              size="lg"
+              fullWidth
+              Icon={PackagePlus}
+            />
+          </View>
+        ) : null}
+      </View>
+      {canAdjust ? (
+        <Button
+          label={t('correctCount')}
+          onPress={onCorrect}
+          variant="text"
+          size="md"
+          fullWidth
+          Icon={Pencil}
+          style={{ marginTop: spacing.xs }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function Fact({ label, value, color, Icon, leading }: { label: string; value: string; color?: string; Icon?: LucideIcon; leading?: React.ReactNode }) {
   const { palette } = useTheme();
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.actionBtn,
-        {
-          backgroundColor: pressed
-            ? palette.surfaceContainerHighest
-            : palette.surfaceContainerHigh,
-          opacity: disabled ? 0.4 : 1,
-        },
-      ]}
-    >
-      <Icon size={20} color={color} strokeWidth={2.2} />
-      <Text variant="labelMedium" color={color}>{label}</Text>
-    </Pressable>
+    <View style={styles.fact}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        {leading ?? (Icon ? <Icon size={22} color={palette.onSurfaceVariant} /> : null)}
+        <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+          {label}
+        </Text>
+      </View>
+      <Text variant="bodyLarge" color={color ?? palette.onSurface} style={{ flexShrink: 1, textAlign: 'right' }}>
+        {value}
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  search: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  searchBox: {
+  root: { flex: 1 },
+  search: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    paddingHorizontal: spacing.lg,
-    minHeight: 52,
-  },
-  searchInput: { flex: 1, fontSize: 17, paddingVertical: 0 },
-
-  summaryRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  summaryTile: {
-    flex: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
-    alignItems: 'center',
-    gap: 2,
-    minHeight: 64,
-    justifyContent: 'center',
-  },
-  summaryValue: { fontSize: 22, lineHeight: 26, fontWeight: '800' },
-
-  filterRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-  },
-  list: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xxxl },
-
-  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
-  count: { fontSize: 22, lineHeight: 26, fontWeight: '800', textAlign: 'right' },
-
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: 4,
-  },
-  pill: {
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-
-  subRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.md,
-    marginTop: 6,
+    height: 52,
+    marginHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  subItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 10 },
-  barTrack: { flex: 1, height: 8, borderRadius: radius.pill, overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: radius.pill },
-
-  actionRow: {
+  searchInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
+  chips: { gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  row: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  actionBtn: {
-    flex: 1,
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.lg,
+    minHeight: 72,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
-    borderRadius: radius.md,
   },
-  empty: { padding: spacing.xxl },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  empty: { paddingTop: spacing.xxxl, paddingHorizontal: spacing.xl },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  countRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xl, marginBottom: spacing.sm },
+  track: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  facts: { marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
+  fact: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.md },
+  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
 });

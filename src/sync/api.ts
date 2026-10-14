@@ -12,6 +12,7 @@
  * the read screens fall back to local cache).
  */
 
+import { discardPhoto, photoFileExists, type ItemPhotoPayload } from '../modules/inventory/itemPhoto';
 import { config } from '../config';
 import { clearSession, getSession } from '../auth/session';
 import { getDeviceId } from '../utils/device';
@@ -54,8 +55,10 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const deviceId = await getDeviceId();
   const session = getSession();
+  // A multipart upload sets its own Content-Type (with the boundary).
+  const isForm = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isForm ? {} : { 'Content-Type': 'application/json' }),
     'X-Device-Id': deviceId,
     'X-Site-Id': config.siteId,
     ...((init?.headers as Record<string, string>) ?? {}),
@@ -94,6 +97,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, ApiError.format(res.status, path, body), body);
   }
   return res.json() as Promise<T>;
+}
+
+export type RawResult<T> =
+  | { ok: boolean; status: number; data: T | null; offline: false }
+  | { ok: false; status: 0; data: null; offline: true };
+
+/**
+ * Like `request`, but never throws on an HTTP error: returns the status and
+ * the parsed body so a screen can show the server's own answer (the visitor
+ * pass check replies 400 with a full body for an invalid pass). A network
+ * failure comes back as `offline: true` instead of throwing, because the
+ * gate screens fall back to offline capture rather than an error.
+ */
+export async function requestRaw<T>(path: string, init?: RequestInit): Promise<RawResult<T>> {
+  const deviceId = await getDeviceId();
+  const session = getSession();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Device-Id': deviceId,
+    'X-Site-Id': config.siteId,
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  const sentToken = session?.token ?? null;
+  if (sentToken) headers['X-Guard-Token'] = sentToken;
+  let res: Response;
+  try {
+    res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+  } catch {
+    markApiNetworkError();
+    return { ok: false, status: 0, data: null, offline: true };
+  }
+  markApiSuccess();
+  if (res.status === 401 && sentToken) void clearSession().catch(() => {});
+  const data = (await res.json().catch(() => null)) as T | null;
+  return { ok: res.ok, status: res.status, data, offline: false };
 }
 
 const post = (path: string, payload: unknown) =>
@@ -191,6 +229,9 @@ export const api = {
     guardId: string;
     guardName: string;
     language: 'hindi' | 'english';
+    siteId?: string;
+    roles?: string[];
+    permissions?: string[];
   }> {
     const deviceId = await getDeviceId();
     let res: Response;
@@ -224,6 +265,17 @@ export const api = {
     return res.json();
   },
 
+  /** Current session + live roles/permissions. 401 clears the session centrally. */
+  session: () =>
+    request<{
+      guardName: string;
+      guardId: string;
+      language: 'hindi' | 'english';
+      expiresAt: number;
+      roles?: string[];
+      permissions?: string[];
+    }>('/api/guard/session'),
+
   // Writes (outbox-dispatched).
   send: {
     receipt: (payload: object) => post('/api/inventory/receipts', payload),
@@ -237,9 +289,39 @@ export const api = {
       post('/api/inventory/canonical-products/learn-barcode', payload),
     stockCorrection: (payload: object) =>
       post('/api/inventory/corrections', payload),
+    // Visitor gate actions captured offline. Same structured event the web
+    // guard portal sends, so the server's offline sync handles both.
+    visitorEvent: (payload: object) => post('/api/offline-events/sync', payload),
+    /** One received item's proof photo, uploaded from the file kept on the phone. */
+    itemPhoto: async (payload: object) => {
+      const p = payload as ItemPhotoPayload;
+      if (!photoFileExists(p.file_uri)) {
+        throw new Error('The item photo is no longer on this phone. The item is saved; only its photo is missing.');
+      }
+      const form = new FormData();
+      form.append('photo_id', p.photo_id);
+      if (p.delivery_id) form.append('delivery_id', p.delivery_id);
+      form.append('receipt_ids', p.receipt_ids.join(','));
+      form.append('taken_at', String(p.taken_at));
+      // React Native reads the file itself from this { uri, name, type } part.
+      form.append('photo', { uri: p.file_uri, name: `${p.photo_id}.jpg`, type: 'image/jpeg' } as unknown as Blob);
+      const res = await request<{ photo_id: string; stored: boolean }>('/api/inventory/receipts/photo', {
+        method: 'POST',
+        body: form,
+      });
+      // On the server now (or already was): free the space on the phone.
+      discardPhoto(p.file_uri);
+      return res;
+    },
   },
 
   // Reads (called by screens).
+  /** Where photos are on the server, for the ticks: received, posted to the group. */
+  photoStatus: (ids: string[]) =>
+    request<{ photos: { photo_id: string; received: true; posted: boolean; in_drive: boolean }[] }>(
+      `/api/inventory/receipts/photos/status?ids=${encodeURIComponent(ids.join(','))}`,
+    ).then((r) => r.photos),
+
   fetch: {
     orders: () =>
       request<{ orders: RemoteOrder[] }>('/api/inventory/orders').then((r) => r.orders),

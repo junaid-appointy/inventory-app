@@ -1,71 +1,53 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Check } from 'lucide-react-native';
+import { Check, type LucideIcon } from 'lucide-react-native';
 import { nanoid } from 'nanoid/non-secure';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {
-  AppBar,
-  Button,
-  Card,
-  spacing,
-  Text,
-} from '../../../design';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AmountStepper } from '../../../components/AmountStepper';
+import { PackTile } from '../../../components/PackTile';
+import { AppBar, Button, IconBadge, spacing, Text } from '../../../design';
 import { getSession } from '../../../auth/session';
 import { correctStockLocal, findStock, getNearestExpiry, StockRow } from '../../../db/stock';
 import { listLots, replaceLotsLocal } from '../../../db/lots';
 import { enqueue } from '../../../db/outbox';
 import { useT } from '../../../i18n';
+import { useCan } from '../../../auth';
+import { NoPermission } from '../../../components/NoPermission';
 import { useTheme } from '../../../theme';
 import { RootStackParamList } from '../../../navigation/types';
 import { api, ApiError } from '../../../sync/api';
 import { flushOnce } from '../../../sync/syncService';
 import { haptic } from '../../../utils/haptics';
 import { useKeyboardHeight } from '../../../hooks/useKeyboardHeight';
-import { BatchEditor, Batch } from '../components/BatchEditor';
-import { formatOnHand, resolveUnit } from '../../../units';
+import { formatAmount, formatSmall, productShape, smallPerPack, smallStep, smallUnit } from '../../../units';
+import type { Batch } from '../components/BatchEditor';
+import { ExpiryGroups } from '../components/ExpiryGroups';
+import { PackShelf, SingleShelf } from '../components/Shelf';
+import { categoryIcon } from '../categoryIcon';
+import { joinLots, lotsKey, splitLots, type Lot } from '../countMath';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditStock'>;
 
-/** Earliest non-null ISO date out of a list of batches. */
-function earliestExpiry(batches: Batch[]): string | null {
-  const sorted = batches
-    .map((b) => b.expiry)
-    .filter((e): e is string => !!e)
-    .sort();
-  return sorted[0] ?? null;
-}
 
 /**
- * This screen records a STOCKTAKE: "I counted the shelf and there is
- * this much." A count is a fact about the physical world, so it always
- * applies — there is no state in which we ask the user to choose between
- * their count and a number the system remembers. If an admin's change
- * and this count both land, they apply in server-arrival order and the
- * later one wins, which is what a queue does.
+ * Correct count: a STOCKTAKE ("I counted the shelf and there is this
+ * much"). A count is a fact about the physical world, so it always applies;
+ * there is deliberately no conflict state (see
+ * Planning-docs/inventory_conflict_free_sync_design.md).
  *
- * loading — first read still in flight; save disabled because there is
- *           nothing to save yet.
- * ready   — we have something on screen and the count can be recorded,
- *           online or off. The outbox reconciles it either way.
- *
- * Deliberately absent: a `conflict` state. See
- * Planning-docs/inventory_conflict_free_sync_design.md — a merge prompt
- * asks a non-power user a question they cannot answer, and it only
- * exists because someone wrote an absolute number. We keep the absolute
- * write (a count IS absolute) but stop treating a stale local number as
- * a competing opinion worth arbitrating.
+ * People count what they can see: full packs (per expiry date), then the
+ * one open pack in exact kg + grams or pieces. Bag pictures only pre-fill
+ * the open-pack amount; the saved number is always exact. On save the
+ * open pack is added back to the dated batch it came from, so expiry
+ * dates are never lost.
  */
 type VerifyStatus = 'loading' | 'ready';
 
+const EPS = 1e-9;
+
 export function EditStockScreen({ route, navigation }: Props) {
   const t = useT();
+  const can = useCan();
   const { palette } = useTheme();
   const kbHeight = useKeyboardHeight();
   const { barcode } = route.params;
@@ -73,40 +55,32 @@ export function EditStockScreen({ route, navigation }: Props) {
   const [row, setRow] = useState<StockRow | null>(null);
   const [originalQty, setOriginalQty] = useState<number>(0);
   const [originalExpiry, setOriginalExpiry] = useState<string | null>(null);
-  const [originalBatches, setOriginalBatches] = useState<Batch[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
-
+  const [originalLots, setOriginalLots] = useState<Lot[]>([]);
+  const [full, setFull] = useState<Batch[]>([]);
+  const [openSmall, setOpenSmall] = useState(0);
+  const [openExpiry, setOpenExpiry] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
-
-  // Freshness fetch. Not a gate — we pull the server's lot breakdown so
-  // the guard starts from the best numbers we have, then get out of the
-  // way. A failure here never blocks recording a count: the shelf does
-  // not stop being countable because the network is down.
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('loading');
-  const [serverQty, setServerQty] = useState<number | null>(null);
 
-  /**
-   * Where the batch rows on screen came from. The local read and the JIT
-   * fetch race each other, so both consult this instead of assuming an
-   * order. 'remote' wins and is never downgraded — the server's lot
-   * breakdown is the real one.
-   */
+  /** 'remote' wins over 'local' and is never downgraded (the server's lot breakdown is the real one). */
   const seedSource = useRef<'none' | 'local' | 'remote'>('none');
-  /** Set once the guard edits anything, so a late-arriving JIT response
-   *  can't wipe what they just typed. */
+  /** Set once the person edits anything, so a late server reply can't wipe what they typed. */
   const userTouched = useRef(false);
 
-  const applySeed = (
-    seed: Batch[],
-    source: 'local' | 'remote',
-    qtyRef: number,
-    expiryRef: string | null,
-  ) => {
+  const shape = row ? productShape(row.pack_size, row.unit) : 'single';
+  const perPack = row ? smallPerPack(row.pack_size, row.unit) : 1;
+  const countsOpen = shape !== 'single';
+
+  const applySeed = (lots: Lot[], r: StockRow, source: 'local' | 'remote', qtyRef: number) => {
     seedSource.current = source;
-    setOriginalBatches(seed);
-    setBatches(seed);
+    const pp = smallPerPack(r.pack_size, r.unit);
+    const split = splitLots(lots, pp, productShape(r.pack_size, r.unit) !== 'single');
+    setOriginalLots(lots);
+    setFull(split.full);
+    setOpenSmall(split.openSmall);
+    setOpenExpiry(split.openExpiry);
     setOriginalQty(qtyRef);
-    setOriginalExpiry(expiryRef);
+    setOriginalExpiry(lots.map((l) => l.expiry).filter((e): e is string => !!e).sort()[0] ?? null);
   };
 
   useEffect(() => {
@@ -115,146 +89,82 @@ export function EditStockScreen({ route, navigation }: Props) {
       const r = await findStock(barcode);
       const exp = await getNearestExpiry(barcode);
       const lots = await listLots(barcode);
-      if (cancelled) return;
-      if (!r) return;
+      if (cancelled || !r) return;
       setRow(r);
       setVerifyStatus((s) => (s === 'loading' ? 'ready' : s));
       if (seedSource.current === 'remote') return;
-      // Seed batches from local lots. If lots are empty (legacy row from
-      // before the lots migration, or a cache that hasn't pulled batches
-      // yet), synthesise one batch carrying the entire on_hand at the
-      // cached nearest_expiry. That synthetic row is a placeholder to
-      // look at, NOT something to save — the JIT fetch below replaces it
-      // with the server's real breakdown, and Save stays disabled until
-      // the fetch settles.
-      const seed: Batch[] = lots.length > 0
+      // No lots yet (legacy row): one placeholder lot with the cached total.
+      const seed: Lot[] = lots.length > 0
         ? lots.map((l) => ({ expiry: l.expiry_date, qty: Number(l.qty) }))
-        : [{ expiry: exp, qty: r.on_hand || 1 }];
-      // Conflict reference = the earliest expiry actually present in what
-      // we opened with. Deriving it from the seed rather than reading the
-      // denormalised nearest_expiry column keeps the two in step even if
-      // the column lags the lots it summarises — a mismatch here shows up
-      // as a permanent, unresolvable "Stock has changed" banner.
-      applySeed(seed, 'local', r.on_hand, earliestExpiry(seed));
+        : [{ expiry: exp, qty: r.on_hand || 0 }];
+      applySeed(seed, r, 'local', r.on_hand);
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barcode]);
 
-  // Fire the JIT fetch independently of the local read so neither
-  // blocks the other. The 3 s timeout matches CatalogPickerScreen.
+  // Fresh lot breakdown from the server, independent of the local read. A
+  // failure never blocks the count: the shelf stays countable offline.
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 3000);
     (async () => {
       try {
         const remote = await api.fetch.stockOne(barcode);
-        if (cancelled) return;
-        const remoteQty = Number(remote.on_hand);
-        const remoteExpiry = remote.nearest_expiry ?? null;
-        setServerQty(remoteQty);
-
-        // Take the server's lot breakdown over anything we guessed
-        // locally. Correcting stock REPLACES the lots, so seeding from a
-        // cache that had no batches meant saving "one lot, no expiry"
-        // over the real dated ones — the correction silently wiped the
-        // expiry for everyone. Only skip this if the guard already
-        // started editing; their input outranks a late response.
-        const remoteLots = (remote.lots ?? []).map((l) => ({
-          expiry: l.expiry_date,
-          qty: Number(l.qty),
-        }));
-        if (remoteLots.length > 0 && !userTouched.current) {
-          applySeed(remoteLots, 'remote', remoteQty, remoteExpiry);
-        }
+        const r = await findStock(barcode);
+        if (cancelled || !r) return;
+        // Correcting REPLACES the lots, so seed from the server's real dated
+        // batches rather than a cache that might have none.
+        const remoteLots = (remote.lots ?? []).map((l) => ({ expiry: l.expiry_date, qty: Number(l.qty) }));
+        if (remoteLots.length > 0 && !userTouched.current) applySeed(remoteLots, r, 'remote', Number(remote.on_hand));
       } catch (err) {
         if (cancelled) return;
-        // 401 is handled centrally; clear navigates to Login.
         if (err instanceof ApiError && err.status === 401) return;
-        // Everything else — 404, offline, timeout, 5xx — is survivable.
-        // We fall back to the local view and still let the count through.
-        // Blocking here would punish the guard for our connectivity.
       } finally {
-        clearTimeout(t);
+        clearTimeout(timer);
         if (!cancelled) setVerifyStatus('ready');
       }
     })();
-    return () => { cancelled = true; clearTimeout(t); controller.abort(); };
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barcode]);
 
-  /** Total qty across all batches — replaces the old single qty stepper. */
-  const qty = useMemo(() => batches.reduce((s, b) => s + (b.qty || 0), 0), [batches]);
+  const nextLots = useMemo(() => joinLots(full, countsOpen ? openSmall : 0, openExpiry, perPack), [full, openSmall, openExpiry, perPack, countsOpen]);
+  const total = useMemo(() => nextLots.reduce((s, l) => s + l.qty, 0), [nextLots]);
+  const changed = !!row && lotsKey(nextLots) !== lotsKey(originalLots);
+  const diff = total - originalQty;
 
-  /** Whatever ends up as the locally-tracked "nearest" expiry. */
-  const localNearestExpiry = useMemo(() => earliestExpiry(batches), [batches]);
-
-  /** True iff batches differ from what was loaded — qty or per-batch
-   *  expiry. Counts re-orderings as no change. */
-  const changed = useMemo(() => {
-    if (!row) return false;
-    const a = [...batches]
-      .map((b) => `${b.expiry ?? ''}@${b.qty}`)
-      .sort()
-      .join('|');
-    const b = [...originalBatches]
-      .map((b) => `${b.expiry ?? ''}@${b.qty}`)
-      .sort()
-      .join('|');
-    return a !== b;
-  }, [row, batches, originalBatches]);
-  /**
-   * The system's number differs from what the guard is about to record.
-   * This is a note, not a question — it exists so the guard can catch
-   * their own typo, and it never blocks the save. If they counted 12 and
-   * we thought 20, they are standing at the shelf and we are not.
-   */
-  const systemDiffers =
-    serverQty !== null && Math.abs(serverQty - qty) > 1e-6 && userTouched.current;
+  const touch = () => { userTouched.current = true; };
 
   const submit = async () => {
     if (!row || !changed) return;
     const session = getSession();
     setSaving(true);
     try {
-      // Coerce tri-state expiry (undefined = unset) → null for persistence.
-      const cleanBatches = batches
-        .filter((b) => b.qty > 0)
-        .map((b) => ({ ...b, expiry: b.expiry ?? null }));
-      // Optimistic local writes: stock cache + lots mirror.
-      await correctStockLocal(barcode, qty, localNearestExpiry);
-      await replaceLotsLocal(
-        barcode,
-        cleanBatches.map((b) => ({ expiry_date: b.expiry, qty: b.qty })),
-      );
+      const nearest = nextLots.map((l) => l.expiry).filter((e): e is string => !!e).sort()[0] ?? null;
+      await correctStockLocal(barcode, total, nearest);
+      await replaceLotsLocal(barcode, nextLots.map((l) => ({ expiry_date: l.expiry, qty: l.qty })));
       await enqueue('stock_correction', {
         id: `crn_${nanoid(12)}`,
         barcode,
         product_name: row.name,
         old_qty: originalQty,
-        new_qty: qty,
+        new_qty: total,
         old_expiry: originalExpiry,
-        // New canonical shape: per-batch breakdown. Server's correction
-        // route prefers `lots` over the legacy `new_expiry` /
-        // `new_expiries` fields.
-        lots: cleanBatches.map((b) => ({ expiry_date: b.expiry, qty: b.qty })),
-        // Legacy fields kept for backward compatibility with older
-        // server builds and dashboard audit views.
-        new_expiry: cleanBatches.length === 1 ? cleanBatches[0].expiry : localNearestExpiry,
+        // Canonical shape: per-batch breakdown (the server prefers `lots`).
+        lots: nextLots.map((l) => ({ expiry_date: l.expiry, qty: l.qty })),
+        // Legacy fields for older servers and audit views.
+        new_expiry: nextLots.length === 1 ? nextLots[0].expiry : nearest,
         new_expiries: null,
         performed_by: session?.guardId ?? null,
         performed_by_name: session?.guardName ?? null,
         corrected_at: Date.now(),
-        // When the shelf was actually counted. Today this equals
-        // corrected_at, but stamping it makes the count a dated
-        // observation rather than an edit — which is what lets the
-        // server later decide that an older in-flight movement was
-        // already included in this count.
+        // A count is a dated observation, which lets the server tell that
+        // an older in-flight movement was already included in it.
         counted_at: Date.now(),
       });
-      // Await the flush so the StockScreen's focus refresh sees the
-      // server-acknowledged value, not stale read-back data. Without
-      // this, the GET races the POST and replaceStockFromRemote
-      // overwrites the local optimistic write.
+      // Await so the stock list's refresh sees the server-acknowledged value.
       await flushOnce().catch(() => {});
       haptic.success();
       navigation.goBack();
@@ -263,121 +173,254 @@ export function EditStockScreen({ route, navigation }: Props) {
     }
   };
 
+  // After every hook on purpose: hooks must run in the same order each render.
+  if (!can('inventory.adjust')) {
+    return <NoPermission title={t('correctCount')} onBack={() => navigation.goBack()} />;
+  }
   if (!row) {
     return (
       <View style={[styles.safe, { backgroundColor: palette.background }]}>
-        <AppBar title={t('editStock')} onBack={() => navigation.goBack()} />
+        <AppBar title={t('correctCount')} onBack={() => navigation.goBack()} />
       </View>
     );
   }
 
+  const unitWord = shape === 'single' ? formatAmount(2, row.pack_size, row.unit).replace(/^\S+\s*/, '') : t('fullPacksWord');
+  const Icon = categoryIcon(row.category);
+  const fullCount = full.reduce((s, b) => s + b.qty, 0);
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'height' : undefined}
-      style={{ flex: 1 }}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'height' : undefined} style={{ flex: 1 }}>
       <View style={[styles.safe, { backgroundColor: palette.background }]}>
-        <AppBar title={t('editStock')} subtitle={t('editStockSub')} onBack={() => navigation.goBack()} />
+        <AppBar title={t('correctCount')} onBack={() => navigation.goBack()} />
 
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + kbHeight }]}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Two states only. While the freshest numbers are still
-              loading we say so; once loaded we may note that the system
-              expected a different total. There is deliberately no
-              banner that asks the guard to choose a number. */}
-          {verifyStatus === 'loading' && (
-            <View style={[styles.statusBanner, { borderColor: palette.outlineVariant }]}>
-              <ActivityIndicator color={palette.primary} size="small" />
-              <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginLeft: spacing.sm }}>
-                {t('verifying')}
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + kbHeight }]} keyboardShouldPersistTaps="handled">
+          <View style={styles.product}>
+            <IconBadge Icon={Icon} size={56} />
+            <View style={{ flex: 1 }}>
+              <Text variant="titleLarge" style={{ fontWeight: '700' }} numberOfLines={2}>
+                {row.name}
+              </Text>
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                {t('appHasAmount', { amount: formatAmount(originalQty, row.pack_size, row.unit) })}
               </Text>
             </View>
-          )}
-          {systemDiffers && serverQty !== null && (
-            <View
-              style={[
-                styles.statusBanner,
-                {
-                  borderColor: palette.outlineVariant,
-                  backgroundColor: palette.surfaceContainerLow,
-                },
-              ]}
-            >
-              <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ flex: 1 }}>
-                {t('systemShows', {
-                  amount: formatOnHand(serverQty, row?.pack_size, row?.unit),
-                })}
+            {verifyStatus === 'loading' ? <ActivityIndicator color={palette.primary} /> : null}
+          </View>
+
+          {/* What they counted, drawn like the shelf, so a slip is easy to spot. */}
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="labelLarge" color={palette.onSurfaceVariant} style={styles.label}>
+              {t('whatYouCounted')}
+            </Text>
+            {countsOpen ? (
+              <PackShelf Icon={Icon} perPack={perPack} totalSmall={fullCount * perPack + openSmall} unit={row.unit} />
+            ) : (
+              <SingleShelf Icon={Icon} count={fullCount} />
+            )}
+          </View>
+
+          <View>
+            <Question
+              pic={<PackTile kind={shape === 'single' ? 'single' : 'closed'} Icon={Icon} size="sm" />}
+              text={shape === 'single' ? t('howManyOnShelf') : t('fullPacksOnShelf')}
+            />
+            <ExpiryGroups
+              batches={full}
+              min={0}
+              unitWord={unitWord}
+              Icon={Icon}
+              single={shape === 'single'}
+              onChange={(next) => {
+                touch();
+                setFull(next);
+              }}
+            />
+          </View>
+
+          {countsOpen ? (
+            <View>
+              <Question
+                pic={<PackTile kind="open" Icon={Icon} size="sm" fill={0.5} />}
+                text={shape === 'countPack' ? t('openBoxPieces') : t('openPackLeft')}
+              />
+              <OpenPackInput
+                Icon={Icon}
+                perPack={perPack}
+                value={openSmall}
+                unit={row.unit}
+                packSize={row.pack_size}
+                pieces={shape === 'countPack'}
+                onChange={(v) => {
+                  touch();
+                  setOpenSmall(v);
+                }}
+              />
+            </View>
+          ) : null}
+
+          <View style={[styles.total, { backgroundColor: palette.surfaceContainerLow }]}>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
+                {t('totalOnShelf')}
               </Text>
+              {changed && Math.abs(diff) > EPS ? (
+                <Text variant="labelLarge" color={palette.amber} style={{ fontWeight: '700' }}>
+                  {t(diff < 0 ? 'lessThanApp' : 'moreThanApp', { amount: formatAmount(Math.abs(diff), row.pack_size, row.unit) })}
+                </Text>
+              ) : null}
             </View>
-          )}
-
-          <Card tone="elevated" padding="xl">
-            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
-              {t('product').toUpperCase()}
+            <Text variant="headlineSmall" style={{ fontWeight: '800' }}>
+              {formatAmount(total, row.pack_size, row.unit)}
             </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: spacing.xs, gap: spacing.md }}>
-              <Text variant="headlineSmall" style={{ flex: 1 }}>{row.name}</Text>
-            </View>
-            <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.md }}>
-              {t('currentCount')}: {formatOnHand(originalQty, row.pack_size, row.unit)}
-            </Text>
-          </Card>
-
-          <BatchEditor
-            batches={batches}
-            onChange={(next) => {
-              userTouched.current = true;
-              setBatches(next);
-            }}
-            unit={row.unit ?? null}
-            packSize={row.pack_size ?? null}
-            decimal={resolveUnit(row.unit).nature === 'continuous'}
-            // Corrections are counted in base units — the guard weighs
-            // "347 g left", they don't estimate "0.694 of a 500 g tub".
-            editInBaseUnits
-          />
+          </View>
         </ScrollView>
 
-        <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
-          {/* The only reasons a count cannot be recorded are that we
-              have not loaded the item yet, or nothing was changed. Being
-              offline is NOT one of them — the count goes to the outbox
-              and reconciles when the network returns. */}
+        <View style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.outlineVariant }]}>
+          {/* Only "nothing loaded yet" and "nothing changed" stop a count.
+              Offline is not one of them: it queues and reconciles. */}
           <Button
-            label={changed ? t('recordCount') : t('noChanges')}
+            label={changed ? t('saveCount') : t('noChanges')}
             onPress={submit}
             loading={saving}
             disabled={!changed || verifyStatus === 'loading'}
             size="lg"
             fullWidth
-            leadingIcon={<Check size={22} color={palette.onPrimary} strokeWidth={2.4} />}
+            Icon={Check}
           />
-          <Button
-            label={t('cancel')}
-            variant="text"
-            onPress={() => navigation.goBack()}
-            style={{ marginTop: spacing.sm }}
-          />
+          <Button label={t('cancel')} variant="text" size="md" onPress={() => navigation.goBack()} style={{ marginTop: spacing.xs }} />
         </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+/**
+ * How much is in the open pack, exactly: kg + grams (or l + ml) side by
+ * side, or one number of pieces/grams. The pictures above only pre-fill
+ * it (tap "½" → 2 kg 500 g), then the person adjusts to the real amount.
+ */
+function OpenPackInput({
+  Icon,
+  perPack,
+  value,
+  unit,
+  packSize,
+  pieces,
+  onChange,
+}: {
+  Icon: LucideIcon;
+  perPack: number;
+  value: number;
+  unit: string | null;
+  packSize: number | null;
+  pieces: boolean;
+  onChange: (small: number) => void;
+}) {
+  const t = useT();
+  const { palette } = useTheme();
+  const { symbol: smallSymbol, perBase } = smallUnit(unit);
+  const max = perPack - (pieces ? 1 : 0);
+  const fractions: Array<{ f: number; label: string }> = [
+    { f: 0, label: t('fillNone') },
+    { f: 0.1, label: t('fillLittle') },
+    { f: 0.25, label: '¼' },
+    { f: 0.5, label: '½' },
+    { f: 0.75, label: '¾' },
+  ];
+  const fromFraction = (f: number) => Math.min(max, Math.round(perPack * f));
+  const split = perBase > 1 && perPack >= perBase;
+  const big = Math.floor(value / perBase);
+  const small = value - big * perBase;
+
+  return (
+    <View style={{ gap: spacing.lg }}>
+      {/* Pictures: a quick guess for people without a scale. */}
+      <View style={styles.fills}>
+        {fractions.map(({ f, label }) => {
+          const on = value === fromFraction(f);
+          return (
+            <Pressable
+              key={label}
+              onPress={() => {
+                haptic.tap();
+                onChange(fromFraction(f));
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              // Same border width on and off, so tapping does not nudge the row.
+              style={[styles.fill, { borderColor: on ? palette.primary : palette.outlineVariant, backgroundColor: on ? palette.primaryContainer : palette.surfaceContainerLowest }]}
+            >
+              <PackTile kind="open" Icon={Icon} size="sm" fill={f} />
+              <Text variant="labelMedium" color={on ? palette.onPrimaryContainer : palette.onSurface} style={{ fontWeight: '600' }}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* The exact amount. */}
+      {split ? (
+        <View style={styles.two}>
+          <View style={[styles.unitBox, { borderColor: palette.outlineVariant }]}>
+            <AmountStepper compact value={big} min={0} max={Math.floor(max / perBase)} onChange={(n) => onChange(Math.min(max, n * perBase + small))} />
+            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
+              {resolveBig(unit)}
+            </Text>
+          </View>
+          <View style={[styles.unitBox, { borderColor: palette.outlineVariant }]}>
+            <AmountStepper compact value={small} min={0} max={perBase - 1} step={smallStep(packSize, unit)} onChange={(n) => onChange(Math.min(max, big * perBase + n))} />
+            <Text variant="labelLarge" color={palette.onSurfaceVariant}>
+              {smallSymbol}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.unitBox, { borderColor: palette.outlineVariant }]}>
+          <AmountStepper value={value} min={0} max={max} step={smallStep(packSize, unit)} onChange={onChange} />
+          <Text variant="labelLarge" color={palette.onSurfaceVariant}>
+            {pieces ? formatAmount(2 / perPack, packSize, unit).replace(/^\S+\s*/, '') : smallSymbol}
+          </Text>
+        </View>
+      )}
+      {split && value > 0 ? (
+        <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'center' }}>
+          {formatSmall(value, unit)}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** The big unit's symbol (kg for g, l for ml). */
+function resolveBig(unit: string | null): string {
+  return formatSmall(smallUnit(unit).perBase, unit).replace(/^\S+\s*/, '');
+}
+
+/** A question with the same pack picture the shelf uses. */
+function Question({ pic, text }: { pic: React.ReactNode; text: string }) {
+  return (
+    <View style={styles.questionRow}>
+      <View style={styles.questionIcon}>{pic}</View>
+      <Text variant="titleMedium" style={{ fontWeight: '700', flex: 1 }}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: spacing.xl, gap: spacing.xl },
-  footer: {
-    padding: spacing.xl,
-    borderTopWidth: 1,
-  },
-  statusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
+  content: { padding: spacing.xl, gap: spacing.xxl },
+  product: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  questionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  questionIcon: { width: 40, alignItems: 'center', justifyContent: 'center' },
+  label: { textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '700' },
+  fills: { flexDirection: 'row', gap: spacing.xs },
+  fill: { flex: 1, alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.sm, borderRadius: 14, borderWidth: 2 },
+  two: { flexDirection: 'row', gap: spacing.md },
+  unitBox: { flex: 1, alignItems: 'center', gap: spacing.xs, borderWidth: 1, borderRadius: 16, paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
+  total: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 16 },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });

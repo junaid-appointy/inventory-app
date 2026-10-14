@@ -57,6 +57,18 @@ const steadyPurpleDark: Theme = {
     outline: '#988E96',
     outlineVariant: '#4D444B',
     scrim: 'rgba(0,0,0,0.6)',
+    amber: '#F5BF4A',
+    amberSoft: '#2E2408',
+    amberLine: '#5B4300',
+    band: '#2A0F29',
+    onBand: '#F8D9F5',
+    onBandMuted: 'rgba(248,217,245,0.72)',
+    packFill: '#5A4C3C',
+    packEdge: '#B8A58C',
+    packSeal: '#141013',
+    onPack: '#F3E8DA',
+    shelf: '#221F22',
+    shelfPlank: '#4A4248',
   },
 };
 

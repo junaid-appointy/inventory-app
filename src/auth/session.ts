@@ -16,6 +16,10 @@ export type GuardSession = {
   guardId: string;
   guardName: string;
   language: 'hindi' | 'english';
+  /** Server role keys. Missing on sessions saved before roles existed. */
+  roles?: string[];
+  /** Server permissions. Missing on sessions saved before roles existed. */
+  permissions?: string[];
 };
 
 type Listener = (session: GuardSession | null) => void;

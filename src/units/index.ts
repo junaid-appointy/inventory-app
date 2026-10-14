@@ -29,3 +29,16 @@ export {
   packChipLabel,
   unitChipLabel,
 } from './convert';
+
+export {
+  productShape,
+  smallUnit,
+  smallPerPack,
+  packsToSmall,
+  smallToPacks,
+  formatSmall,
+  formatAmount,
+  quickAmounts,
+  smallStep,
+} from './amount';
+export type { ProductShape } from './amount';

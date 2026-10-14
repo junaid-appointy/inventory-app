@@ -10,11 +10,21 @@ import { findOpenItemByProductId, learnBarcode } from '../../../db/catalog';
 import { getSession } from '../../../auth/session';
 import { flushOnce, syncOrders } from '../../../sync/syncService';
 import { now } from '../../../db/database';
+import { discardPhoto, newDeliveryId, queueItemPhoto } from '../itemPhoto';
 
 export type OrderBatch = {
   qty: number;
   expiry: string | null; // ISO date, e.g. "2027-03-15"
+  /** The proof photo this batch was counted with (all its packs together).
+   *  Every batch of one "add" shares it; a re-scan of the same item adds
+   *  batches with their own photo. */
+  photoUri?: string | null;
 };
+
+/** Every distinct photo in these batches, in order. */
+function photosOf(batches: OrderBatch[]): string[] {
+  return Array.from(new Set(batches.map((b) => b.photoUri).filter((u): u is string => !!u)));
+}
 
 export type OrderSessionItem = {
   barcode: string;
@@ -40,7 +50,9 @@ type OrderSessionCtx = {
   removeItem: (barcode: string) => void;
   updateItemQty: (barcode: string, qty: number) => void;
   clear: () => void;
-  submitAll: () => Promise<void>;
+  /** Saves every item as one delivery; each item's photo goes with its receipts.
+   *  Returns each item's photo ids by barcode (for the ticks). */
+  submitAll: () => Promise<Record<string, string[]>>;
   isActive: boolean;
   /** Last expiry date entered — used for "same as last" auto-fill */
   lastExpiry: string | null;
@@ -77,7 +89,11 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const removeItem = useCallback((barcode: string) => {
-    setItems((prev) => prev.filter((i) => i.barcode !== barcode));
+    setItems((prev) => {
+      const gone = prev.find((i) => i.barcode === barcode);
+      if (gone) photosOf(gone.batches).forEach(discardPhoto);
+      return prev.filter((i) => i.barcode !== barcode);
+    });
   }, []);
 
   const updateItemQty = useCallback((barcode: string, qty: number) => {
@@ -91,18 +107,29 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
           .map((b) => b.expiry)
           .filter((e): e is string => !!e)
           .sort()[0] ?? null;
-        return { ...i, qty, batches: [{ qty, expiry: earliest }] };
+        // One batch keeps one photo: the first; the others are dropped.
+        const [kept, ...dropped] = photosOf(i.batches);
+        dropped.forEach(discardPhoto);
+        return { ...i, qty, batches: [{ qty, expiry: earliest, photoUri: kept ?? null }] };
       }),
     );
   }, []);
 
   const clear = useCallback(() => {
-    setItems([]);
+    setItems((prev) => {
+      prev.forEach((i) => photosOf(i.batches).forEach(discardPhoto));
+      return [];
+    });
     setLastExpiry(null);
   }, []);
 
   const submitAll = useCallback(async () => {
     const session = getSession();
+    // One delivery = every receipt below. Each photo goes with the receipts
+    // it was counted with (one item, all its packs together).
+    const deliveryId = newDeliveryId();
+    const receiptsByPhoto = new Map<string, string[]>();
+    const barcodeOfPhoto = new Map<string, string>();
     const performedBy = session?.guardId ?? null;
     const performedByName = session?.guardName ?? null;
 
@@ -133,7 +160,7 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
       // (undefined = unset in the editor) into the binary string|null
       // the persistence layer expects.
       const rawBatches = item.batches.length > 0 ? item.batches : [{ qty: item.qty, expiry: null }];
-      const batches = rawBatches.map((b) => ({ qty: b.qty, expiry: b.expiry ?? null }));
+      const batches = rawBatches.map((b) => ({ qty: b.qty, expiry: b.expiry ?? null, photoUri: b.photoUri ?? null }));
       for (const batch of batches) {
         const receiptId = `rcp_${nanoid(12)}`;
         const lotQty = toLot(batch.qty);
@@ -150,7 +177,12 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
           scanned_at: now(),
           performed_by: performedBy,
           performed_by_name: performedByName,
+          delivery_id: deliveryId,
         });
+        if (batch.photoUri) {
+          receiptsByPhoto.set(batch.photoUri, [...(receiptsByPhoto.get(batch.photoUri) ?? []), receiptId]);
+          barcodeOfPhoto.set(batch.photoUri, item.barcode);
+        }
 
         // Mirror the lot locally so EditStock / Dispense see the new
         // batch immediately, without waiting for the next sync round-trip.
@@ -205,12 +237,22 @@ export function OrderSessionProvider({ children }: { children: React.ReactNode }
       }
     }
 
+    // Photos go after their receipts, so the server can post each with them.
+    const photoIds: Record<string, string[]> = {};
+    for (const [photoUri, receiptIds] of receiptsByPhoto) {
+      const id = await queueItemPhoto({ deliveryId, receiptIds, photoUri });
+      const barcode = barcodeOfPhoto.get(photoUri)!;
+      photoIds[barcode] = [...(photoIds[barcode] ?? []), id];
+    }
+
     // Try to sync immediately, don't block if offline
     flushOnce().catch(() => {});
 
-    // Clear session after successful submission
+    // Clear session after successful submission (the photo files now
+    // belong to the outbox, which deletes each once uploaded).
     setItems([]);
     setLastExpiry(null);
+    return photoIds;
   }, [items]);
 
   const value = useMemo<OrderSessionCtx>(

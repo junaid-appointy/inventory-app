@@ -50,25 +50,49 @@ export const palette = {
   successContainer: '#ACF3A5',
   onSuccessContainer: '#002204',
 
-  background: '#FBF7FA',
-  onBackground: '#1E1A1D',
+  // Neutrals are true greys, not purple-tinted: white space and one brand
+  // colour read as calm and premium; tinted greys read as muddy.
+  background: '#FFFFFF',
+  onBackground: '#111114',
 
-  surface: '#FBF7FA',
-  onSurface: '#1E1A1D',
-  surfaceDim: '#DEDADD',
-  surfaceBright: '#FBF7FA',
+  surface: '#FFFFFF',
+  onSurface: '#111114',
+  surfaceDim: '#DCDCE0',
+  surfaceBright: '#FFFFFF',
 
   surfaceContainerLowest: '#FFFFFF',
-  surfaceContainerLow: '#F5EFF3',
-  surfaceContainer: '#EFE8EE',
-  surfaceContainerHigh: '#E9E2E8',
-  surfaceContainerHighest: '#E3DDE2',
+  surfaceContainerLow: '#F7F7F9',
+  surfaceContainer: '#F2F2F5',
+  surfaceContainerHigh: '#ECECF0',
+  surfaceContainerHighest: '#E5E5EA',
 
-  onSurfaceVariant: '#4D444B',
-  outline: '#7C747A',
-  outlineVariant: '#CDC4CB',
+  onSurfaceVariant: '#62646B',
+  outline: '#8B8D94',
+  outlineVariant: '#E4E5E9',
 
   scrim: 'rgba(0,0,0,0.45)',
+
+  // Attention amber for status icons and words (the warn container pair is
+  // too brown for a small icon).
+  amber: '#D97706',
+  amberSoft: '#FFF8EB',
+  amberLine: '#F6D9A6',
+
+  // Header band on hub screens: a deep plum from the brand seed, so white
+  // text reads at AAA contrast and the white sheet below can overlap it.
+  band: '#3D0E3B',
+  onBand: '#FFFFFF',
+  onBandMuted: 'rgba(255,255,255,0.74)',
+
+  // Pack pictures (PackTile): one look for every product. The fill is
+  // "what is inside", the seal strip means "never opened", and the shelf
+  // they stand on. Purple stays reserved for "goes in your hand".
+  packFill: '#E6D8C4',
+  packEdge: '#8C7B66',
+  packSeal: '#4A4048',
+  onPack: '#4A3A2A',
+  shelf: '#F7F5F2',
+  shelfPlank: '#D9CFC4',
 } as const;
 
 // Widen string literals so alternate themes can supply any color value

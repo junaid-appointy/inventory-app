@@ -2,14 +2,21 @@ import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { View } from 'react-native';
-import { useAuth } from '../auth';
+import { useAuth, useCan } from '../auth';
 import { OfflineBanner } from '../components/OfflineBanner';
-import { getAllScreens } from '../modules';
+import { getAllowedScreens, getVisibleModules, type ModuleScreen } from '../modules';
 import { OrderSessionProvider } from '../modules/inventory/components/OrderSessionContext';
 import { LoginScreen } from '../modules/inventory/screens/LoginScreen';
 import { useTheme } from '../theme';
+import { OutboxScreen } from '../modules/inventory/screens/OutboxScreen';
+import { SettingsScreen } from '../modules/inventory/screens/SettingsScreen';
+import { ScanScreen } from './ScanScreen';
+import { TodayScreen } from './TodayScreen';
+import { NoAccessScreen } from './NoAccessScreen';
 
 const Stack = createNativeStackNavigator();
+
+const HUB_ROUTES = new Set(['Today', 'Home', 'GateHome', 'Settings']);
 
 export function RootNavigator() {
   const { palette } = useTheme();
@@ -28,7 +35,20 @@ export function RootNavigator() {
     },
   };
 
-  const screens = getAllScreens();
+  const can = useCan();
+  const modules = getVisibleModules(can);
+  const canScanBoth = can('visitor.checkin.create') && can('inventory.receive');
+  // The first registered screen is where the app opens: the launcher when
+  // there is a choice, otherwise straight into the only module. Settings and
+  // the sync queue belong to the app, not to any one module.
+  const screens: ModuleScreen[] = modules.length === 0 ? [] : [
+    ...(modules.length > 1 ? [{ name: 'Today', component: TodayScreen }] : []),
+    ...modules.flatMap((m) => getAllowedScreens(m, can)),
+    // The combined scanner exists only for people who can scan both kinds.
+    ...(canScanBoth ? [{ name: 'Scan', component: ScanScreen, options: { animation: 'fade' } }] : []),
+    { name: 'Settings', component: SettingsScreen },
+    { name: 'Outbox', component: OutboxScreen },
+  ];
 
   return (
     <OrderSessionProvider>
@@ -47,13 +67,16 @@ export function RootNavigator() {
           >
             {!ready || !session ? (
               <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'fade' }} />
+            ) : screens.length === 0 ? (
+              <Stack.Screen name="NoAccess" component={NoAccessScreen} options={{ animation: 'fade' }} />
             ) : (
               screens.map((s) => (
                 <Stack.Screen
                   key={s.name}
                   name={s.name}
                   component={s.component}
-                  options={s.options as any}
+                  // Hubs swap like tabs: a quick fade, not a page push.
+                  options={(HUB_ROUTES.has(s.name) ? { animation: 'fade', ...s.options } : s.options) as any}
                 />
               ))
             )}

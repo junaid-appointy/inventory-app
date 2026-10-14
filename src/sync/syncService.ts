@@ -1,10 +1,11 @@
 import * as Network from 'expo-network';
 import { config } from '../config';
 import { OutboxKind } from '../db/outbox';
-import { markFailed, markSending, markSent, nextBatch, pendingCount, recoverOrphanedSending } from '../db/outbox';
+import { markFailed, markRejected, markSending, markSent, nextBatch, pendingCount, recoverOrphanedSending } from '../db/outbox';
 import { replaceCanonicalProducts, type CanonicalProduct } from '../db/catalog';
 import { upsertOrdersFromRemote } from '../db/orders';
-import { api } from './api';
+import { api, ApiError } from './api';
+import { refreshSessionAccess } from '../auth/refresh';
 import { pullStockIntoCache } from './stockPull';
 import { getSession } from '../auth/session';
 import { cache, type CacheKey } from './cacheStatus';
@@ -45,6 +46,8 @@ const DISPATCH: Record<OutboxKind, (payload: object) => Promise<unknown>> = {
   mismatch_flag: api.send.mismatchFlag,
   learn_barcode: api.send.learnBarcode,
   stock_correction: api.send.stockCorrection,
+  visitor_event: api.send.visitorEvent,
+  item_photo: api.send.itemPhoto,
 };
 
 // Per-kind cache invalidation map. After a successful dispatch we
@@ -62,6 +65,10 @@ const POST_WRITE_INVALIDATES: Record<OutboxKind, CacheKey[]> = {
   mismatch_flag: ['orders'],
   learn_barcode: [],
   stock_correction: ['stock', 'alerts'],
+  // Gate screens re-load on focus; no inventory cache to refresh.
+  visitor_event: [],
+  // Proof only: nothing on screen reads it back.
+  item_photo: [],
 };
 
 /**
@@ -154,6 +161,7 @@ export async function flushOnce(opts?: { pullReads?: boolean }): Promise<{ sent:
   running = true;
   let sent = 0;
   let failed = 0;
+  let rejected = 0;
   try {
     const net = await Network.getNetworkStateAsync().catch(() => ({ isConnected: false }));
     if (!net.isConnected) return { sent, failed };
@@ -192,11 +200,22 @@ export async function flushOnce(opts?: { pullReads?: boolean }): Promise<{ sent:
         sent++;
         for (const k of POST_WRITE_INVALIDATES[row.kind]) touched.add(k);
       } catch (err) {
-        await markFailed(row.id, err instanceof Error ? err.message : String(err));
-        failed++;
+        if (err instanceof ApiError && err.status === 403) {
+          // No permission. Retrying cannot help; tell the person instead.
+          // Re-pull the touched caches so any optimistic local change is
+          // replaced by the server's truth.
+          await markRejected(row.id, err.message);
+          rejected++;
+          for (const k of POST_WRITE_INVALIDATES[row.kind]) touched.add(k);
+        } else {
+          await markFailed(row.id, err instanceof Error ? err.message : String(err));
+          failed++;
+        }
       }
     }
-    if (sent > 0 || failed > 0) {
+    // A refusal usually means access changed; let the UI catch up.
+    if (rejected > 0) void refreshSessionAccess();
+    if (sent > 0 || failed > 0 || rejected > 0) {
       _lastSyncAt = Date.now();
     }
 

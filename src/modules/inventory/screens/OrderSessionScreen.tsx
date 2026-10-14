@@ -1,16 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Check, ScanLine, Trash2, X } from 'lucide-react-native';
+import { Check, ScanLine, Trash2 } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Image, Pressable, StyleSheet, View } from 'react-native';
 import { formatExpiry } from '../../../utils/expiry';
-import {
-  AppBar,
-  Button,
-  Card,
-  radius,
-  spacing,
-  Text,
-} from '../../../design';
+import { AppBar, Button, IconBadge, RowDivider, spacing, Text } from '../../../design';
+import { categoryIcon } from '../categoryIcon';
+import { formatAmount } from '../../../units';
 import { useT } from '../../../i18n';
 import { StringKey, TParams } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
@@ -30,16 +25,19 @@ export function OrderSessionScreen({ navigation }: Props) {
     if (items.length === 0) return;
     setSubmitting(true);
     try {
-      await submitAll();
+      const photoIds = await submitAll();
       haptic.success();
       navigation.replace('DeliverySummary', {
         items: items.map((i) => ({
           name: i.name,
           category: i.category,
           qty: i.qty,
+          label: formatAmount(i.qty, i.packSize, i.unit),
+          photoIds: photoIds[i.barcode] ?? [],
         })),
         totalItems: items.length,
         totalQty: items.reduce((sum, i) => sum + i.qty, 0),
+        withPhoto: true,
       });
     } finally {
       setSubmitting(false);
@@ -58,7 +56,7 @@ export function OrderSessionScreen({ navigation }: Props) {
           onPress: () => {
             clear();
             haptic.warn();
-            navigation.popToTop();
+            navigation.navigate('Home');
           },
         },
       ],
@@ -82,45 +80,50 @@ export function OrderSessionScreen({ navigation }: Props) {
     [removeItem, t],
   );
 
+  const totalPacks = items.reduce((sum, i) => sum + i.qty, 0);
+
   const renderItem = useCallback(
     ({ item }: { item: OrderSessionItem }) => (
-      <Card tone="filled" padding="lg">
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text variant="titleMedium">{item.name}</Text>
-            <Text
-              variant="bodyMedium"
-              color={palette.onSurfaceVariant}
-              style={{ marginTop: 2 }}
-            >
-              {item.category ?? '—'}
-              {formatPack(item)}
-              {formatBatches(item.batches, t)}
-            </Text>
-          </View>
-          <View style={[styles.qtyBadge, { backgroundColor: palette.primaryContainer }]}>
-            <Text variant="titleLarge" color={palette.primary}>
-              {item.qty}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => handleRemoveItem(item.barcode, item.name)}
-            hitSlop={12}
-            style={styles.deleteBtn}
-          >
-            <Trash2 size={20} color={palette.error} strokeWidth={2.2} />
-          </Pressable>
+      <View style={styles.row}>
+        {/* Its proof photo stands for the item; the icon only if there is none. */}
+        {item.batches.find((b) => b.photoUri)?.photoUri ? (
+          <Image
+            source={{ uri: item.batches.find((b) => b.photoUri)!.photoUri! }}
+            style={[styles.thumb, { backgroundColor: palette.surfaceContainerHigh }]}
+            accessibilityLabel={item.name}
+          />
+        ) : (
+          <IconBadge Icon={categoryIcon(item.category)} size={48} />
+        )}
+        <View style={{ flex: 1 }}>
+          <Text variant="titleMedium" numberOfLines={1} style={{ fontWeight: '600' }}>
+            {item.name}
+          </Text>
+          <Text variant="bodyMedium" color={palette.onSurfaceVariant} numberOfLines={1} style={{ marginTop: 2 }}>
+            {[formatPack(item), formatBatches(item.batches, t)].filter(Boolean).join(' · ') || ' '}
+          </Text>
         </View>
-      </Card>
+        <Text variant="headlineSmall" style={{ fontWeight: '800' }}>
+          {Number.isInteger(item.qty) ? item.qty : formatAmount(item.qty, item.packSize, item.unit)}
+        </Text>
+        <Pressable
+          onPress={() => handleRemoveItem(item.barcode, item.name)}
+          hitSlop={12}
+          style={styles.deleteBtn}
+          accessibilityLabel={t('removeItem')}
+        >
+          <Trash2 size={20} color={palette.onSurfaceVariant} strokeWidth={2} />
+        </Pressable>
+      </View>
     ),
-    [handleRemoveItem, t],
+    [handleRemoveItem, palette, t],
   );
 
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar
-        title={`Order — ${items.length} item${items.length === 1 ? '' : 's'}`}
-        subtitle={`Total: ${items.reduce((s, i) => s + i.qty, 0)} units`}
+        title={t('thisDelivery')}
+        subtitle={items.length > 0 ? t('deliveryCount', { items: items.length, packs: totalPacks }) : undefined}
         onBack={() => navigation.goBack()}
       />
 
@@ -128,68 +131,58 @@ export function OrderSessionScreen({ navigation }: Props) {
         data={items}
         keyExtractor={(item) => item.barcode}
         contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+        ItemSeparatorComponent={() => <RowDivider />}
         renderItem={renderItem}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text
-              variant="headlineSmall"
-              style={{ textAlign: 'center' }}
-            >
+            <Text variant="titleLarge" style={{ textAlign: 'center' }}>
               {t('noItemsScanned')}
             </Text>
-            <Text
-              variant="bodyLarge"
-              color={palette.onSurfaceVariant}
-              style={{ textAlign: 'center', marginTop: spacing.sm }}
-            >
-              {t('scanNextItem')} — {t('addToOrder').toLowerCase()}.
+            <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={{ textAlign: 'center', marginTop: spacing.sm }}>
+              {t('deliveryEmptyHint')}
             </Text>
           </View>
         }
       />
 
-      <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
-        <Button
-          label={t('scanNextItem')}
-          leadingIcon={<ScanLine size={22} color={palette.onPrimary} strokeWidth={2.4} />}
-          size="lg"
-          fullWidth
-          onPress={() => navigation.navigate('Scanner')}
-        />
-        {items.length > 0 && (
-          <>
+      <View style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.outlineVariant }]}>
+        <View style={styles.footerRow}>
+          <View style={{ flex: 1 }}>
             <Button
-              label={`${t('submitOrder')} (${items.length})`}
-              variant="tonal"
-              leadingIcon={<Check size={22} color={palette.onSecondaryContainer} strokeWidth={2.4} />}
+              label={t('scanNextItem')}
+              variant={items.length > 0 ? 'outlined' : 'filled'}
+              Icon={ScanLine}
               size="lg"
               fullWidth
-              onPress={handleSubmit}
-              loading={submitting}
-              style={{ marginTop: spacing.sm }}
+              onPress={() => navigation.navigate('Scanner')}
             />
-            <Button
-              label={t('cancelOrder')}
-              variant="text"
-              onPress={handleCancel}
-              style={{ marginTop: spacing.xs }}
-            />
-          </>
-        )}
+          </View>
+          {items.length > 0 ? (
+            <View style={{ flex: 1 }}>
+              <Button
+                label={t('finishShort', { n: items.length })}
+                Icon={Check}
+                size="lg"
+                fullWidth
+                onPress={handleSubmit}
+                loading={submitting}
+              />
+            </View>
+          ) : null}
+        </View>
+        {items.length > 0 ? (
+          <Button label={t('cancelOrder')} variant="text" size="md" onPress={handleCancel} style={{ marginTop: spacing.xs }} />
+        ) : null}
       </View>
     </View>
   );
 }
 
+/** "500 g pack", or "" when the pack size says nothing extra. */
 function formatPack(item: OrderSessionItem): string {
   const hasPack = item.packSize != null && item.packSize !== 1;
-  if (!hasPack && !item.unit) return '';
-  const parts: string[] = [];
-  parts.push(String(item.qty));
-  if (hasPack) parts.push(`× ${item.packSize}`);
-  if (item.unit) parts.push(item.unit);
-  return ` · ${parts.join(' ')}`;
+  if (!hasPack) return item.category ?? '';
+  return `${item.packSize}${item.unit ? ` ${item.unit}` : ''}`;
 }
 
 function formatBatches(
@@ -199,32 +192,17 @@ function formatBatches(
   const dated = batches.filter((b) => b.expiry);
   if (dated.length === 0) return '';
   const unique = Array.from(new Set(dated.map((b) => b.expiry as string))).sort();
-  if (unique.length === 1) return ` · ${t('expShort', { date: formatExpiry(unique[0]) })}`;
-  return ` · ${t('expiriesEarliest', { count: unique.length, date: formatExpiry(unique[0]) })}`;
+  if (unique.length === 1) return t('expShort', { date: formatExpiry(unique[0]) });
+  return t('expiriesEarliest', { count: unique.length, date: formatExpiry(unique[0]) });
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  qtyBadge: {
-    minWidth: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-  },
+  list: { paddingBottom: spacing.xxxl },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, minHeight: 72, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   empty: { padding: spacing.xxl },
-  deleteBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footer: {
-    padding: spacing.xl,
-    borderTopWidth: 1,
-  },
+  thumb: { width: 48, height: 48, borderRadius: 12 },
+  deleteBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
+  footerRow: { flexDirection: 'row', gap: spacing.md },
 });

@@ -1,10 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AlertTriangle, Check, RefreshCw } from 'lucide-react-native';
+import { CloudOff, Languages, LogOut, Palette as PaletteIcon, RefreshCw, UserRound } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../../../auth';
-import { adjustedCount, stuckCount } from '../../../db/outbox';
-import { AppBar, Button, Card, Chip, spacing, Text } from '../../../design';
+import { HubLayout } from '../../../components/shell/HubLayout';
+import { adjustedCount, rejectedCount, stuckCount } from '../../../db/outbox';
+import { Chip, ListRow, RowDivider, spacing, Text } from '../../../design';
 import { useI18n, useT } from '../../../i18n';
 import type { Lang } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
@@ -18,6 +19,10 @@ const LANG_OPTIONS: Array<{ value: Lang; label: string }> = [
   { value: 'hi', label: 'हिंदी' },
 ];
 
+/**
+ * "More": the app's own settings, reachable from every module's bottom bar.
+ * Sync only appears loud when something actually needs a person.
+ */
 export function SettingsScreen({ navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
@@ -25,133 +30,76 @@ export function SettingsScreen({ navigation }: Props) {
   const { lang, setLang } = useI18n();
   const { session, logout } = useAuth();
 
-  // Sync runs on its own and normally has nothing to say. We only count
-  // the two things a person might need to act on: writes that keep
-  // failing, and writes the server adjusted. A plain backlog is not a
-  // problem — it drains by itself — so it deliberately shows nothing.
+  // Count only what a person might act on: writes that keep failing, writes
+  // the server adjusted, and writes the server refused. A plain backlog
+  // drains by itself, so it deliberately shows nothing.
   const [needsAttention, setNeedsAttention] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
-      const [stuck, adjusted] = await Promise.all([stuckCount(), adjustedCount()]);
-      if (!cancelled) setNeedsAttention(stuck + adjusted);
+      const [stuck, adjusted, rejected] = await Promise.all([stuckCount(), adjustedCount(), rejectedCount()]);
+      if (!cancelled) setNeedsAttention(stuck + adjusted + rejected);
     };
     void check();
     const unsub = navigation.addListener('focus', () => { void check(); });
     return () => { cancelled = true; unsub(); };
   }, [navigation]);
 
-  // Theme options use translated labels
   const themeOptions: Array<{ value: ThemeName; label: string }> = [
     { value: 'steadyPurple', label: t('themeLight') },
     { value: 'steadyPurpleDark', label: t('themeDark') },
   ];
 
   return (
-    <View style={[styles.safe, { backgroundColor: palette.background }]}>
-      <AppBar title={t('settings')} onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Section title={t('langSection')}>
-          <View style={styles.chipRow}>
-            {LANG_OPTIONS.map((o) => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={lang === o.value}
-                onPress={() => setLang(o.value)}
-              />
-            ))}
-          </View>
-        </Section>
-
-        <Section title={t('appearanceSection')}>
-          <View style={styles.chipRow}>
-            {themeOptions.map((o) => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={themeName === o.value}
-                onPress={() => setTheme(o.value)}
-              />
-            ))}
-          </View>
-        </Section>
-
-        <Section title={t('dataSection')}>
-          <Pressable
-            onPress={() => navigation.navigate('Outbox')}
-            style={styles.row}
-            android_ripple={{ color: palette.outlineVariant }}
-          >
-            <RefreshCw size={22} color={palette.onSurfaceVariant} strokeWidth={2.2} />
-            <View style={{ flex: 1 }}>
-              <Text variant="titleMedium">{t('syncQueue')}</Text>
-              <Text
-                variant="bodyMedium"
-                color={needsAttention > 0 ? palette.error : palette.onSurfaceVariant}
-                style={{ marginTop: 2 }}
-              >
-                {needsAttention > 0
-                  ? t('syncNeedsAttention', { n: needsAttention })
-                  : t('syncAllClear')}
-              </Text>
-            </View>
-            {needsAttention > 0 ? (
-              <AlertTriangle size={20} color={palette.error} strokeWidth={2.2} />
-            ) : (
-              <Check size={20} color={palette.primary} strokeWidth={2.4} />
-            )}
-          </Pressable>
-        </Section>
-
-        {session && (
-          <Section title={t('accountSection')}>
-            <Text variant="titleMedium">{session.guardName}</Text>
-            <Text
-              variant="bodyMedium"
-              color={palette.onSurfaceVariant}
-              style={{ marginTop: spacing.xs }}
-            >
-              {t('signedIn')} · {session.language}
-            </Text>
-            <View style={{ marginTop: spacing.lg }}>
-              <Button
-                label={t('signOut')}
-                variant="outlined"
-                onPress={logout}
-                size="md"
-                fullWidth
-              />
-            </View>
-          </Section>
-        )}
-      </ScrollView>
-    </View>
+    <HubLayout title={t('moreTitle')}>
+      {session ? (
+        <ListRow Icon={UserRound} title={session.guardName} subtitle={t('signedIn')} />
+      ) : null}
+      <RowDivider />
+      <ListRow
+        Icon={needsAttention > 0 ? CloudOff : RefreshCw}
+        tone={needsAttention > 0 ? 'danger' : 'neutral'}
+        title={t('syncQueue')}
+        subtitle={needsAttention > 0 ? t('syncNeedsAttention', { n: needsAttention }) : t('syncAllClear')}
+        onPress={() => navigation.navigate('Outbox')}
+      />
+      <RowDivider />
+      <ChoiceRow Icon={Languages}>
+        {LANG_OPTIONS.map((o) => (
+          <Chip key={o.value} label={o.label} selected={lang === o.value} onPress={() => setLang(o.value)} />
+        ))}
+      </ChoiceRow>
+      <RowDivider />
+      <ChoiceRow Icon={PaletteIcon}>
+        {themeOptions.map((o) => (
+          <Chip key={o.value} label={o.label} selected={themeName === o.value} onPress={() => setTheme(o.value)} />
+        ))}
+      </ChoiceRow>
+      <RowDivider />
+      {session ? (
+        <>
+          <ListRow Icon={LogOut} tone="danger" title={t('signOut')} onPress={() => void logout()} showChevron={false} />
+          <RowDivider />
+        </>
+      ) : null}
+      <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'center', marginTop: spacing.xxl }}>
+        {t('appName')}
+      </Text>
+    </HubLayout>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function ChoiceRow({ Icon, children }: { Icon: typeof Languages; children: React.ReactNode }) {
   const { palette } = useTheme();
   return (
-    <View style={{ marginBottom: spacing.xl }}>
-      <Text
-        variant="labelLarge"
-        color={palette.onSurfaceVariant}
-        style={{ marginBottom: spacing.sm }}
-      >
-        {title}
-      </Text>
-      <Card tone="filled" padding="lg">
-        {children}
-      </Card>
+    <View style={styles.choice}>
+      <Icon size={26} color={palette.onSurfaceVariant} strokeWidth={1.8} />
+      <View style={styles.chips}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, minHeight: 48 },
+  choice: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, minHeight: 68, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  chips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });
-

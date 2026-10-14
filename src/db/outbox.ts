@@ -9,7 +9,9 @@ export type OutboxKind =
   | 'reorder_request'
   | 'mismatch_flag'
   | 'learn_barcode'
-  | 'stock_correction';
+  | 'stock_correction'
+  | 'visitor_event'
+  | 'item_photo';
 
 /**
  * Lifecycle of one queued write.
@@ -31,6 +33,12 @@ export type OutboxKind =
  *                                but told us nothing more. Older builds
  *                                and any endpoint that predates the
  *                                feedback contract land here.
+ *  - `rejected`                — the server refused it (403, no
+ *                                permission). Never retried in the
+ *                                background; "Sync now" on the Sync queue
+ *                                screen re-queues it once, so a write made
+ *                                before a supervisor granted access is not
+ *                                lost.
  */
 export type OutboxStatus =
   | 'queued'
@@ -39,7 +47,8 @@ export type OutboxStatus =
   | 'failed'
   | 'applied'
   | 'applied_with_adjustment'
-  | 'superseded_by_count';
+  | 'superseded_by_count'
+  | 'rejected';
 
 /** Statuses meaning "the server has it; nothing more will happen." */
 export const TERMINAL_OUTBOX_STATUSES: readonly OutboxStatus[] = [
@@ -177,4 +186,64 @@ export async function markFailed(id: string, err: string): Promise<void> {
     `UPDATE outbox SET status = 'failed', attempts = attempts + 1, last_error = ?, updated_at = ? WHERE id = ?`,
     [err.slice(0, 500), now(), id]
   );
+}
+
+export async function markRejected(id: string, err: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE outbox SET status = 'rejected', attempts = attempts + 1, last_error = ?, updated_at = ? WHERE id = ?`,
+    [err.slice(0, 500), now(), id]
+  );
+}
+
+/** Writes the server refused for lack of permission. The person must act. */
+export async function rejectedCount(): Promise<number> {
+  const db = await getDb();
+  const placeholders = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
+  const row = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) as c FROM outbox WHERE status = 'rejected' AND kind NOT IN (${placeholders})`,
+    INTERNAL_OUTBOX_KINDS as string[]
+  );
+  return row?.c ?? 0;
+}
+
+/** Give rejected rows one more go, e.g. after a supervisor granted access. */
+export async function requeueRejected(): Promise<number> {
+  const db = await getDb();
+  const result = await db.runAsync(
+    `UPDATE outbox SET status = 'queued', updated_at = ? WHERE status = 'rejected'`,
+    [now()]
+  );
+  return result.changes ?? 0;
+}
+
+/** Queued (not yet accepted) rows of one kind, e.g. gate actions captured offline. */
+export async function pendingCountOfKind(kind: OutboxKind): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) as c FROM outbox WHERE kind = ? AND status IN ('queued', 'failed', 'sending')`,
+    [kind]
+  );
+  return row?.c ?? 0;
+}
+
+/**
+ * Item photos still on this phone (not yet accepted by the server), by photo
+ * id → their outbox status. Drives the clock on the WhatsApp-style ticks.
+ */
+export async function itemPhotosOnPhone(): Promise<Map<string, OutboxStatus>> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ payload: string; status: OutboxStatus }>(
+    `SELECT payload, status FROM outbox WHERE kind = 'item_photo' AND status IN ('queued', 'sending', 'failed', 'rejected')`,
+  );
+  const out = new Map<string, OutboxStatus>();
+  for (const r of rows) {
+    try {
+      const id = (JSON.parse(r.payload) as { photo_id?: string }).photo_id;
+      if (id) out.set(id, r.status);
+    } catch {
+      /* unreadable row: not a photo we can show */
+    }
+  }
+  return out;
 }

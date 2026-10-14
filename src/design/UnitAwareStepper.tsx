@@ -13,6 +13,7 @@
  * per-product flag.
  */
 
+import { Package, Scale } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip } from './Chip';
@@ -129,11 +130,13 @@ export function UnitAwareStepper({
       <View style={styles.chipRow}>
         <Chip
           label={pLabel}
+          Icon={Package}
           selected={mode === 'pack'}
           onPress={() => switchMode('pack')}
         />
         <Chip
           label={uLabel}
+          Icon={Scale}
           selected={mode === 'unit'}
           onPress={() => switchMode('unit')}
         />

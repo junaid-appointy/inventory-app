@@ -22,11 +22,9 @@ import {
   useCodeScanner,
 } from 'react-native-vision-camera';
 import { Button, IconButton, radius, spacing, Text } from '../../../design';
-import { findProduct, upsertProduct } from '../../../db/products';
-import { findCanonicalProductByBarcode } from '../../../db/catalog';
 import { useT } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
-import { api } from '../../../sync/api';
+import { PRODUCT_CODE_TYPES, resolveBarcodeRoute } from '../barcodeRoute';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
 
@@ -41,17 +39,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 // the camera would happily route those into the Receiving form as if
 // they were barcodes (seen with `exp+field-app://expo-development-client/…`
 // in field testing).
-const CODE_TYPES = [
-  'code-128',
-  'code-39',
-  'code-93',
-  'codabar',
-  'ean-13',
-  'ean-8',
-  'itf',
-  'upc-a',
-  'upc-e',
-] as const;
+const CODE_TYPES = PRODUCT_CODE_TYPES;
 
 // ML Kit v4+ has strong internal confidence scoring. We no longer require
 // a 2-read confirmation gate — that was the main cause of "I have to wave
@@ -122,60 +110,12 @@ export function ScannerScreen({ navigation }: Props) {
     }).start();
   }, [flashOpacity]);
 
-  /**
-   * Route a barcode to the next screen. Local catalog → Receiving;
-   * otherwise ask the backend; final fallback is the registration flow.
-   */
+  /** Route a barcode to the next screen (shared rules: barcodeRoute.ts). */
   const routeFor = useCallback(
     async (raw: string) => {
-      // First check: canonical product catalog (barcode → product_id)
-      const canonical = await findCanonicalProductByBarcode(raw).catch(() => null);
-      if (canonical) {
-        navigation.push('Receiving', {
-          barcode: raw,
-          productId: canonical.product_id,
-          productName: canonical.canonical_name,
-          unit: canonical.unit,
-          packSize: canonical.pack_size,
-        });
-        return;
-      }
-
-      // Second check: legacy local products table
-      const local = await findProduct(raw).catch(() => null);
-      if (local) {
-        navigation.push('Receiving', {
-          barcode: raw,
-          packSize: local.pack_size ?? undefined,
-        });
-        return;
-      }
-
-      // Third check: backend catalog
-      try {
-        const hit = await api.fetch.catalog(raw);
-        if (hit.product) {
-          await upsertProduct({
-            barcode: hit.product.barcode,
-            name: hit.product.name,
-            category: hit.product.category,
-            unit: hit.product.unit,
-            pack_size: hit.product.pack_size ?? null,
-          });
-          navigation.push('Receiving', {
-            barcode: raw,
-            packSize: hit.product.pack_size ?? undefined,
-          });
-          return;
-        }
-      } catch {
-        // Offline / 401 — fall through.
-      }
-
-      // Barcode not in any catalog — go straight to the registration form
-      // so the user can name + categorise the product. The catalog list is
-      // surfaced inline as fuzzy suggestions on the name input itself.
-      navigation.push('RegisterProduct', { barcode: raw });
+      const next = await resolveBarcodeRoute(raw);
+      if (next.name === 'Receiving') navigation.push('Receiving', next.params);
+      else navigation.push('RegisterProduct', next.params);
     },
     [navigation],
   );

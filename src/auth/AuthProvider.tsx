@@ -1,10 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { ANONYMOUS_PRINCIPAL, can, Principal } from '../rbac';
 import { api } from '../sync/api';
 import { resetAllCacheStates } from '../sync/cacheStatus';
 import { resetAllRefetchThrottles } from '../sync/refetch';
 import { startSync, stopSync } from '../sync/syncService';
 import { warmCache } from '../sync/warmCache';
+import { refreshSessionAccess } from './refresh';
 import { clearSession, GuardSession, getSession, hydrateSession, onSessionChange, setSession } from './session';
 
 type Ctx = {
@@ -18,22 +20,23 @@ type Ctx = {
 
 const AuthContext = createContext<Ctx | null>(null);
 
+// What every guard could do before roles existed. Used only for a session
+// saved by an older build, until the first refresh replaces it. The server
+// enforces the real permissions either way.
+const LEGACY_GUARD_PERMISSIONS = [
+  'inventory.view',
+  'inventory.receive',
+  'inventory.issue',
+  'inventory.register',
+  'inventory.reorder',
+];
+
 function principalFromSession(session: GuardSession | null): Principal {
   if (!session) return ANONYMOUS_PRINCIPAL;
-  // Backend doesn't yet return roles/permissions for the guard. Until it
-  // does, every logged-in guard gets the inventory module's view +
-  // capture permissions. Replace with server-supplied values when the
-  // /api/guard/login response grows them.
   return {
     userId: session.guardId,
-    roles: ['guard'],
-    permissions: [
-      'inventory.view',
-      'inventory.receive',
-      'inventory.issue',
-      'inventory.register',
-      'inventory.reorder',
-    ],
+    roles: session.roles ?? ['guard'],
+    permissions: session.permissions ?? LEGACY_GUARD_PERMISSIONS,
   };
 }
 
@@ -53,13 +56,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (s) {
         void warmCache();
         startSync();
+        // Roles may have changed since this session was saved.
+        void refreshSessionAccess();
       }
+    });
+    // Coming back to the app is when a supervisor's change is most likely
+    // waiting: pick it up then, not only at the next sign-in.
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && getSession()) void refreshSessionAccess();
     });
     // Subscribe to session changes from any source — manual logout,
     // 401 auto-clear in sync/api.ts, or another tab updating storage.
     // When the session becomes null we also reset cache states and stop
     // the sync loop so the next login starts cold.
-    return onSessionChange((next) => {
+    const unsubscribe = onSessionChange((next) => {
       setSessionState(next);
       if (next === null) {
         stopSync();
@@ -71,6 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         startSync();
       }
     });
+    return () => {
+      unsubscribe();
+      appStateSub.remove();
+    };
   }, []);
 
   const login = useCallback(async ({ guardName, pin }: { guardName: string; pin: string }) => {
@@ -80,6 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       guardId: res.guardId,
       guardName: res.guardName,
       language: res.language,
+      roles: res.roles,
+      permissions: res.permissions,
     });
     // Kick off the warm-up so Home tiles populate without waiting for
     // the periodic 30 s sync tick. Non-blocking — login() returns
