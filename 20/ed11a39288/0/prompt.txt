@@ -103,3 +103,7 @@ Your claude.ai usage limit has reset. Continue the task you were working on when
 ---
 
 can we do a whatsapp integration that somehow the things done on the app is sent as a curated message on whatsapp via our whatsapp agent running on our office vps, the repo is outside officeoperations umbrella named openWA. like then we can add iamge capture on intake on inventory and send it as a proof on whatsapp. just scan, analyse and tell me.
+
+---
+
+oh you added it wrong, we need photo of each item or item set, like if milk packets are 50, photo of 50 milk packets togehter. there will not be just one photo of whole delivery
