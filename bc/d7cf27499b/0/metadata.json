@@ -1,0 +1,124 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "bcd7cf27499b",
+  "session_id": "8106e3a6-5646-4a4e-8acc-0f2662bf21fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-14T16:27:56.224854Z",
+  "branch": "feature/field-rbac",
+  "checkpoints_count": 5,
+  "save_step_count": 5,
+  "files_touched": [
+    "src/design/BottomSheet.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "54d9f1a52afa",
+  "token_usage": {
+    "input_tokens": 2334,
+    "cache_creation_tokens": 8307472,
+    "cache_read_tokens": 538471283,
+    "output_tokens": 1212798,
+    "api_call_count": 1172
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01PGYQmHp6DyDTPEaZbPQm8Z",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "implementation-planning"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "54d9f1a52afa",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 94,
+        "end": 95,
+        "entry_ids": [
+          "b984b315-dcf3-4c2b-b781-51d95615d7a8"
+        ],
+        "tool_use_id": "toolu_01PGYQmHp6DyDTPEaZbPQm8Z"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PGYQmHp6DyDTPEaZbPQm8Z"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: implementation-planning",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 26
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-14T16:27:55.604804Z",
+    "agent_lines": 50,
+    "agent_removed": 9,
+    "human_added": 194,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 244,
+    "total_lines_changed": 292,
+    "agent_percentage": 20.205479452054796,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 50,
+      "agent_lines_removed": 9,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 50,
+      "agent_lines_removed": 9,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 50,
+      "agent_lines_removed": 9,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 50,
+      "agent_lines_removed": 9,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    }
+  ]
+}
