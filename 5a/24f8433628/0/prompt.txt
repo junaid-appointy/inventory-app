@@ -1,0 +1,5 @@
+when I click on an item there is this small/half drawer that opens, with option to dispense and receive, there is a knob/handle at the top of it, I expect that if I drag it from that knob , this drawer will close, but that does not happen.
+
+---
+
+try again
