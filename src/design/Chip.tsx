@@ -1,6 +1,7 @@
 import { Check, type LucideIcon } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { PressScale } from './motion';
 import { useTheme } from '../theme';
 import { haptic } from '../utils/haptics';
 import { Text } from './Text';
@@ -25,7 +26,8 @@ type Props = {
 export function Chip({ label, selected, onPress, Icon }: Props) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressScale
+      to={0.95}
       onPress={() => {
         haptic.tap();
         onPress();
@@ -57,7 +59,7 @@ export function Chip({ label, selected, onPress, Icon }: Props) {
           {label}
         </Text>
       </View>
-    </Pressable>
+    </PressScale>
   );
 }
 

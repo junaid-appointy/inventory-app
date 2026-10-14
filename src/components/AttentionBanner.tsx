@@ -1,7 +1,7 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, StyleSheet } from 'react-native';
-import { spacing, Text } from '../design';
+import { StyleSheet } from 'react-native';
+import { Appear, PressScale, spacing, Text } from '../design';
 import { useT } from '../i18n';
 import { useTheme } from '../theme';
 
@@ -10,7 +10,8 @@ export function AttentionBanner({ text, onPress }: { text: string; onPress: () =
   const t = useT();
   const { palette } = useTheme();
   return (
-    <Pressable
+    <Appear>
+    <PressScale
       onPress={onPress}
       accessibilityRole="button"
       style={[styles.box, { backgroundColor: palette.amberSoft, borderColor: palette.amberLine }]}
@@ -23,7 +24,8 @@ export function AttentionBanner({ text, onPress }: { text: string; onPress: () =
         {t('viewAction')}
       </Text>
       <ChevronRight size={18} color={palette.primary} />
-    </Pressable>
+    </PressScale>
+    </Appear>
   );
 }
 

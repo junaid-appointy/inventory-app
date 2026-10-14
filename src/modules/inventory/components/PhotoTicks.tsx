@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, CheckCheck, Clock } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text } from '../../../design';
+import { Animated, StyleSheet, View } from 'react-native';
+import { Text, usePop } from '../../../design';
 import { itemPhotosOnPhone } from '../../../db/outbox';
 import { useT } from '../../../i18n';
 import type { StringKey } from '../../../i18n/strings';
@@ -106,15 +106,17 @@ export function PhotoTick({ state, withLabel }: { state: TickState; withLabel?: 
   const { palette } = useTheme();
   const color = state === 'posted' ? palette.primary : state === 'failed' ? palette.amber : palette.onSurfaceVariant;
   const Icon = state === 'posted' ? CheckCheck : state === 'server' ? Check : state === 'failed' ? AlertTriangle : Clock;
+  // A tick that moves on (clock, one tick, two ticks) pops, like WhatsApp's.
+  const pop = usePop(state, 1.25);
   return (
-    <View style={styles.row} accessible accessibilityLabel={t(LABEL[state])}>
+    <Animated.View style={[styles.row, { transform: [{ scale: pop }] }]} accessible accessibilityLabel={t(LABEL[state])}>
       <Icon size={18} color={color} strokeWidth={2.4} />
       {withLabel ? (
         <Text variant="labelMedium" color={color} style={{ letterSpacing: 0 }}>
           {t(LABEL[state])}
         </Text>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

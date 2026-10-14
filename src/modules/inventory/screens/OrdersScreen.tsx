@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, ScanLine } from 'lucide-react-native';
 import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { AppBar, Button, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
+import { animateNextLayout, AppBar, Button, Card, PressScale, ProgressBar, Skeleton, spacing, StatusPill, Text } from '../../../design';
 import { findBarcodeForProduct, findCanonicalProductById } from '../../../db/catalog';
 import { getOrderItems, listOpenOrders, Order, OrderItem, upsertOrdersFromRemote } from '../../../db/orders';
 import { haptic } from '../../../utils/haptics';
@@ -79,6 +79,7 @@ export function OrdersScreen({ navigation }: Props) {
     [navigation],
   );
   const toggle = useCallback((id: string) => {
+    animateNextLayout();
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -237,14 +238,7 @@ export function OrdersScreen({ navigation }: Props) {
 
               {total > 0 && bucket !== 'done' ? (
                 <View style={styles.progress}>
-                  <View style={[styles.bar, { backgroundColor: palette.surfaceContainerHighest }]}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        { backgroundColor: palette.primary, width: `${Math.round((doneCount / total) * 100)}%` },
-                      ]}
-                    />
-                  </View>
+                  <ProgressBar fill={doneCount / total} color={palette.primary} track={palette.surfaceContainerHighest} />
                   <Text variant="labelLarge" color={palette.onSurfaceVariant}>
                     {t('receivedOfTotal', { done: String(doneCount), total: String(total) })}
                   </Text>
@@ -255,8 +249,9 @@ export function OrdersScreen({ navigation }: Props) {
               {shown.map((i, idx) => {
                 const itemDone = i.received_qty >= i.expected_qty;
                 return (
-                  <Pressable
+                  <PressScale
                     key={i.id}
+                    to={0.98}
                     onPress={() => void receiveLine(i)}
                     accessibilityRole="button"
                     accessibilityLabel={`${i.product_name}, ${i.received_qty} / ${i.expected_qty}`}
@@ -286,7 +281,7 @@ export function OrdersScreen({ navigation }: Props) {
                     ) : (
                       <ChevronRight size={20} color={palette.onSurfaceVariant} />
                     )}
-                  </Pressable>
+                  </PressScale>
                 );
               })}
               {rows.length > PREVIEW_ROWS ? (
@@ -343,8 +338,6 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
   progress: { marginTop: spacing.md, gap: spacing.xs },
-  bar: { height: 8, borderRadius: 4, overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: 4 },
   more: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingTop: spacing.md },
   footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
   empty: { padding: spacing.xxl },

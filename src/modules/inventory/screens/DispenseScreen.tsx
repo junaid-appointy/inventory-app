@@ -32,10 +32,13 @@ import {
   View,
 } from 'react-native';
 import {
+  animateNextLayout,
   AppBar,
   Button,
   Chip,
   IconBadge,
+  motion,
+  PressScale,
   RowDivider,
   Skeleton,
   spacing,
@@ -336,10 +339,12 @@ export function DispenseScreen({ route, navigation }: Props) {
   );
 
   const setClosed = useCallback((n: number) => {
+    animateNextLayout(motion.fast);
     setManualAlloc(null);
     setClosedTake(n);
   }, []);
   const setLoose = useCallback((n: number) => {
+    animateNextLayout(motion.fast);
     setManualAlloc(null);
     setLooseTake(n);
   }, []);
@@ -742,8 +747,9 @@ export function DispenseScreen({ route, navigation }: Props) {
               {REASONS.map((r) => {
                 const on = r.value === reason;
                 return (
-                  <Pressable
+                  <PressScale
                     key={r.value}
+                    to={0.95}
                     onPress={() => {
                       haptic.tap();
                       setReason(r.value);
@@ -763,7 +769,7 @@ export function DispenseScreen({ route, navigation }: Props) {
                     <Text variant="labelLarge" color={on ? palette.onPrimaryContainer : palette.onSurface} numberOfLines={1} style={{ fontWeight: on ? '700' : '500' }}>
                       {t(r.labelKey)}
                     </Text>
-                  </Pressable>
+                  </PressScale>
                 );
               })}
             </View>
@@ -851,7 +857,8 @@ function HandCounter({
 function QuickAmount({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressScale
+      to={0.94}
       onPress={() => {
         haptic.tap();
         onPress();
@@ -876,7 +883,7 @@ function QuickAmount({ label, on, onPress }: { label: string; on: boolean; onPre
       >
         {label}
       </Text>
-    </Pressable>
+    </PressScale>
   );
 }
 

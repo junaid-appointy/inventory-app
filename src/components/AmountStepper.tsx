@@ -1,7 +1,7 @@
 import { Minus, Plus } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { spacing, Text } from '../design';
+import { Animated, StyleSheet, TextInput, View } from 'react-native';
+import { PressScale, spacing, Text, usePop } from '../design';
 import { useTheme } from '../theme';
 import { haptic } from '../utils/haptics';
 
@@ -33,6 +33,7 @@ export function AmountStepper({
 }) {
   const { palette } = useTheme();
   const [draft, setDraft] = useState<string | null>(null);
+  const pop = usePop(value);
 
   // Drop the typing buffer when the value changes from outside.
   useEffect(() => setDraft(null), [value]);
@@ -46,7 +47,8 @@ export function AmountStepper({
   };
 
   const btn = (Icon: typeof Minus, onPress: () => void, disabled: boolean, label: string) => (
-    <Pressable
+    <PressScale
+      to={0.9}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -55,13 +57,14 @@ export function AmountStepper({
       style={[compact ? styles.btnSm : styles.btn, { backgroundColor: palette.surfaceContainerHigh, opacity: disabled ? 0.4 : 1 }]}
     >
       <Icon size={compact ? 20 : 26} color={palette.onSurface} strokeWidth={2.4} />
-    </Pressable>
+    </PressScale>
   );
 
   return (
     <View style={[styles.row, compact && { gap: spacing.sm }]}>
       {btn(Minus, () => bump(-1), value <= min, 'Less')}
       <View style={{ flex: 1, alignItems: 'center' }}>
+        <Animated.View style={{ transform: [{ scale: pop }] }}>
         <TextInput
           value={draft ?? String(value)}
           onChangeText={(txt) => setDraft(txt.replace(/\D/g, '').slice(0, 5))}
@@ -77,6 +80,7 @@ export function AmountStepper({
           style={[compact ? styles.inputSm : styles.input, { color: palette.onSurface }]}
           accessibilityLabel={unitLabel}
         />
+        </Animated.View>
         {unitLabel ? (
           <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
             {unitLabel}

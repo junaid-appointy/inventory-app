@@ -1,6 +1,7 @@
 import { ChevronRight, type LucideIcon } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { PressScale } from './motion';
 import { useTheme } from '../theme';
 import { Text } from './Text';
 import { spacing } from './tokens';
@@ -37,7 +38,8 @@ export function ListRow({
   const chevron = showChevron ?? !!onPress;
   const iconColor = tone === 'warn' ? palette.amber : tone === 'danger' ? palette.error : palette.onSurfaceVariant;
   return (
-    <Pressable
+    <PressScale
+      to={0.99}
       onPress={onPress}
       disabled={!onPress}
       android_ripple={onPress ? { color: palette.surfaceContainerHigh } : undefined}
@@ -62,7 +64,7 @@ export function ListRow({
         trailing
       )}
       {chevron ? <ChevronRight size={20} color={palette.outline} /> : null}
-    </Pressable>
+    </PressScale>
   );
 }
 

@@ -1,14 +1,14 @@
 import { ChevronRight, type LucideIcon } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { spacing, Text } from '../design';
+import { StyleSheet, View } from 'react-native';
+import { PressScale, spacing, Text } from '../design';
 import { useTheme } from '../theme';
 
 /** A big outlined row that opens a task (design 04): line icon, title, chevron. */
 export function NavRow({ Icon, label, detail, onPress }: { Icon: LucideIcon; label: string; detail?: string; onPress: () => void }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressScale
       onPress={onPress}
       accessibilityRole="button"
       android_ripple={{ color: palette.surfaceContainerHigh }}
@@ -26,7 +26,7 @@ export function NavRow({ Icon, label, detail, onPress }: { Icon: LucideIcon; lab
         ) : null}
       </View>
       <ChevronRight size={22} color={palette.outline} />
-    </Pressable>
+    </PressScale>
   );
 }
 

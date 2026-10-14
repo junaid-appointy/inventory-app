@@ -3,7 +3,7 @@ import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCameraFormat, useCameraPermission } from 'react-native-vision-camera';
-import { Button, spacing, Text } from '../../../design';
+import { Appear, Button, PressScale, spacing, Text } from '../../../design';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
@@ -53,6 +53,8 @@ export function ItemPhoto({
       </View>
 
       {uri ? (
+        // Keyed by the photo, so a retake eases in too.
+        <Appear key={uri}>
         <View style={[styles.preview, { borderColor: palette.outlineVariant }]}>
           <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" accessibilityLabel={t('itemPhotoTitle')} />
           <View style={[styles.done, { backgroundColor: palette.success }]}>
@@ -72,8 +74,10 @@ export function ItemPhoto({
             </Text>
           </Pressable>
         </View>
+        </Appear>
       ) : (
-        <Pressable
+        <PressScale
+          to={0.98}
           onPress={() => {
             haptic.tap();
             setOpen(true);
@@ -86,7 +90,7 @@ export function ItemPhoto({
           <Text variant="titleMedium" color={palette.onPrimaryContainer} style={{ fontWeight: '700', alignSelf: 'stretch', textAlign: 'center' }}>
             {t('takeItemPhoto')}
           </Text>
-        </Pressable>
+        </PressScale>
       )}
 
       <CameraSheet

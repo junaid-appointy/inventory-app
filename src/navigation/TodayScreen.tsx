@@ -10,7 +10,7 @@ import { NavRow } from '../components/NavRow';
 import { HubLayout } from '../components/shell/HubLayout';
 import { rejectedCount, stuckCount } from '../db/outbox';
 import { listLowOrOut } from '../db/stock';
-import { spacing } from '../design';
+import { Appear, spacing } from '../design';
 import { useT } from '../i18n';
 import { pullStockIntoCache } from '../sync/stockPull';
 import { refetchThrottled } from '../sync/refetch';
@@ -70,13 +70,13 @@ export function TodayScreen({ navigation }: Props) {
     <HubLayout title={t('tabToday')} eyebrow={`${t(greetingKey())}, ${getSession()?.guardName ?? ''}`} refreshing={refreshing} onRefresh={onRefresh}>
       <View style={{ gap: spacing.lg }}>
         {can('inventory.receive') ? (
-          <NavRow Icon={Package} label={t('receiveAction')} onPress={() => navigation.navigate('Orders')} />
+          <Appear delay={0}><NavRow Icon={Package} label={t('receiveAction')} onPress={() => navigation.navigate('Orders')} /></Appear>
         ) : null}
         {can('visitor.checkin.create') ? (
-          <NavRow Icon={UserRound} label={t('checkInVisitor')} onPress={() => navigation.navigate('GateHome')} />
+          <Appear delay={40}><NavRow Icon={UserRound} label={t('checkInVisitor')} onPress={() => navigation.navigate('GateHome')} /></Appear>
         ) : null}
         {can('inventory.issue') ? (
-          <NavRow Icon={HandCoins} label={t('takeOutAction')} onPress={() => navigation.navigate('Dispense')} />
+          <Appear delay={80}><NavRow Icon={HandCoins} label={t('takeOutAction')} onPress={() => navigation.navigate('Dispense')} /></Appear>
         ) : null}
         {attention > 0 ? (
           <View style={{ marginTop: spacing.sm }}>

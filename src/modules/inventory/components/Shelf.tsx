@@ -183,7 +183,7 @@ function ShelfFrame({ children, legend, empty }: { children: React.ReactNode; le
       {legend ? (
         <View style={styles.legend}>
           <View style={[styles.swatch, { backgroundColor: palette.primaryContainer, borderColor: palette.primary }]} />
-          <Text variant="labelMedium" color={palette.onSurfaceVariant}>
+          <Text variant="labelMedium" color={palette.onSurfaceVariant} numberOfLines={1} style={{ flexShrink: 0 }}>
             {t('goesInHand')}
           </Text>
         </View>

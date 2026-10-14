@@ -7,7 +7,7 @@ import { AmountStepper } from '../../../components/AmountStepper';
 import { DateTile } from '../../../components/DateTile';
 import { PackIcons } from '../../../components/PackIcons';
 import { PackTile } from '../../../components/PackTile';
-import { AppBar, Button, IconBadge, spacing, Text } from '../../../design';
+import { animateNextLayout, AppBar, Button, IconBadge, PressScale, ProgressBar, spacing, Text } from '../../../design';
 import { addReceivedQty, findOpenItemByBarcode, OrderItem } from '../../../db/orders';
 import { enqueue } from '../../../db/outbox';
 import { trackExpiry } from '../../../db/expiry';
@@ -380,9 +380,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
                   {t('receivedOfExpected', { received: projected, expected })}
                 </Text>
               </View>
-              <View style={[styles.track, { backgroundColor: palette.surfaceContainerHigh }]}>
-                <View style={{ width: `${Math.round(orderFill * 100)}%`, height: '100%', borderRadius: 4, backgroundColor: mismatch ? palette.error : palette.success }} />
-              </View>
+              <ProgressBar fill={orderFill} color={mismatch ? palette.error : palette.success} track={palette.surfaceContainerHigh} />
               {mismatch ? (
                 <View style={styles.warnRow}>
                   <AlertTriangle size={18} color={palette.error} />
@@ -408,6 +406,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
                 size="md"
                 onPress={() => {
                   setBatches([{ qty, expiry: sortedFirstExpiry(batches) }]);
+                  animateNextLayout();
                   setMultiExpiry(false);
                 }}
               />
@@ -425,6 +424,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
                     <Pressable
                       onPress={() => {
                         const start = smallStep(resolvedPackSize, resolvedUnit) * 10;
+                        animateNextLayout();
                         setLooseSmall(start);
                         setSingle({ qty: smallToPacks(start, resolvedPackSize, resolvedUnit) });
                       }}
@@ -455,6 +455,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
                   />
                   <Pressable
                     onPress={() => {
+                      animateNextLayout();
                       setLooseSmall(null);
                       setSingle({ qty: 1 });
                     }}
@@ -474,7 +475,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
                 {single.expiry === undefined ? (
                   <View style={styles.choiceRow}>
                     <Choice Icon={CalendarDays} label={t('pickExpiry')} onPress={() => setPickingDate(true)} primary />
-                    <Choice Icon={CalendarOff} label={t('noExpiry')} onPress={() => setSingle({ expiry: null })} />
+                    <Choice Icon={CalendarOff} label={t('noExpiry')} onPress={() => { animateNextLayout(); setSingle({ expiry: null }); }} />
                   </View>
                 ) : (
                   <View style={[styles.chosen, { borderColor: palette.outlineVariant }]}>
@@ -494,14 +495,17 @@ export function ReceivingScreen({ route, navigation }: Props) {
                         {t('changeAction')}
                       </Text>
                     </Pressable>
-                    <Pressable onPress={() => setSingle({ expiry: undefined })} hitSlop={10} accessibilityLabel="Clear">
+                    <Pressable onPress={() => { animateNextLayout(); setSingle({ expiry: undefined }); }} hitSlop={10} accessibilityLabel="Clear">
                       <X size={20} color={palette.onSurfaceVariant} />
                     </Pressable>
                   </View>
                 )}
                 {looseSmall === null ? (
                   <Pressable
-                    onPress={() => setMultiExpiry(true)}
+                    onPress={() => {
+                      animateNextLayout();
+                      setMultiExpiry(true);
+                    }}
                     style={[styles.softBtn, { backgroundColor: palette.surfaceContainerLow }]}
                     accessibilityRole="button"
                   >
@@ -579,6 +583,7 @@ export function ReceivingScreen({ route, navigation }: Props) {
           value={single.expiry ? new Date(single.expiry) : null}
           minimumDate={new Date()}
           onSelect={(d) => {
+            animateNextLayout();
             setSingle({ expiry: toISO(d) });
             setPickingDate(false);
           }}
@@ -622,7 +627,8 @@ function Question({ Icon, pic, text }: { Icon?: LucideIcon; pic?: React.ReactNod
 function Choice({ Icon, label, onPress, primary }: { Icon: typeof CalendarDays; label: string; onPress: () => void; primary?: boolean }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressScale
+      to={0.96}
       onPress={() => {
         haptic.tap();
         onPress();
@@ -636,7 +642,7 @@ function Choice({ Icon, label, onPress, primary }: { Icon: typeof CalendarDays; 
       <Text variant="titleMedium" color={primary ? palette.onPrimaryContainer : palette.onSurface} style={{ fontWeight: '600' }}>
         {label}
       </Text>
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -646,7 +652,6 @@ const styles = StyleSheet.create({
   product: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   card: { borderWidth: 1, borderRadius: 18, padding: spacing.lg, gap: spacing.sm },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.md },
-  track: { height: 8, borderRadius: 4, overflow: 'hidden' },
   warnRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   questionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
   questionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
