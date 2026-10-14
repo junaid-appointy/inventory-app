@@ -30,11 +30,17 @@ export function BottomSheet({ visible, onClose, children }: { visible: boolean; 
     Animated.timing(rise, { toValue: 1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [visible, rise, drag]);
 
+  // Drag from the handle area to close. It claims the touch the moment a
+  // finger lands on it: on Android's new architecture a touch nobody claimed
+  // at the start never offers its moves to anyone, so "wait for a downward
+  // move" never fired. Buttons in the sheet are outside this area and keep
+  // working as before.
   const pan = useMemo(
     () =>
       PanResponder.create({
-        // Taps still reach the buttons; only a clear downward drag moves the sheet.
-        onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
         onPanResponderRelease: (_, g) => {
           if (g.dy > CLOSE_DISTANCE || g.vy > CLOSE_VELOCITY) {
@@ -58,7 +64,6 @@ export function BottomSheet({ visible, onClose, children }: { visible: boolean; 
       <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: palette.scrim }]} onPress={onClose} accessibilityLabel="Close" />
       <View style={styles.anchor} pointerEvents="box-none">
         <Animated.View
-          {...pan.panHandlers}
           onLayout={(e) => {
             sheetHeight.current = e.nativeEvent.layout.height;
           }}
@@ -71,7 +76,12 @@ export function BottomSheet({ visible, onClose, children }: { visible: boolean; 
             },
           ]}
         >
-          <View style={styles.grab}>
+          <View
+            {...pan.panHandlers}
+            style={styles.grab}
+            accessibilityRole="adjustable"
+            accessibilityLabel="Drag down to close"
+          >
             <View style={[styles.handle, { backgroundColor: palette.outlineVariant }]} />
           </View>
           {children}
@@ -84,7 +94,7 @@ export function BottomSheet({ visible, onClose, children }: { visible: boolean; 
 const styles = StyleSheet.create({
   anchor: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: spacing.xs, paddingHorizontal: spacing.xl },
-  // Taller than the bar itself so a thumb finds it easily.
-  grab: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.xs },
+  // Much taller than the bar itself so a thumb finds it easily.
+  grab: { alignSelf: 'stretch', alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.lg, marginTop: -spacing.xs },
   handle: { width: 40, height: 4, borderRadius: 2 },
 });

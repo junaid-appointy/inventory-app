@@ -30,7 +30,8 @@ export function StatusChip({ label, tone, Icon }: { label: string; tone: Tone; I
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 }}>
       {I ? <I size={18} color={iconColor} strokeWidth={2.4} /> : null}
-      <Text variant="bodyLarge" color={tone === 'danger' ? palette.error : palette.onSurface}>
+      {/* Android measures Devanagari a little narrow; keep the word on one line. */}
+      <Text variant="bodyLarge" color={tone === 'danger' ? palette.error : palette.onSurface} numberOfLines={1} style={{ flexShrink: 0 }}>
         {label}
       </Text>
     </View>
