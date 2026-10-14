@@ -193,6 +193,8 @@ export type RemoteProduct = {
   category: string | null;
   unit: string | null;
   pack_size: number | null;
+  /** Canonical product the barcode is mapped to (servers from 2026-10). */
+  product_id?: string | null;
 };
 
 export type RemoteCatalogHit = {

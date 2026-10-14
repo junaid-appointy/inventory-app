@@ -4,7 +4,7 @@
  * the registration form. Shared by inventory's scanner and the app-wide
  * Scan button so both decide the same way.
  */
-import { findCanonicalProductByBarcode } from '../../db/catalog';
+import { findCanonicalProductByBarcode, learnBarcode } from '../../db/catalog';
 import { findProduct, upsertProduct } from '../../db/products';
 import type { RootStackParamList } from '../../navigation/types';
 import { api } from '../../sync/api';
@@ -59,6 +59,21 @@ export async function resolveBarcodeRoute(raw: string): Promise<BarcodeRoute> {
         unit: hit.product.unit,
         pack_size: hit.product.pack_size ?? null,
       });
+      const productId = hit.product.product_id;
+      if (productId) {
+        // Remember the mapping so the next scan resolves offline.
+        await learnBarcode(raw, productId, 'server').catch(() => {});
+        return {
+          name: 'Receiving',
+          params: {
+            barcode: raw,
+            productId,
+            productName: hit.product.name,
+            unit: hit.product.unit ?? undefined,
+            packSize: hit.product.pack_size ?? undefined,
+          },
+        };
+      }
       return { name: 'Receiving', params: { barcode: raw, packSize: hit.product.pack_size ?? undefined } };
     }
   } catch {
