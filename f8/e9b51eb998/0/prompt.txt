@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>bzcmdeyjb</task-id>
+<tool-use-id>toolu_01EtTBBj5y9GYbK4CtuxufW6</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-appointy-work-OfficeOperationsUmbrella/8106e3a6-5646-4a4e-8acc-0f2662bf21fb/tasks/bzcmdeyjb.output</output-file>
+<status>completed</status>
+<summary>Background command "Deploy the engine at the exact commit and wait for it" completed (exit code 0)</summary>
+</task-notification>

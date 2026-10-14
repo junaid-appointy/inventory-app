@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "f8e9b51eb998",
+  "strategy": "manual-commit",
+  "branch": "feature/field-rbac",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "src/design/motion.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f8/e9b51eb998/0/metadata.json",
+      "transcript": "/f8/e9b51eb998/0/full.jsonl",
+      "content_hash": "/f8/e9b51eb998/0/content_hash.txt",
+      "prompt": "/f8/e9b51eb998/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 206,
+    "cache_creation_tokens": 118669,
+    "cache_read_tokens": 51974331,
+    "output_tokens": 67817,
+    "api_call_count": 101
+  }
+}
