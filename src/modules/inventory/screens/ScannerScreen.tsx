@@ -272,7 +272,7 @@ export function ScannerScreen({ navigation }: Props) {
       <SafeAreaView edges={['top']} style={styles.topBar}>
         <View style={styles.topBarRow}>
           <IconButton Icon={X} onPress={() => navigation.goBack()} tone="inverse" />
-          <Text variant="titleMedium" color="#fff">
+          <Text variant="titleMedium" color="#fff" numberOfLines={1} style={{ flex: 1, textAlign: 'center' }}>
             {t('scanBarcode')}
           </Text>
           <IconButton

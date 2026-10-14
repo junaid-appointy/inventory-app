@@ -13,6 +13,8 @@ export type OrderItem = {
   order_id: string;
   barcode: string | null;
   product_name: string;
+  /** Canonical product, when the bill line was matched to one. */
+  product_id: string | null;
   expected_qty: number;
   received_qty: number;
 };

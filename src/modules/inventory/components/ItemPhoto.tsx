@@ -24,7 +24,8 @@ export function ItemPhoto({
   uri: string | null;
   onChange: (uri: string | null) => void;
   /** What is in the photo, spoken: "50 packets", "4 kg 800 g". */
-  amount: string;
+  /** What is in the photo; null when it is a single pack. */
+  amount: string | null;
   /** Optional: let the screen open the camera too (e.g. from its main button). */
   cameraOpen?: boolean;
   onCameraOpenChange?: (open: boolean) => void;
@@ -46,7 +47,7 @@ export function ItemPhoto({
             {t('itemPhotoTitle')}
           </Text>
           <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-            {t('itemPhotoHint', { amount })}
+            {amount ? t('itemPhotoHint', { amount }) : t('itemPhotoHintOne')}
           </Text>
         </View>
       </View>
@@ -82,7 +83,7 @@ export function ItemPhoto({
           style={[styles.empty, { borderColor: palette.primary, backgroundColor: palette.primaryContainer }]}
         >
           <CameraIcon size={40} color={palette.onPrimaryContainer} strokeWidth={1.8} />
-          <Text variant="titleMedium" color={palette.onPrimaryContainer} style={{ fontWeight: '700' }}>
+          <Text variant="titleMedium" color={palette.onPrimaryContainer} style={{ fontWeight: '700', alignSelf: 'stretch', textAlign: 'center' }}>
             {t('takeItemPhoto')}
           </Text>
         </Pressable>
@@ -200,7 +201,7 @@ export function CameraSheet({ visible, onClose, onPhoto }: { visible: boolean; o
                   {error}
                 </Text>
               ) : (
-                <Text variant="bodyLarge" color="#FFFFFF" style={{ textAlign: 'center', marginBottom: spacing.md }}>
+                <Text variant="bodyLarge" color="#FFFFFF" style={{ alignSelf: 'stretch', textAlign: 'center', marginBottom: spacing.md }}>
                   {t('photoFrameHint')}
                 </Text>
               )}

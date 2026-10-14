@@ -81,7 +81,7 @@ export function TodayScreen({ navigation }: Props) {
         {attention > 0 ? (
           <View style={{ marginTop: spacing.sm }}>
             <AttentionBanner
-              text={t('itemsNeedAttention', { n: attention })}
+              text={attention === 1 ? t('itemNeedsAttention') : t('itemsNeedAttention', { n: attention })}
               onPress={() => navigation.navigate(lowCount > 0 ? 'Alerts' : 'Outbox')}
             />
           </View>

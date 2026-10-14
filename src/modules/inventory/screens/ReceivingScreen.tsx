@@ -519,7 +519,13 @@ export function ReceivingScreen({ route, navigation }: Props) {
           <ItemPhoto
             uri={photoUri}
             onChange={setPhotoUri}
-            amount={looseSmall !== null ? formatSmall(looseSmall, resolvedUnit) : formatAmount(qty, resolvedPackSize, resolvedUnit)}
+            amount={
+              looseSmall !== null
+                ? formatSmall(looseSmall, resolvedUnit)
+                : qty === 1
+                  ? null
+                  : formatAmount(qty, resolvedPackSize, resolvedUnit)
+            }
             cameraOpen={cameraOpen}
             onCameraOpenChange={setCameraOpen}
           />

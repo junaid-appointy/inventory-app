@@ -33,6 +33,7 @@ export function shelfText(t: T, totalSmall: number, perPack: number, unit: strin
   const closed = Math.floor(total / perPack);
   const open = total - closed * perPack;
   const count = closedPacksText(t, closed);
+  if (open > 0 && closed === 0) return t('onlyOpenPackHas', { amount: formatSmall(open, unit) });
   return open > 0 ? t('openPackHas', { count, amount: formatSmall(open, unit) }) : count;
 }
 

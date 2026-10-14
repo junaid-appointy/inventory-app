@@ -517,6 +517,7 @@ export function DispenseScreen({ route, navigation }: Props) {
   // Closed packs left after the loose amount has opened what it needs.
   const maxClosed = Math.max(0, plan.sealed - Math.ceil(Math.max(0, looseTake - plan.open) / perPack));
   const canTakeClosed = closedTake < maxClosed;
+  const hasClosed = plan.sealed > 0 || closedTake > 0;
   const step = smallStep(selected.pack_size, selected.unit);
   const quick = shape === 'measurePack' ? quickAmounts(selected.pack_size, selected.unit).filter((v) => v <= maxLoose) : [];
   const small = smallUnit(selected.unit);
@@ -613,7 +614,7 @@ export function DispenseScreen({ route, navigation }: Props) {
                   {t('onTheShelf')}
                 </Text>
                 {isSingle ? (
-                  <SingleShelf Icon={Icon} count={available} taking={closedTake} legend />
+                  <SingleShelf Icon={Icon} count={available} taking={closedTake} legend={totalTaken > 0} />
                 ) : (
                   <PackShelf
                     Icon={Icon}
@@ -624,7 +625,8 @@ export function DispenseScreen({ route, navigation }: Props) {
                     looseTaken={looseTake}
                     onTakeClosed={canTakeClosed ? () => setClosed(closedTake + 1) : undefined}
                     onReturnClosed={() => setClosed(Math.max(0, closedTake - 1))}
-                    legend
+                    // The purple key only means something once purple is on screen.
+                    legend={totalTaken > 0}
                   />
                 )}
               </View>
@@ -650,6 +652,9 @@ export function DispenseScreen({ route, navigation }: Props) {
                     </View>
                   ) : (
                     <View style={[styles.counters, { borderColor: palette.outlineVariant }]}>
+                      {/* No closed pack on the shelf: no counter that could only say 0. */}
+                      {hasClosed ? (
+                      <>
                       <HandCounter
                         tile={<PackTile kind="closed" Icon={Icon} size="sm" />}
                         title={t('closedPacksTitle')}
@@ -660,6 +665,8 @@ export function DispenseScreen({ route, navigation }: Props) {
                         unitLabel={t(closedTake === 1 ? 'packOne' : 'packMany')}
                       />
                       <View style={[styles.counterRule, { backgroundColor: palette.outlineVariant }]} />
+                      </>
+                      ) : null}
                       <HandCounter
                         tile={<PackTile kind="open" Icon={Icon} size="sm" fill={0.5} />}
                         title={t('fromOpenPackTitle')}
