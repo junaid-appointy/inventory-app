@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "ca03cef5899a",
+  "strategy": "manual-commit",
+  "branch": "feature/field-rbac",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/StaffAvatar.tsx",
+    "src/modules/visitor/api.ts",
+    "src/modules/visitor/screens/ExpectedScreen.tsx",
+    "src/modules/visitor/screens/OnSiteScreen.tsx",
+    "src/modules/visitor/screens/StaffInOutScreen.tsx",
+    "src/modules/visitor/screens/WalkInScreen.tsx",
+    "src/modules/visitor/staffDirectory.ts",
+    "src/utils/nameMatch.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ca/03cef5899a/0/metadata.json",
+      "transcript": "/ca/03cef5899a/0/full.jsonl",
+      "content_hash": "/ca/03cef5899a/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 96,
+    "cache_creation_tokens": 56898,
+    "cache_read_tokens": 37759046,
+    "output_tokens": 38595,
+    "api_call_count": 48
+  }
+}
