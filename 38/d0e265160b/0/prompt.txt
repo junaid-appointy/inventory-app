@@ -1,0 +1,5 @@
+can we add ota update possibility in the our app? with all the possible sensor permission becuase right now it wont be on playstore, I will share the apk directly. later we may register in play store and app store.
+
+---
+
+continue

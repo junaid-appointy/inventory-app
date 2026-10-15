@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "38d0e265160b",
+  "strategy": "manual-commit",
+  "branch": "feature/field-rbac",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/updates/UpdateBanner.tsx",
+    "src/updates/ota.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/38/d0e265160b/0/metadata.json",
+      "transcript": "/38/d0e265160b/0/full.jsonl",
+      "content_hash": "/38/d0e265160b/0/content_hash.txt",
+      "prompt": "/38/d0e265160b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 40,
+    "cache_creation_tokens": 29823,
+    "cache_read_tokens": 13443241,
+    "output_tokens": 19282,
+    "api_call_count": 21
+  }
+}
