@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.7.6",
+  "checkpoint_id": "6e093ed5492a",
+  "strategy": "manual-commit",
+  "branch": "feature/field-rbac",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/components/OfflineBanner.tsx",
+    "src/db/database.ts",
+    "src/db/outbox.ts",
+    "src/i18n/strings.ts",
+    "src/modules/inventory/screens/OutboxScreen.tsx",
+    "src/modules/visitor/offline.ts",
+    "src/modules/visitor/screens/StaffInOutScreen.tsx",
+    "src/modules/visitor/screens/WalkInScreen.tsx",
+    "src/modules/visitor/staffDirectory.ts",
+    "src/navigation/RootNavigator.tsx",
+    "src/navigation/navigationRef.ts",
+    "src/sync/api.ts",
+    "src/sync/syncService.ts",
+    "src/sync/unsent.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6e/093ed5492a/0/metadata.json",
+      "transcript": "/6e/093ed5492a/0/full.jsonl",
+      "content_hash": "/6e/093ed5492a/0/content_hash.txt",
+      "prompt": "/6e/093ed5492a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 328,
+    "cache_creation_tokens": 1286792,
+    "cache_read_tokens": 81762291,
+    "output_tokens": 152172,
+    "api_call_count": 165
+  }
+}

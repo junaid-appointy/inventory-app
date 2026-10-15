@@ -1,0 +1,1 @@
+can we improve the UI and UX of form and list in inventory tab, like make adding an item to an order easy to understand and use. and also good to look at.
