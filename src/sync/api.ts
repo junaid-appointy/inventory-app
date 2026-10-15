@@ -182,6 +182,8 @@ export type RemoteStockRow = {
   nearest_expiry?: string | null;
   /** Free-text shelf label set by an admin in ops-dashboard. */
   location?: string | null;
+  /** Alerts only: someone already asked for it to be reordered. */
+  reorder_open?: boolean;
   /** Level at the last receipt or stocktake. Null until either happens. */
   opening_qty?: number | null;
 };

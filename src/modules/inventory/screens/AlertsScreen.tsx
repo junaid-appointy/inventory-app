@@ -18,6 +18,7 @@ import { useT } from '../../../i18n';
 import { useCan } from '../../../auth';
 import { RootStackParamList } from '../../../navigation/types';
 import { flushOnce } from '../../../sync/syncService';
+import { api } from '../../../sync/api';
 import { haptic } from '../../../utils/haptics';
 import { useTheme } from '../../../theme';
 import { onCacheStateChange, useCacheStatus } from '../../../sync/cacheStatus';
@@ -31,6 +32,9 @@ export function AlertsScreen({ navigation }: Props) {
   const { palette } = useTheme();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [requested, setRequested] = useState<Set<string>>(new Set());
+  // Items someone (on any phone) already asked for, from the server, so
+  // "Request sent" survives a reload instead of offering the button again.
+  const [openOnServer, setOpenOnServer] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   // False until the first local read resolves — stops the "All stocked
   // up" empty state flashing before readLocal() returns.
@@ -47,6 +51,8 @@ export function AlertsScreen({ navigation }: Props) {
   const fetchRemote = useCallback(async () => {
     await flushOnce().catch(() => {});
     await pullStockIntoCache();
+    const alerts = await api.fetch.alerts().catch(() => null);
+    if (alerts) setOpenOnServer(new Set(alerts.filter((a) => a.reorder_open).map((a) => a.barcode)));
   }, []);
 
   const readLocal = useCallback(async () => {
@@ -128,7 +134,7 @@ export function AlertsScreen({ navigation }: Props) {
           const status = statusFor(item);
           const isOut = status === 'out';
           const label = isOut ? t('outStock') : t('lowStock');
-          const done = requested.has(item.barcode);
+          const done = requested.has(item.barcode) || openOnServer.has(item.barcode);
           // Design: red bg for OUT, amber bg for LOW
           const alertCardBg = isOut ? '#FFEBEE' : '#FFF8E1';
           // Bold pill: solid red/amber bg
