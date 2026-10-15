@@ -1,0 +1,1 @@
+what happens when we press on reorder, I do not see the notification on the admin dashboard, nor in the inventory tab. also I should not see that option if I do not have the permission to reorder.
