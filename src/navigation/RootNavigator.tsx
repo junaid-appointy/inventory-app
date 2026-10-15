@@ -1,6 +1,6 @@
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useAuth, useCan } from '../auth';
 import { OfflineBanner } from '../components/OfflineBanner';
@@ -13,6 +13,7 @@ import { SettingsScreen } from '../modules/inventory/screens/SettingsScreen';
 import { ScanScreen } from './ScanScreen';
 import { TodayScreen } from './TodayScreen';
 import { NoAccessScreen } from './NoAccessScreen';
+import { navigationRef } from './navigationRef';
 
 const Stack = createNativeStackNavigator();
 
@@ -21,6 +22,7 @@ const HUB_ROUTES = new Set(['Today', 'Home', 'GateHome', 'Settings']);
 export function RootNavigator() {
   const { palette } = useTheme();
   const { session, ready } = useAuth();
+  const [route, setRoute] = useState<string | undefined>();
 
   const navTheme = {
     ...DefaultTheme,
@@ -56,8 +58,17 @@ export function RootNavigator() {
           screen shows it without needing to wire it locally. Zero
           height when online (no layout shift). */}
       <View style={{ flex: 1 }}>
-        <OfflineBanner />
-        <NavigationContainer theme={navTheme}>
+        <OfflineBanner
+          // Not on the list itself, and not before anyone has signed in.
+          showUnsent={!!session && screens.length > 0 && route !== 'Outbox'}
+          onUnsentPress={() => navigationRef.isReady() && navigationRef.navigate('Outbox')}
+        />
+        <NavigationContainer
+          ref={navigationRef}
+          theme={navTheme}
+          onReady={() => setRoute(navigationRef.getCurrentRoute()?.name)}
+          onStateChange={() => setRoute(navigationRef.getCurrentRoute()?.name)}
+        >
           <Stack.Navigator
             screenOptions={{
               headerShown: false,

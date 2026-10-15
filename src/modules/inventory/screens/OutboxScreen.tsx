@@ -1,41 +1,18 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CheckCheck, CheckCircle2, Circle, CircleCheckBig, MessageCircle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { AppBar, Button, Card, Skeleton, spacing, StatusPill, Text } from '../../../design';
+import { Alert, FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { AppBar, Button, ListRow, RowDivider, SectionHeader, Skeleton, spacing, Text } from '../../../design';
 import { getDb } from '../../../db/database';
-import { INTERNAL_OUTBOX_KINDS, OutboxRow, requeueRejected } from '../../../db/outbox';
+import { INTERNAL_OUTBOX_KINDS, markShared, OutboxRow, requeueRejected, UNSENT_STATUSES } from '../../../db/outbox';
 import { useT } from '../../../i18n';
-import { StringKey, TParams } from '../../../i18n/strings';
 import { RootStackParamList } from '../../../navigation/types';
-import { flushOnce, getLastSyncAt } from '../../../sync/syncService';
+import { flushOnce, onPendingChange } from '../../../sync/syncService';
+import { describeRow, isShareable, rowTime, shareText } from '../../../sync/unsent';
 import { useTheme } from '../../../theme';
+import { haptic } from '../../../utils/haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Outbox'>;
-
-/** Translator function shape, threaded into the module-level helpers so
- *  their output follows the active language. */
-type TFn = (key: StringKey, params?: TParams) => string;
-
-const STATUS_LABEL_KEY: Record<string, StringKey> = {
-  queued: 'statusWaiting',
-  sending: 'statusSending',
-  failed: 'statusFailed',
-  applied_with_adjustment: 'statusAdjusted',
-  superseded_by_count: 'statusCounted',
-  rejected: 'statusNotAllowed',
-};
-
-const TONE: Record<string, 'warn' | 'danger' | 'neutral'> = {
-  sending: 'warn',
-  failed: 'danger',
-  // The server refused it for lack of permission: the person must act.
-  rejected: 'danger',
-  queued: 'neutral',
-  // An adjustment is information, not a failure. The guard did nothing
-  // wrong: they recorded what happened and the system's number was off.
-  applied_with_adjustment: 'warn',
-  superseded_by_count: 'neutral',
-};
 
 /**
  * Statuses that need no telling. A write that landed exactly as recorded
@@ -44,269 +21,222 @@ const TONE: Record<string, 'warn' | 'danger' | 'neutral'> = {
  */
 const SILENT_STATUSES = ['sent', 'applied'] as const;
 
-/** Parse payload JSON to produce a human-readable description */
-function describeItem(kind: string, payloadStr: string, t: TFn): string {
-  try {
-    const p = JSON.parse(payloadStr);
-    const name = p.product_name ?? p.name ?? '';
-    const qty = p.qty ?? '';
-    switch (kind) {
-      case 'receipt':
-        return t('descReceived', { qty, name }).trim();
-      case 'product_registration':
-        return t('descNewProduct', { name }).trim();
-      case 'issue':
-      case 'dispense':
-        return t('descDispensed', { qty, name }).trim();
-      case 'reorder_request':
-        return t('descReorder', { name }).trim();
-      case 'mismatch_flag':
-        return t('descMismatch', { received: p.received_total ?? '?', expected: p.expected ?? '?' });
-      case 'item_photo':
-        return t('descItemPhoto');
-      case 'visitor_event': {
-        const who = p.visitorName ?? '';
-        if (p.eventType === 'checkout') return t('descVisitorExit', { name: who }).trim();
-        if (p.eventType === 'manual_checkin') return t('descVisitorWalkIn', { name: who }).trim();
-        return t('descVisitorCheckIn', { name: who || p.qrToken || '' }).trim();
-      }
-      default:
-        return t('descInventoryUpdate');
-    }
-  } catch {
-    return t('descInventoryUpdate');
-  }
-}
-
-function timeAgo(ts: number, t: TFn): string {
-  const diff = Date.now() - ts;
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return t('justNow');
-  if (minutes < 60) return t('minAgo', { n: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t('hourAgo', { n: hours });
-  return t('dayAgo', { n: Math.floor(hours / 24) });
-}
-
+/**
+ * "Not sent yet": everything saved on this phone that the server has not
+ * taken, in one plain list. When the server cannot be reached the person
+ * ticks what to tell the office and forwards it on WhatsApp, the same way
+ * they forward any message. The rows still go to the server by themselves
+ * when it is back, and then leave this list.
+ *
+ * Below them, rows the server took with a note worth reading (a count was
+ * corrected, a staff mark needs a look), until the person leaves.
+ */
 export function OutboxScreen({ navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
-  const [rows, setRows] = useState<OutboxRow[]>([]);
+  const [unsent, setUnsent] = useState<OutboxRow[]>([]);
+  const [noted, setNoted] = useState<OutboxRow[]>([]);
+  // Unticked by the person; everything else not yet shared is ticked.
+  const [unticked, setUnticked] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const db = await getDb();
-
-    // Drop the rows with nothing to report. What survives is either
-    // still in flight, stuck, or landed with something the user should
-    // know — the adjusted ones stay until the queue is cleared.
     const silent = SILENT_STATUSES.map(() => '?').join(',');
-    await db.runAsync(
-      `DELETE FROM outbox WHERE status IN (${silent})`,
-      SILENT_STATUSES as unknown as string[],
+    await db.runAsync(`DELETE FROM outbox WHERE status IN (${silent})`, SILENT_STATUSES as unknown as string[]);
+    const hidden = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
+    const rows = await db.getAllAsync<OutboxRow>(
+      `SELECT * FROM outbox WHERE status NOT IN (${silent}) AND kind NOT IN (${hidden})
+       ORDER BY created_at DESC LIMIT 200`,
+      [...(SILENT_STATUSES as unknown as string[]), ...(INTERNAL_OUTBOX_KINDS as string[])],
     );
-
-    const hiddenList = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
-    setRows(
-      await db.getAllAsync<OutboxRow>(
-        `SELECT * FROM outbox
-         WHERE status NOT IN (${silent}) AND kind NOT IN (${hiddenList})
-         ORDER BY CASE status WHEN 'rejected' THEN 0 WHEN 'failed' THEN 1 WHEN 'sending' THEN 2 ELSE 3 END, created_at DESC
-         LIMIT 200`,
-        [...(SILENT_STATUSES as unknown as string[]), ...(INTERNAL_OUTBOX_KINDS as string[])],
-      ),
-    );
-    setInitialLoading(false);
+    setUnsent(rows.filter((r) => UNSENT_STATUSES.includes(r.status)));
+    setNoted(rows.filter((r) => !UNSENT_STATUSES.includes(r.status) && r.server_note));
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+    // Rows leave on their own as the server takes them.
+    return onPendingChange(() => void load());
   }, [load]);
 
-  const failedCount = useMemo(() => rows.filter((r) => r.status === 'failed').length, [rows]);
+  const isTicked = useCallback(
+    (row: OutboxRow) => isShareable(row) && !row.shared_at && !unticked.has(row.id),
+    [unticked],
+  );
+  // A shared row stays unticked unless the person ticks it again.
+  const [reticked, setReticked] = useState<Set<string>>(new Set());
+  const ticked = useMemo(
+    () => unsent.filter((r) => isTicked(r) || (isShareable(r) && reticked.has(r.id))),
+    [isTicked, reticked, unsent],
+  );
 
-  const lastSyncAt = getLastSyncAt();
-
-  const clearQueue = () => {
-    if (rows.length === 0) return;
-    Alert.alert(
-      t('clearQueueConfirm'),
-      t('clearQueueBody', { count: rows.length }),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('clearBtn'),
-          style: 'destructive',
-          onPress: async () => {
-            const db = await getDb();
-            const silent = SILENT_STATUSES.map(() => '?').join(',');
-            await db.runAsync(
-              `DELETE FROM outbox WHERE status NOT IN (${silent})`,
-              SILENT_STATUSES as unknown as string[],
-            );
-            await load();
-            setSyncResult(t('queueCleared'));
-          },
-        },
-      ],
-    );
+  const toggle = (row: OutboxRow) => {
+    haptic.tap();
+    const on = ticked.includes(row);
+    const flip = (s: Set<string>, id: string, add: boolean) => {
+      const next = new Set(s);
+      if (add) next.add(id);
+      else next.delete(id);
+      return next;
+    };
+    if (row.shared_at) setReticked((s) => flip(s, row.id, !on));
+    else setUnticked((s) => flip(s, row.id, on));
   };
 
-  const sync = async () => {
+  const share = async () => {
+    if (ticked.length === 0) return;
+    const result = await Share.share({ message: shareText(ticked, t) }).catch(() => null);
+    if (result?.action === Share.sharedAction) {
+      await markShared(ticked.map((r) => r.id));
+      setReticked(new Set());
+      haptic.success();
+      await load();
+    }
+  };
+
+  const tryAgain = async () => {
     setBusy(true);
-    setSyncResult(null);
     try {
       // A tap here is the person saying "try again", e.g. after a
       // supervisor gave them access. Background ticks never retry these.
       await requeueRejected();
-      const result = await flushOnce();
-      await load();
-      if (result.sent > 0 || result.failed > 0) {
-        setSyncResult(
-          result.failed > 0
-            ? t('syncedCountFailed', { sent: result.sent, failed: result.failed })
-            : t('syncedCount', { sent: result.sent }),
-        );
-      } else {
-        setSyncResult(t('allSynced'));
-      }
+      await flushOnce();
     } catch {
-      setSyncResult(t('syncFailedConn'));
+      // Still offline; the rows stay and say so.
     } finally {
+      await load();
       setBusy(false);
     }
+  };
+
+  const notAllowed = unsent.filter((r) => r.status === 'rejected');
+  const removeNotAllowed = () => {
+    Alert.alert(t('clearQueueConfirm'), t('clearQueueBody', { count: notAllowed.length }), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('clearBtn'),
+        style: 'destructive',
+        onPress: async () => {
+          const db = await getDb();
+          await db.runAsync(`DELETE FROM outbox WHERE status = 'rejected'`);
+          await load();
+        },
+      },
+    ]);
+  };
+
+  const renderUnsent = ({ item }: { item: OutboxRow }) => {
+    const shareable = isShareable(item);
+    const on = ticked.includes(item);
+    const sub = [
+      rowTime(item),
+      !shareable ? t('photoSendsItself') : null,
+      item.status === 'rejected' ? t('rejectedShort') : null,
+    ].filter(Boolean).join('  ·  ');
+    return (
+      <ListRow
+        leading={
+          !shareable ? (
+            <Circle size={26} color={palette.outlineVariant} />
+          ) : on ? (
+            <CheckCircle2 size={26} color={palette.primary} />
+          ) : (
+            <Circle size={26} color={palette.onSurfaceVariant} />
+          )
+        }
+        title={describeRow(item, t)}
+        subtitle={sub}
+        trailing={item.shared_at ? <CheckCheck size={20} color={palette.success} accessibilityLabel={t('sentOnWhatsapp')} /> : undefined}
+        onPress={shareable ? () => toggle(item) : undefined}
+        showChevron={false}
+      />
+    );
   };
 
   return (
     <View style={[styles.safe, { backgroundColor: palette.background }]}>
       <AppBar title={t('syncQueue')} onBack={() => navigation.goBack()} />
 
-      {/* Status bar */}
-      <View style={styles.statusBar}>
-        <Text variant="bodyMedium" color={palette.onSurfaceVariant}>
-          {rows.length === 0
-            ? t('allSynced')
-            : t('itemsWaiting', { count: rows.length })}
-          {failedCount > 0 ? ` · ${t('nFailed', { count: failedCount })}` : ''}
-          {lastSyncAt ? `  ·  ${t('lastSync', { time: timeAgo(lastSyncAt, t) })}` : ''}
-        </Text>
-        {syncResult && (
-          <Text
-            variant="bodyMedium"
-            color={failedCount > 0 ? palette.error : palette.primary}
-          >
-            {syncResult}
-          </Text>
-        )}
-      </View>
-
-      {initialLoading && rows.length === 0 ? (
-        <View style={styles.list}>
+      {loading ? (
+        <View style={styles.pad}>
           {[0, 1, 2].map((i) => (
-            <View key={i} style={{ marginBottom: spacing.sm }}>
-              <Card tone="filled" padding="lg">
-                <View style={styles.rowHead}>
-                  <Skeleton width="40%" height={18} />
-                  <Skeleton width={64} height={20} rounded="pill" />
-                </View>
-                <View style={{ height: spacing.xs }} />
-                <Skeleton width="65%" height={14} />
-              </Card>
-            </View>
+            <Skeleton key={i} height={56} style={{ marginBottom: spacing.md }} />
           ))}
         </View>
       ) : (
-      <FlatList
-        data={rows}
-        keyExtractor={(r) => r.id}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={busy} onRefresh={sync} tintColor={palette.primary} />}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        renderItem={({ item }) => (
-          <Card tone="filled" padding="lg">
-            <View style={styles.rowHead}>
-              <Text variant="titleMedium" style={{ flex: 1 }}>
-                {describeItem(item.kind, item.payload, t)}
+        <FlatList
+          data={unsent}
+          keyExtractor={(r) => r.id}
+          renderItem={renderUnsent}
+          ItemSeparatorComponent={RowDivider}
+          refreshControl={<RefreshControl refreshing={busy} onRefresh={tryAgain} tintColor={palette.primary} />}
+          contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+          ListHeaderComponent={
+            unsent.length > 0 ? (
+              <Text variant="bodyLarge" color={palette.onSurfaceVariant} style={styles.pad}>
+                {t('unsentHelp')}
               </Text>
-              <StatusPill
-                label={STATUS_LABEL_KEY[item.status] ? t(STATUS_LABEL_KEY[item.status]) : item.status}
-                tone={TONE[item.status] ?? 'neutral'}
-              />
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <CircleCheckBig size={48} color={palette.success} />
+              <Text variant="headlineSmall" style={{ textAlign: 'center', marginTop: spacing.md }}>
+                {t('allSynced')}
+              </Text>
             </View>
-            <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: spacing.xs }}>
-              {timeAgo(item.created_at, t)}
-              {item.attempts > 0 ? ` · ${t('nAttempts', { count: item.attempts })}` : ''}
-            </Text>
-            {item.status === 'rejected' ? (
-              <Text variant="bodyMedium" color={palette.error} style={{ marginTop: spacing.xs }}>
-                {t('rejectedHelp')}
-              </Text>
-            ) : null}
-            {/* The server's own sentence about what became of this row.
-                One plain statement, never a question — if something needs
-                a human it arrives as a recount task, not a prompt here. */}
-            {item.server_note ? (
-              <Text variant="bodyMedium" color={palette.onSurface} style={{ marginTop: spacing.xs }}>
-                {item.server_note}
-              </Text>
-            ) : null}
-            {item.last_error ? (
-              <Text variant="bodyMedium" color={palette.error} style={{ marginTop: spacing.xs }} numberOfLines={2}>
-                {item.last_error}
-              </Text>
-            ) : null}
-          </Card>
-        )}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text variant="headlineSmall" style={{ textAlign: 'center' }}>
-              {t('allSynced')}
-            </Text>
-            <Text
-              variant="bodyLarge"
-              color={palette.onSurfaceVariant}
-              style={{ textAlign: 'center', marginTop: spacing.sm }}
-            >
-              {t('everythingSent')}
-            </Text>
-          </View>
-        }
-      />
+          }
+          ListFooterComponent={
+            noted.length > 0 ? (
+              <View style={{ marginTop: spacing.lg }}>
+                <SectionHeader title={t('savedWithNote')} />
+                {noted.map((row) => (
+                  <View key={row.id} style={styles.note}>
+                    <Text variant="titleMedium" style={{ fontWeight: '600' }}>
+                      {describeRow(row, t)}
+                    </Text>
+                    {/* The server's own sentence, in full: it is the news. */}
+                    <Text variant="bodyMedium" color={palette.onSurfaceVariant} style={{ marginTop: 2 }}>
+                      {row.server_note}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null
+          }
+        />
       )}
-      <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
-        <Button label={t('syncNow')} onPress={sync} loading={busy} size="lg" fullWidth />
-        {rows.length > 0 ? (
-          <View style={{ height: spacing.sm }} />
-        ) : null}
-        {rows.length > 0 ? (
+
+      {unsent.length > 0 ? (
+        <View style={[styles.footer, { backgroundColor: palette.surface, borderTopColor: palette.outlineVariant }]}>
           <Button
-            label={t('clearQueue')}
-            onPress={clearQueue}
-            variant="tonal"
-            size="md"
+            label={t('sendOnWhatsapp', { n: ticked.length })}
+            Icon={MessageCircle}
+            onPress={() => void share()}
+            disabled={ticked.length === 0}
+            size="lg"
             fullWidth
           />
-        ) : null}
-      </View>
+          <View style={styles.secondary}>
+            <Button label={t('tryAgain')} variant="text" size="md" onPress={() => void tryAgain()} loading={busy} />
+            {notAllowed.length > 0 ? (
+              <Button label={t('removeNotAllowed')} variant="text" size="md" onPress={removeNotAllowed} />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  statusBar: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.xs,
-  },
-  list: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  rowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  empty: { padding: spacing.xxl },
-  footer: {
-    padding: spacing.xl,
-    borderTopWidth: 1,
-  },
+  pad: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  empty: { padding: spacing.xxl, alignItems: 'center' },
+  footer: { padding: spacing.xl, borderTopWidth: 1 },
+  note: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  secondary: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginTop: spacing.xs },
 });
-

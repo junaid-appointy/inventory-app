@@ -191,11 +191,11 @@ export async function flushOnce(opts?: { pullReads?: boolean }): Promise<{ sent:
         // Older server builds return neither; markSent falls back to
         // the plain 'sent' status in that case.
         const ack = (await dispatch(JSON.parse(row.payload))) as
-          | { status?: string | null; note?: string | null }
+          | { status?: string | null; note?: string | null; message?: string | null }
           | undefined;
         await markSent(row.id, {
           status: ack?.status ?? null,
-          note: ack?.note ?? null,
+          note: ack?.note ?? ack?.message ?? null,
         });
         sent++;
         for (const k of POST_WRITE_INVALIDATES[row.kind]) touched.add(k);

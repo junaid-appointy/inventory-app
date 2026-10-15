@@ -376,6 +376,18 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(`PRAGMA user_version = 12;`);
     version = 12;
   }
+
+  if (version < 13) {
+    // When the person forwarded this row on WhatsApp while the server was
+    // unreachable. Only drives the double tick on the "Not sent yet"
+    // screen; the server never sees it.
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(outbox)');
+    if (!cols.some((c) => c.name === 'shared_at')) {
+      await db.execAsync(`ALTER TABLE outbox ADD COLUMN shared_at INTEGER;`);
+    }
+    await db.execAsync(`PRAGMA user_version = 13;`);
+    version = 13;
+  }
 }
 
 export function now(): number {

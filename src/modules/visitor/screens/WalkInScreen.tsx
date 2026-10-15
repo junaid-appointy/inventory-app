@@ -8,11 +8,10 @@ import type { StringKey } from '../../../i18n/strings';
 import type { RootStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
-import { visitorApi } from '../api';
 import { StaffAvatar } from '../../../components/StaffAvatar';
 import { rankByName } from '../../../utils/nameMatch';
 import { useStaffDirectory } from '../staffDirectory';
-import { queueVisitorEvent } from '../offline';
+import { recordGateEvent } from '../offline';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WalkIn'>;
 
@@ -64,25 +63,15 @@ export function WalkInScreen({ navigation }: Props) {
 
     setSaving(true);
     const input = { visitor_name: visitorName, phone: phone.trim() || undefined, purpose: purposeText, host: hostName || undefined };
-    const res = await visitorApi.manualEntry(input);
-    setSaving(false);
-    if (res.offline) {
-      await queueVisitorEvent({
-        eventType: 'manual_checkin',
-        visitorName,
-        phone: input.phone,
-        purpose: purposeText,
-        hostName: input.host,
-      });
-      setDone(t('savedForLater'));
-    } else if (res.ok) {
+    try {
+      const sent = await recordGateEvent({ eventType: 'manual_checkin', visitorName, phone: input.phone, purpose: purposeText, hostName: input.host });
       haptic.success();
-      setDone(t('walkInDone', { name: visitorName }));
-    } else {
+      setDone(sent ? t('walkInDone', { name: visitorName }) : t('savedForLater'));
+    } catch (error) {
       haptic.error();
-      setError(res.data?.error ?? t('somethingWrong'));
+      setError(error instanceof Error ? error.message : t('somethingWrong'));
       return;
-    }
+    } finally { setSaving(false); }
     // Ready for the next visitor; keep the purpose they were using.
     setName('');
     setPhone('');

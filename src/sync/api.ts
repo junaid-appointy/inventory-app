@@ -68,7 +68,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   let res: Response;
   try {
-    res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), isForm ? 120_000 : 15_000);
+    try { res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers, signal: init?.signal ?? controller.signal }); }
+    finally { clearTimeout(timeout); }
   } catch (err) {
     // Network-layer failure (DNS, socket, no route). The radio is likely
     // down — let the network monitor know so the banner flips quickly.
@@ -101,7 +104,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type RawResult<T> =
   | { ok: boolean; status: number; data: T | null; offline: false }
-  | { ok: false; status: 0; data: null; offline: true };
+  | { ok: false; status: number; data: T | null; offline: true };
 
 /**
  * Like `request`, but never throws on an HTTP error: returns the status and
@@ -123,7 +126,10 @@ export async function requestRaw<T>(path: string, init?: RequestInit): Promise<R
   if (sentToken) headers['X-Guard-Token'] = sentToken;
   let res: Response;
   try {
-    res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try { res = await fetch(`${config.apiBaseUrl}${path}`, { ...init, headers, signal: init?.signal ?? controller.signal }); }
+    finally { clearTimeout(timeout); }
   } catch {
     markApiNetworkError();
     return { ok: false, status: 0, data: null, offline: true };
@@ -131,6 +137,7 @@ export async function requestRaw<T>(path: string, init?: RequestInit): Promise<R
   markApiSuccess();
   if (res.status === 401 && sentToken) void clearSession().catch(() => {});
   const data = (await res.json().catch(() => null)) as T | null;
+  if (res.status >= 500) return { ok: false, status: res.status, data, offline: true };
   return { ok: res.ok, status: res.status, data, offline: false };
 }
 

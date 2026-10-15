@@ -41,6 +41,7 @@ export type OutboxKind =
  *                                lost.
  */
 export type OutboxStatus =
+  | 'needs_review'
   | 'queued'
   | 'sending'
   | 'sent'
@@ -56,6 +57,7 @@ export const TERMINAL_OUTBOX_STATUSES: readonly OutboxStatus[] = [
   'applied',
   'applied_with_adjustment',
   'superseded_by_count',
+  'needs_review',
 ];
 
 export type OutboxRow = {
@@ -67,6 +69,8 @@ export type OutboxRow = {
   last_error: string | null;
   /** Plain-language sentence from the server about what happened. */
   server_note: string | null;
+  /** When it was forwarded on WhatsApp from the "Not sent yet" screen. */
+  shared_at: number | null;
   created_at: number;
   updated_at: number;
 };
@@ -246,4 +250,51 @@ export async function itemPhotosOnPhone(): Promise<Map<string, OutboxStatus>> {
     }
   }
   return out;
+}
+
+/** Not yet accepted by the server: what the "Not sent yet" screen lists. */
+export const UNSENT_STATUSES: readonly OutboxStatus[] = ['queued', 'sending', 'failed', 'rejected'];
+
+/**
+ * How many rows are still waiting to reach the server, and since when. The
+ * oldest time tells "still sending" apart from "the server is not taking
+ * anything". Refused rows are left out: the server was reached, and they
+ * have their own warning.
+ */
+export async function unsentSummary(): Promise<{ count: number; oldestAt: number | null }> {
+  const db = await getDb();
+  const hidden = INTERNAL_OUTBOX_KINDS.map(() => '?').join(',');
+  const row = await db.getFirstAsync<{ c: number; oldest: number | null }>(
+    `SELECT COUNT(*) AS c, MIN(created_at) AS oldest FROM outbox
+     WHERE status IN ('queued', 'sending', 'failed') AND kind NOT IN (${hidden}, 'item_photo')`,
+    INTERNAL_OUTBOX_KINDS as string[],
+  );
+  return { count: row?.c ?? 0, oldestAt: row?.oldest ?? null };
+}
+
+/** Remember that these rows were forwarded on WhatsApp. */
+export async function markShared(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE outbox SET shared_at = ? WHERE id IN (${ids.map(() => '?').join(',')})`,
+    [now(), ...ids],
+  );
+}
+
+/**
+ * Wait briefly for one row to leave the queue, so a screen can say
+ * "done" when the server took it at once, or "saved for later" when not.
+ */
+export async function waitUntilSent(id: string, ms = 6000): Promise<boolean> {
+  const db = await getDb();
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const row = await db.getFirstAsync<{ status: OutboxStatus }>('SELECT status FROM outbox WHERE id = ?', [id]);
+    if (!row) return true;
+    if (!UNSENT_STATUSES.includes(row.status)) return true;
+    if (row.status === 'failed' || row.status === 'rejected') return false;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
 }
