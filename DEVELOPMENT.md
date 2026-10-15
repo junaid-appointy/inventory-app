@@ -414,6 +414,36 @@ npx eas submit --platform android --latest
 
 That's a separate flow from development — covered when we get there.
 
+### Sharing APKs and over-the-air (OTA) updates
+
+Until the app is on the Play Store, staff install a **preview APK** that we share directly:
+
+```bash
+npx eas build --profile preview --platform android   # APK pointed at the live engine
+```
+
+After that, most changes reach every installed APK **without sharing a new APK**:
+
+```bash
+npm run ota -- "Fix take out steps"            # preview channel (shared APKs)
+npm run ota -- "Fix take out steps" production  # store builds, later
+```
+
+The app checks on launch and whenever it comes back to the foreground (at most every 30 minutes), downloads in the background, then shows a "new version is ready" banner. One tap restarts into it; otherwise it applies the next time the app starts. Settings shows the running version and has "Check for updates".
+
+**What OTA can and cannot carry:**
+
+| Change | How it reaches phones |
+| --- | --- |
+| Screens, logic, text, images (anything in `src/`) | `npm run ota` |
+| A new native library, a permission, an `app.json` plugin, the app icon | New preview APK, shared again |
+
+`runtimeVersion` is `fingerprint`: each APK only accepts updates built for its exact native code, so a forgotten APK rebuild means the update simply doesn't reach old phones (it never crashes them). After a native change, build and share a new APK first, then keep using `npm run ota`.
+
+`npm run ota` sets the server address itself because EAS does not apply `eas.json`'s build `env` to updates.
+
+**Already in the APK, for features we have not built yet** (so they can ship later by OTA): location (attendance geofence, foreground only), notifications, fingerprint/face unlock, microphone (voice notes). Android asks a person for each only when a feature uses it. Background location, storage and screen overlay are blocked on purpose (Play Store treats them as sensitive).
+
 ---
 
 ## Quick reference card
