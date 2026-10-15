@@ -6,9 +6,12 @@
  * `EXPO_PUBLIC_API_BASE_URL` to your laptop's LAN IP or an ngrok URL.
  */
 export const config = {
+  // Default is the live engine, so a build or an over-the-air update made
+  // without the variable still reaches the server (it used to fall back to
+  // a dead ngrok tunnel).
   apiBaseUrl:
     process.env.EXPO_PUBLIC_API_BASE_URL ??
-    'https://unyearning-olympia-unclimactic.ngrok-free.dev',
+    'https://ops-engine-dev-330299.bifrost.saastack.site',
   siteId: process.env.EXPO_PUBLIC_SITE_ID ?? 'site-dev',
   // How often the background loop pushes queued writes (outbox flush).
   // Cheap when the outbox is empty — no read payloads are pulled on this

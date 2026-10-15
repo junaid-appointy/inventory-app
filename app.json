@@ -9,7 +9,7 @@
     "icon": "./assets/icon.png",
     "newArchEnabled": true,
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "url": "https://u.expo.dev/5428db61-c637-4123-8b90-65c1bd684799",
@@ -28,23 +28,37 @@
       "package": "com.officeops.auxilio",
       "permissions": [
         "CAMERA",
-        "ACCESS_NETWORK_STATE",
         "INTERNET",
+        "ACCESS_NETWORK_STATE",
         "VIBRATE",
-        "android.permission.CAMERA"
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "RECORD_AUDIO"
       ],
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.officeops.auxilio",
       "icon": "./assets/icon.png",
       "infoPlist": {
-        "NSCameraUsageDescription": "Auxilio uses the camera to scan barcodes at the gate."
+        "NSCameraUsageDescription": "Auxilio uses the camera to scan barcodes at the gate.",
+        "NSLocationWhenInUseUsageDescription": "Auxilio uses your location to check you are at the office when you mark attendance.",
+        "NSMicrophoneUsageDescription": "Auxilio uses the microphone to record voice notes you choose to send.",
+        "NSFaceIDUsageDescription": "Auxilio can use Face ID to unlock instead of your PIN."
       }
     },
     "plugins": [
@@ -61,9 +75,37 @@
           "android": {
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResources": true,
-            "buildArchs": ["arm64-v8a"],
+            "buildArchs": [
+              "arm64-v8a"
+            ],
             "extraProguardRules": "-keep class com.facebook.hermes.** { *; }\n-keep class com.swmansion.reanimated.** { *; }\n-keep class com.mrousavy.camera.** { *; }"
           }
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Auxilio uses your location to check you are at the office when you mark attendance.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#92288E"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Auxilio can use Face ID to unlock instead of your PIN."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Auxilio uses the microphone to record voice notes you choose to send."
         }
       ]
     ],

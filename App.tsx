@@ -11,6 +11,8 @@ import { I18nProvider } from './src/i18n';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { startSync, stopSync } from './src/sync/syncService';
 import { ThemeProvider, useTheme } from './src/theme';
+import { UpdateBanner } from './src/updates/UpdateBanner';
+import { useOtaChecks } from './src/updates/ota';
 
 export default function App() {
   return (
@@ -26,6 +28,8 @@ export default function App() {
 
 function AppShell() {
   const { palette } = useTheme();
+  // Over-the-air updates: check on launch and on every return (src/updates).
+  useOtaChecks();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +77,7 @@ function AppShell() {
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <RootNavigator />
+        <UpdateBanner />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

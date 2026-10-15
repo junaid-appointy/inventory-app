@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CloudOff, Languages, LogOut, Palette as PaletteIcon, RefreshCw, UserRound } from 'lucide-react-native';
+import { CloudOff, Download, Languages, LogOut, Palette as PaletteIcon, RefreshCw, UserRound } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../../../auth';
@@ -10,6 +10,8 @@ import { useI18n, useT } from '../../../i18n';
 import type { Lang } from '../../../i18n';
 import { RootStackParamList } from '../../../navigation/types';
 import { useTheme, useThemeControls } from '../../../theme';
+import { checkForOta, otaEnabled, type OtaResult, runningVersion } from '../../../updates/ota';
+import appConfig from '../../../../app.json';
 import type { ThemeName } from '../../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -45,6 +47,22 @@ export function SettingsScreen({ navigation }: Props) {
     return () => { cancelled = true; unsub(); };
   }, [navigation]);
 
+  // Version, and a manual "check now" for when someone is told a fix is out.
+  const [otaState, setOtaState] = useState<OtaResult | 'checking' | null>(null);
+  const version = runningVersion(appConfig.expo.version);
+  const otaLine =
+    !otaEnabled ? t('updateDevBuild')
+      : otaState === 'checking' ? t('updateChecking')
+        : otaState === 'downloaded' ? t('updateDownloaded')
+          : otaState === 'latest' ? t('updateLatest')
+            : otaState === 'offline' ? t('updateOffline')
+              : t('appVersion', { v: version });
+  const checkNow = async () => {
+    if (!otaEnabled || otaState === 'checking') return;
+    setOtaState('checking');
+    setOtaState(await checkForOta(true));
+  };
+
   const themeOptions: Array<{ value: ThemeName; label: string }> = [
     { value: 'steadyPurple', label: t('themeLight') },
     { value: 'steadyPurpleDark', label: t('themeDark') },
@@ -76,6 +94,15 @@ export function SettingsScreen({ navigation }: Props) {
         ))}
       </ChoiceRow>
       <RowDivider />
+      <ListRow
+        Icon={Download}
+        tone={otaState === 'offline' ? 'warn' : 'neutral'}
+        title={t('updateCheck')}
+        subtitle={otaLine}
+        onPress={otaEnabled ? () => void checkNow() : undefined}
+        showChevron={false}
+      />
+      <RowDivider />
       {session ? (
         <>
           <ListRow Icon={LogOut} tone="danger" title={t('signOut')} onPress={() => void logout()} showChevron={false} />
@@ -83,7 +110,7 @@ export function SettingsScreen({ navigation }: Props) {
         </>
       ) : null}
       <Text variant="labelMedium" color={palette.onSurfaceVariant} style={{ textAlign: 'center', marginTop: spacing.xxl }}>
-        {t('appName')}
+        {t('appName')} · {t('appVersion', { v: version })}
       </Text>
     </HubLayout>
   );
