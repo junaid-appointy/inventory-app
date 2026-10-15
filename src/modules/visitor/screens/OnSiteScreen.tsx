@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { LogOut, User } from 'lucide-react-native';
+import { LogOut } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,8 @@ import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
 import { visitorApi, type VisitorSession } from '../api';
 import { insideFor } from '../format';
+import { VisitorWithHost } from '../../../components/StaffAvatar';
+import { rankByAnyName } from '../../../utils/nameMatch';
 import { queueVisitorEvent } from '../offline';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OnSite'>;
@@ -88,13 +90,12 @@ export function OnSiteScreen({ navigation }: Props) {
     [t],
   );
 
+  // By visitor or host name, forgiving typos and sound-alikes.
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const q = query.trim();
     const list = sessions ?? [];
-    if (!needle) return list;
-    return list.filter((s) =>
-      [s.visitor_name, s.host_employee_name, s.purpose].filter(Boolean).join(' ').toLowerCase().includes(needle),
-    );
+    if (!q) return list;
+    return rankByAnyName(list, (s) => [s.visitor_name, s.host_employee_name], q);
   }, [query, sessions]);
 
   return (
@@ -134,7 +135,7 @@ export function OnSiteScreen({ navigation }: Props) {
           renderItem={({ item }) => (
 
               <ListRow
-                Icon={User}
+                leading={<VisitorWithHost hostName={item.host_employee_name} hostPhotoUrl={item.host_photo_url} />}
                 tone="neutral"
                 title={item.visitor_name}
                 subtitle={[item.host_employee_name, t('insideFor', { time: insideFor(item.checkin_time, t) })].filter(Boolean).join(' · ')}

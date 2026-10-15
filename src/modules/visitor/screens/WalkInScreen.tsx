@@ -1,7 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import Fuse from 'fuse.js';
-import { UserRound } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppBar, Button, Chip, spacing, Text, TextField } from '../../../design';
@@ -10,8 +8,10 @@ import type { StringKey } from '../../../i18n/strings';
 import type { RootStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
-import { visitorApi, type StaffMember } from '../api';
-import { readStaff, saveStaff, STAFF_TTL_MS } from '../cache';
+import { visitorApi } from '../api';
+import { StaffAvatar } from '../../../components/StaffAvatar';
+import { rankByName } from '../../../utils/nameMatch';
+import { useStaffDirectory } from '../staffDirectory';
 import { queueVisitorEvent } from '../offline';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WalkIn'>;
@@ -37,36 +37,19 @@ export function WalkInScreen({ navigation }: Props) {
   const [otherPurpose, setOtherPurpose] = useState('');
   const [host, setHost] = useState('');
   const [hostPicked, setHostPicked] = useState(false);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const needsHost = purpose === 'meeting' || purpose === 'interview';
 
-  // Staff directory: saved copy first (instant, offline), refresh if old.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const cached = await readStaff();
-      if (cached && !cancelled) setStaff(cached.staff);
-      if (cached && Date.now() - cached.loadedAt < STAFF_TTL_MS) return;
-      const res = await visitorApi.searchStaff('');
-      if (res.ok && res.data && !cancelled) {
-        setStaff(res.data.results);
-        void saveStaff({ loadedAt: Date.now(), staff: res.data.results });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const fuse = useMemo(() => new Fuse(staff, { keys: ['name', 'employeeCode'], threshold: 0.35 }), [staff]);
+  // Staff directory on the phone (instant, offline). Matching forgives
+  // typos, sound-alikes ("Juneyd" finds Junaid) and Hindi typing.
+  const { index } = useStaffDirectory();
   const suggestions = useMemo(() => {
     if (hostPicked || host.trim().length < 2) return [];
-    return fuse.search(host.trim(), { limit: 5 }).map((r) => r.item);
-  }, [fuse, host, hostPicked]);
+    return rankByName(index, host.trim(), 5).map((m) => m.item);
+  }, [index, host, hostPicked]);
 
   const submit = async () => {
     setError(null);
@@ -155,7 +138,7 @@ export function WalkInScreen({ navigation }: Props) {
                     { backgroundColor: pressed ? palette.surfaceContainerHigh : palette.surfaceContainerLow },
                   ]}
                 >
-                  <UserRound size={20} color={palette.primary} />
+                  <StaffAvatar name={s.name} photoUrl={s.photoUrl} size={40} />
                   <View style={{ flex: 1 }}>
                     <Text variant="bodyLarge">{s.name}</Text>
                     {s.department || s.role ? (

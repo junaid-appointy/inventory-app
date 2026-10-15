@@ -27,6 +27,8 @@ export type VisitorSession = {
   visitor_name: string;
   checkin_time: string;
   host_employee_name?: string | null;
+  /** The host's photo (uploaded or Google), when known. */
+  host_photo_url?: string | null;
   purpose?: string | null;
 };
 
@@ -44,6 +46,7 @@ export type ExpectedGuest = {
   visitorPhone?: string;
   purpose?: string;
   hostName?: string;
+  hostPhotoUrl?: string;
   expectedDate: string;
   expectedTime?: string;
   approvalStatus: string;
@@ -59,6 +62,7 @@ export type StaffMember = {
   name: string;
   role?: string;
   department?: string;
+  photoUrl?: string;
   attendanceStatus?: string;
   markedInAt?: string;
   markedOutAt?: string;
@@ -82,8 +86,8 @@ export const visitorApi = {
   active: () => requestRaw<{ sessions: VisitorSession[] }>('/api/visitors/active'),
   expected: () =>
     requestRaw<{ date: string; generatedAt: string; guests: ExpectedGuest[] }>('/api/visitors/expected'),
-  searchStaff: (q: string) =>
-    requestRaw<{ results: StaffMember[] }>(`/api/staff/search?q=${encodeURIComponent(q)}`),
+  searchStaff: (q: string, limit = 500) =>
+    requestRaw<{ results: StaffMember[] }>(`/api/staff/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   markIn: (staffId: string) =>
     requestRaw<{ error?: string }>(`/api/staff/mark-in/${encodeURIComponent(staffId)}`, post()),
   markOut: (staffId: string) =>

@@ -1,15 +1,17 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LogIn, LogOut } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { UserRound } from 'lucide-react-native';
 import { AppBar, Button, ListRow, RowDivider, Skeleton, spacing, Text, TextField } from '../../../design';
 import { useT } from '../../../i18n';
 import type { RootStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme';
 import { haptic } from '../../../utils/haptics';
 import { visitorApi, type StaffMember } from '../api';
+import { StaffAvatar } from '../../../components/StaffAvatar';
+import { rankByName } from '../../../utils/nameMatch';
+import { useStaffDirectory } from '../staffDirectory';
 import { timeOnly } from '../format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StaffInOut'>;
@@ -22,25 +24,20 @@ export function StaffInOutScreen({ navigation }: Props) {
   const t = useT();
   const { palette } = useTheme();
   const [query, setQuery] = useState('');
-  const [staff, setStaff] = useState<StaffMember[] | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback(async (q: string) => {
-    const res = await visitorApi.searchStaff(q);
-    if (res.ok && res.data) {
-      setStaff(res.data.results);
-      return;
-    }
-    setStaff((prev) => prev ?? []);
-    setMessage({ text: res.offline ? t('needsInternet') : t('loadFailed'), error: true });
-  }, [t]);
-
-  // Search as they type, but wait for a short pause first.
-  useEffect(() => {
-    const timer = setTimeout(() => void load(query.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [load, query]);
+  // Everyone once (fresh, for today's in/out), then search on the phone:
+  // instant, and it forgives typos, sound-alikes and Hindi typing.
+  const { staff, setStaff, index, offline } = useStaffDirectory({ fresh: true });
+  const shown = useMemo(() => {
+    const q = query.trim();
+    if (!q) return staff;
+    const ranked = rankByName(index, q, 30).map((m) => m.item);
+    // An employee code is matched exactly, as typed.
+    const exact = (staff ?? []).filter((p) => p.employeeCode?.toLowerCase() === q.toLowerCase());
+    return [...exact, ...ranked.filter((p) => !exact.includes(p))];
+  }, [index, query, staff]);
 
   const toggle = useCallback(async (person: StaffMember) => {
     const goingIn = person.attendanceStatus !== 'in';
@@ -58,8 +55,16 @@ export function StaffInOutScreen({ navigation }: Props) {
     }
     haptic.success();
     setMessage({ text: t(goingIn ? 'markedIn' : 'markedOut', { name: person.name }), error: false });
-    await load(query.trim());
-  }, [load, query, t]);
+    // Show the change at once; the next visit to this screen reloads from the server.
+    const now = new Date().toISOString();
+    setStaff((cur) =>
+      (cur ?? []).map((p) =>
+        p.id === person.id
+          ? { ...p, attendanceStatus: goingIn ? 'in' : 'out', ...(goingIn ? { markedInAt: now } : { markedOutAt: now }) }
+          : p,
+      ),
+    );
+  }, [setStaff, t]);
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -67,6 +72,11 @@ export function StaffInOutScreen({ navigation }: Props) {
       <View style={styles.search}>
         <TextField label={t('searchStaff')} value={query} onChangeText={setQuery} clearable />
       </View>
+      {offline && !message ? (
+        <Text variant="bodyMedium" color={palette.error} style={styles.message}>
+          {t('needsInternet')}
+        </Text>
+      ) : null}
       {message ? (
         <Text variant="bodyMedium" color={message.error ? palette.error : palette.primary} style={styles.message}>
           {message.text}
@@ -80,7 +90,7 @@ export function StaffInOutScreen({ navigation }: Props) {
         </View>
       ) : (
         <FlatList
-          data={staff}
+          data={shown}
           keyExtractor={(s) => s.id}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
@@ -96,7 +106,7 @@ export function StaffInOutScreen({ navigation }: Props) {
             return (
 
                 <ListRow
-                  Icon={UserRound}
+                  leading={<StaffAvatar name={item.name} photoUrl={item.photoUrl} size={44} />}
                   tone={inside ? 'success' : 'neutral'}
                   title={item.name}
                   subtitle={[item.employeeCode, when ? t(inside ? 'inAt' : 'outAt', { time: timeOnly(when) }) : null].filter(Boolean).join(' · ')}

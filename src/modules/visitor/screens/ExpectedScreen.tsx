@@ -3,7 +3,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User } from 'lucide-react-native';
 import { AppBar, ListRow, RowDivider, Skeleton, spacing, StatusChip, Text, TextField } from '../../../design';
 import { useT } from '../../../i18n';
 import type { RootStackParamList } from '../../../navigation/types';
@@ -11,6 +10,8 @@ import { useTheme } from '../../../theme';
 import { visitorApi, type ExpectedGuest } from '../api';
 import { readExpected, saveExpected } from '../cache';
 import { timeOnly } from '../format';
+import { VisitorWithHost } from '../../../components/StaffAvatar';
+import { rankByAnyName } from '../../../utils/nameMatch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Expected'>;
 
@@ -64,13 +65,15 @@ export function ExpectedScreen({ navigation }: Props) {
     }
   }, [load]);
 
+  // By visitor or host name, forgiving typos and sound-alikes; digits
+  // find a phone number.
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const q = query.trim();
     const list = guests ?? [];
-    if (!needle) return list;
-    return list.filter((g) =>
-      [g.visitorName, g.hostName, g.visitorPhone, g.purpose].filter(Boolean).join(' ').toLowerCase().includes(needle),
-    );
+    if (!q) return list;
+    const digits = q.replace(/\D/g, '');
+    if (digits.length >= 3) return list.filter((g) => (g.visitorPhone ?? '').replace(/\D/g, '').includes(digits));
+    return rankByAnyName(list, (g) => [g.visitorName, g.hostName], q);
   }, [guests, query]);
 
   return (
@@ -111,7 +114,7 @@ export function ExpectedScreen({ navigation }: Props) {
             return (
 
                 <ListRow
-                  Icon={User}
+                  leading={<VisitorWithHost hostName={item.hostName} hostPhotoUrl={item.hostPhotoUrl} />}
                   tone={item.tokenUsed ? 'primary' : 'info'}
                   title={item.visitorName}
                   subtitle={[item.hostName && `${t('hostLabel')}: ${item.hostName}`, item.expectedTime || timeOnly(item.validFrom)].filter(Boolean).join(' · ')}
